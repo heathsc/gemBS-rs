@@ -5,12 +5,14 @@ extern crate stderrlog;
 extern crate clap;
 
 mod cli;
+mod commands;
 
 fn main() {
 	cli::process_cli();
-    trace!("trace message");
-    debug!("debug message");
-    info!("info message");
-    warn!("warn message");
-    error!("error message");
+
+//    trace!("trace message");
+//    debug!("debug message");
+//    info!("info message");
+//    warn!("warn message");
+//    error!("error message");
 }
