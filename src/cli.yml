@@ -1,0 +1,160 @@
+name: gemBS
+version: "3.5.1"
+author: Simon Heath <simon.heath@gmail.com>
+about: gemBS is a bioinformatics pipeline for analyzing whole genome bisulfite data (WGBS) data
+setting: GlobalVersion
+setting: DeriveDisplayOrder
+setting: SubcommandRequiredElseHelp
+args:
+    - quiet: {short: q, help: Silence all output}
+    - timestamp: {short: t, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, ns]}
+    - loglevel: {short: l, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], help: Set log level}
+    - json: {short: j, long: json-file, takes_value: true, value_name: JSON, help: Location of gemBS JSON file}
+    - dir: {short: d, long: dir, takes_value: true, value_name: DIR, help: set working directory}
+subcommands:
+    - prepare:
+        setting: DeriveDisplayOrder
+        about: Prepare gemBS analysis
+        args:
+           - config: {short: c, long: config, value_name: CONFIG, help: Text config file with gemBS parameters, takes_value: true, required: true}
+           - metadata: {short: t, long: text-metadata, value_name: TEXT_METADATA, help: Sample data in csv format, takes_value: true, required: true}
+           - output: {short: o, long: output, value_name: OUTPUT, help: Output JSON file, takes_value: true}
+           - jsonmetadata: {short: l, long: lims-cnag-json, value_name: JSON_METADATA, help: Use JSON metadata file from CNAG lims, takes_value: true}
+           - no_db: {short: d, long: no-db, help: Do not use on-disk database}
+    - index:
+        setting: DeriveDisplayOrder
+        about: Prepare genome indexes
+        args:
+          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads (default - all available cores)}
+          - sampling: {short: s, long: sampling-rate, value_name: SAMPLING_RATE, takes_value: true, help: Text sampling rate - increasing will decrease index size but also performance}
+          - populate: {short: p, long: populate-cache, help: Populate reference cache if required (for CRAM)}
+          - dbsnp_files: {short: d, long: list-dbsnp-files, value_name: DBSNP_FILES, multiple: true, takes_value: true, help: List of input files from dbSNP}
+    - map:
+        setting: DeriveDisplayOrder
+        about: Read mapping
+        args:
+          - dataset: {short: D, long: dataset, value_name: DATASET, takes_value: true, help: Dataset to be mapped}
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - tmp_dir: {short: d, long: tmp-dir, value_name: PATH, takes_value: true, help: Temporary directory to perform sorting operations}
+          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for mapping pipeline}
+          - map_threads: {long: map-threads, value_name: THREADS, takes_value: true, help: Number of threads for GEM3 mapper}
+          - sort_threads: {long: sort-threads, value_name: THREADS, takes_value: true, help: Number of threads for sorting}
+          - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
+          - file_type: {short: T, long: type, value_name: FILE_TYPE, takes_value: true, possible_values: [PAIRED, SINGLE, INTERLEAVED, STREAM, BAM], help: Type of data file}
+          - paired: {short: p, long: paired-end, help: Input data is paired end}
+          - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
+          - reverse: {short: R, long: reverse-conversion, help: Assume G2A conversion on read 1 and C2T on read 2}
+          - non_stranded: {short: s, long: read-non-stranded, help: Treat library as non-stranded}
+          - underconv_seq: {short: u, long: underconversion-sequence, value_name: SEQUENCE_NAME, takes_value: true, help: Name of underconversion sequencing control}
+          - overconv_seq: {short: v, long: overconversion-sequence, value_name: SEQUENCE_NAME, takes_value: true, help: Name of overconversion sequencing control}
+          - non_bs: {long: non-bs, help: Map as regular (non-bisulfite) data}
+          - no_merge: {long: no-merge, help: Do not automatically merge BAMs}
+          - dry_run: {long: dry-run, help: Output pending mapping commands without execution}
+          - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
+          - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
+          - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}
+    - merge-bams:
+        setting: DeriveDisplayOrder
+        about: Merge BAM files for each sample (if required)
+        args:
+          - contigs: {short: l, long:contig-list, value_name: CONTIG, takes_value: true, multiple: true, help: List of contigs for methylation calling}
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
+          - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
+          - dry_run: {long: dry-run, help: Output pending mapping commands without execution}
+          - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
+          - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
+          - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}
+    - call:
+        setting: DeriveDisplayOrder
+        about: Methylation and SNP calling
+        args:
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - mapq_threshold: {short: q, long: mapq-threshold, value_name: MAPQ_THRESHOLD, takes_value: true, help: Threshold for MAPQ scores}
+          - qual_threshold: {short: Q, long: qual-threshold, value_name: QUAL_THRESHOLD, takes_value: true, help: Threshold for base quality scores}
+          - right_trim: {short: g, long: right-trim, value_name: BASES, takes_value: true, help: Bases to trim from right of read}
+          - left_trim: {short: f, long: left-trim, value_name: BASES, takes_value: true, help: Bases to trim from left of read}
+          - tmp_dir: {short: d, long: tmp-dir, value_name: PATH, takes_value: true, help: Temporary directory to perform sorting operations}
+          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for calling pipeline}
+          - call_threads: {long: call-threads, value_name: THREADS, takes_value: true, help: Number of threads for methylation caller}
+          - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
+          - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
+          - keep_duplicates: {short: u, long: keep-duplicates, help: Do not merge duplicate reads}
+          - ignore_duplicate_flag: {short: U, long: ignore-duplicate-flag, help: Ignore duplicate flag from SAM/BAM files}
+          - keep_unmatched: {short: k, long: keep-unmatched, help: Do not discard reads that do not form proper pairs}
+          - species: {short: e, long: species, value_name: SPECIES, takes_value: true, help: Species name}
+          - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
+          - haploid: {short: '1', long: haploid, help: Force genotype calls to be haploid}
+          - conversion: {short: C, long: conversion, value_name: "UNDER,OVER", takes_value: true, help: "set conversion rates (under,over)"}          
+          - ref_bias: {short: R, long: reference_bias, value_name: BIAS, takes_value: true, help: set bias to reference homozygote}          
+          - concat_only: {short: x, long: concat-only, help: Only perform BCF file merging}
+          - pool: {long: pool, value_name: POOL, takes_value: true, help: Contig pool for methylation calling}          
+          - list_pools: {long: list-pools, value_name: LEVEL, takes_value: true, help: List contig pool - level 1 print names; level >1 list pool composition}          
+          - no_merge: {long: no-merge, help: Do not automatically merge BAMs}
+          - dry_run: {long: dry-run, help: Output pending commands without execution}
+          - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
+          - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
+          - ignore_dep: {long: ignore-dep, help: Ignore dependencies for dry-run and json options}
+          - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}        
+    - merge-bcfs:
+        setting: DeriveDisplayOrder
+        about: Merge BCF files for each sample (if required)
+        args:
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for merge step}
+          - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
+          - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
+          - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
+          - dry_run: {long: dry-run, help: Output pending commands without execution}
+          - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
+          - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
+          - ignore_dep: {long: ignore-dep, help: Ignore dependencies for dry-run and json options}
+          - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}        
+    - extract:
+        setting: DeriveDisplayOrder
+        about: Produce methylation and SNP summary files
+        args:
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
+          - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
+          - strand_specific: {short:s, long: strand-specific, help: Output separate lines in CpG file for each strand}
+          - bigwig_strand_specific: {short:W, long: bigwig-strand-specific, help: Output separate bigWig files for each strand}
+          - phred_threshold: {short: q, long: phred_threshold, value_name: PHRED, takes_value: true, help: Minimum threshold for genotype PHRED score}
+          - min_inform: {short: I, long: min-inform, value_name: N, takes_value: true, help: Minimum threshold for informative reads}
+          - min_nc: {short: M, long: min-nc, value_name: N, takes_value: true, help: Minimum number of non-converted reads for non-CpG sites}
+          - allow_het: {short:H, long: allow-het, help: Allow both homozygous and heterozygous sites}
+          - ref_bias: {short: R, long: reference_bias, value_name: BIAS, takes_value: true, help: set bias to reference homozygote}          
+          - cpg: {short:c, long: cpg, help: Output gemBS bed with CpG sites}
+          - non_cpg: {short:N, long: non-cpg, help: Output gemBS bed with non-CpG sites}
+          - bed_methyl: {short:B, long: bed-methyl, help: "Output ENCODE standard output (bedMethyl, bigBed and bigWig)"}
+          - snps: {short:S, long: snps, help: Output SNPs}
+          - snp_list: {long: snp-list, value_name: SNP_LIST, takes_value: true, help: Path to file with list of SNPs to output}          
+          - snp_db: {long: snp-db, value_name: SNP_DB, takes_value: true, help: Path to dbSNP_idx processed SNP database file}          
+          - dry_run: {long: dry-run, help: Output pending commands without execution}
+          - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
+          - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
+          - ignore_dep: {long: ignore-dep, help: Ignore dependencies for dry-run and json options}
+    - map-report:
+        setting: DeriveDisplayOrder
+        about: Generate mapping summary report
+        args:
+          - project: {short: p, long: project, value_name: NAME, takes_value: true, help: Output title for report (project name)}
+          - output_dir: {short: o, long: output-dir, value_name: PATH, takes_value: true, help: Output directory for mapping report}
+    - call-report:
+        setting: DeriveDisplayOrder
+        about: Generate calling summary report
+        args:
+          - project: {short: p, long: project, value_name: NAME, takes_value: true, help: Output title for report (project name)}
+          - output_dir: {short: o, long: output-dir, value_name: PATH, takes_value: true, help: Output directory for call report}
+          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for report pipeline}
+    - db-sync:
+        setting: DeriveDisplayOrder
+        about: Synchronize database
+        args:
+          - confirm: {short:y, long: yes, help: Confirm operation}
+ 
