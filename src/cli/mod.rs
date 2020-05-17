@@ -1,17 +1,18 @@
-use clap::{App, AppSettings, ArgMatches};
+use clap::{App, AppSettings};
 use std::str::FromStr;
 use crate::commands;
 
 pub mod utils;
+use utils::LogLevel;
 
-pub fn process_cli() {
+pub fn process_cli() -> Result<(), &'static str> {
 	let yaml = load_yaml!("cli.yml");
     let m = App::from_yaml(yaml)
         .setting(AppSettings::VersionlessSubcommands)
 		.get_matches();
 		
 	// Interpret global command line flags and set up logging
-    let mut quiet = m.is_present("quiet");
+    
     let ts = m.value_of("timestamp").map(|v| {
         stderrlog::Timestamp::from_str(v).unwrap_or_else(|_| {
             clap::Error {
@@ -21,23 +22,11 @@ pub fn process_cli() {
             }.exit()
         })
     }).unwrap_or(stderrlog::Timestamp::Off);
-	let verbose: usize = m.value_of("loglevel").map(|v| {
-		match v {
-			"none" => {
-				quiet = true;
-				0
-			},
-			"error" => 0,
-			"warn" => 1,
-			"info" => 2,
-			"debug" => 3,
-			"trace" => 4,
-			_ => 0, // Shouldn't happen
-		}
-	}).unwrap_or(0);
+	let verbose = value_t!(m.value_of("loglevel"), LogLevel).unwrap_or_else(|_| LogLevel::new(0));
+	let quiet = verbose.is_none() || m.is_present("quiet");
     stderrlog::new()
         .quiet(quiet)
-        .verbosity(verbose)
+        .verbosity(verbose.get_level())
         .timestamp(ts)
         .init()
         .unwrap();
@@ -47,14 +36,15 @@ pub fn process_cli() {
 	match m.subcommand() {
 		("prepare", Some(m_sum)) => {
 			debug!("User entered 'prepare' command");
+			commands::prepare::prepare_command(m_sum)
 		},
 		("index", Some(m_sum)) => {
 			debug!("User entered 'index' command");
-			commands::index::index_command(m_sum);
+			commands::index::index_command(m_sum)
 		},
 		_ => {
-			error!("Unknown subcomand");
+			error!("Unknown subcomamnd");
+			Err("Unknown subcommand")
 		},
 	}
-
 }

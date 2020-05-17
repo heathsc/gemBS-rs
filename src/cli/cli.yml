@@ -1,5 +1,5 @@
 name: gemBS
-version: "3.5.1"
+version: "4.0.0"
 author: Simon Heath <simon.heath@gmail.com>
 about: gemBS is a bioinformatics pipeline for analyzing whole genome bisulfite data (WGBS) data
 setting: GlobalVersion
@@ -7,8 +7,8 @@ setting: DeriveDisplayOrder
 setting: SubcommandRequiredElseHelp
 args:
     - quiet: {short: q, help: Silence all output}
-    - timestamp: {short: t, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, ns]}
-    - loglevel: {short: l, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], help: Set log level}
+    - timestamp: {short: t, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
+    - loglevel: {short: l, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
     - json: {short: j, long: json-file, takes_value: true, value_name: JSON, help: Location of gemBS JSON file}
     - dir: {short: d, long: dir, takes_value: true, value_name: DIR, help: set working directory}
 subcommands:
@@ -17,10 +17,14 @@ subcommands:
         about: Prepare gemBS analysis
         args:
            - config: {short: c, long: config, value_name: CONFIG, help: Text config file with gemBS parameters, takes_value: true, required: true}
-           - metadata: {short: t, long: text-metadata, value_name: TEXT_METADATA, help: Sample data in csv format, takes_value: true, required: true}
+           - cvs_metadata: {short: t, long: text-metadata, value_name: TEXT_METADATA, help: Sample data in csv format, takes_value: true}
+           - json_metadata: {short: l, long: lims-cnag-json, value_name: JSON_METADATA, help: Use JSON metadata file from CNAG lims, takes_value: true}
            - output: {short: o, long: output, value_name: OUTPUT, help: Output JSON file, takes_value: true}
-           - jsonmetadata: {short: l, long: lims-cnag-json, value_name: JSON_METADATA, help: Use JSON metadata file from CNAG lims, takes_value: true}
            - no_db: {short: d, long: no-db, help: Do not use on-disk database}
+        groups:
+           - metadata:
+              args: [cvs_metadata, json_metadata]
+              required: true
     - index:
         setting: DeriveDisplayOrder
         about: Prepare genome indexes
@@ -38,9 +42,9 @@ subcommands:
           - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
           - tmp_dir: {short: d, long: tmp-dir, value_name: PATH, takes_value: true, help: Temporary directory to perform sorting operations}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for mapping pipeline}
-          - map_threads: {long: map-threads, value_name: THREADS, takes_value: true, help: Number of threads for GEM3 mapper}
-          - sort_threads: {long: sort-threads, value_name: THREADS, takes_value: true, help: Number of threads for sorting}
-          - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
+          - map_threads: {long: map-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for GEM3 mapper}
+          - sort_threads: {long: sort-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for sorting}
+          - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for merging}
           - file_type: {short: T, long: type, value_name: FILE_TYPE, takes_value: true, possible_values: [PAIRED, SINGLE, INTERLEAVED, STREAM, BAM], help: Type of data file}
           - paired: {short: p, long: paired-end, help: Input data is paired end}
           - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
@@ -54,6 +58,9 @@ subcommands:
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
           - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
           - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}
+        groups:
+           - sample_desc:
+              args: [dataset, sample, barcode] 
     - merge-bams:
         setting: DeriveDisplayOrder
         about: Merge BAM files for each sample (if required)
@@ -67,6 +74,9 @@ subcommands:
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
           - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
           - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}
+        groups:
+           - sample_desc:
+              args: [sample, barcode] 
     - call:
         setting: DeriveDisplayOrder
         about: Methylation and SNP calling
@@ -79,8 +89,8 @@ subcommands:
           - left_trim: {short: f, long: left-trim, value_name: BASES, takes_value: true, help: Bases to trim from left of read}
           - tmp_dir: {short: d, long: tmp-dir, value_name: PATH, takes_value: true, help: Temporary directory to perform sorting operations}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for calling pipeline}
-          - call_threads: {long: call-threads, value_name: THREADS, takes_value: true, help: Number of threads for methylation caller}
-          - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
+          - call_threads: {long: call-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for methylation caller}
+          - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for merging}
           - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
           - keep_duplicates: {short: u, long: keep-duplicates, help: Do not merge duplicate reads}
           - ignore_duplicate_flag: {short: U, long: ignore-duplicate-flag, help: Ignore duplicate flag from SAM/BAM files}
@@ -99,6 +109,9 @@ subcommands:
           - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
           - ignore_dep: {long: ignore-dep, help: Ignore dependencies for dry-run and json options}
           - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}        
+        groups:
+           - sample_desc:
+              args: [sample, barcode] 
     - merge-bcfs:
         setting: DeriveDisplayOrder
         about: Merge BCF files for each sample (if required)
@@ -114,6 +127,9 @@ subcommands:
           - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
           - ignore_dep: {long: ignore-dep, help: Ignore dependencies for dry-run and json options}
           - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}        
+        groups:
+           - sample_desc:
+              args: [sample, barcode] 
     - extract:
         setting: DeriveDisplayOrder
         about: Produce methylation and SNP summary files
@@ -139,6 +155,9 @@ subcommands:
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
           - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
           - ignore_dep: {long: ignore-dep, help: Ignore dependencies for dry-run and json options}
+        groups:
+          - sample_desc:
+             args: [sample, barcode] 
     - map-report:
         setting: DeriveDisplayOrder
         about: Generate mapping summary report

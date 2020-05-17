@@ -7,12 +7,6 @@ extern crate clap;
 mod cli;
 mod commands;
 
-fn main() {
-	cli::process_cli();
-
-//    trace!("trace message");
-//    debug!("debug message");
-//    info!("info message");
-//    warn!("warn message");
-//    error!("error message");
+fn main() -> Result<(), &'static str> {
+	cli::process_cli()
 }
