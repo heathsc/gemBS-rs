@@ -1,12 +1,12 @@
 #[macro_use]
 extern crate log;
-extern crate stderrlog;
 #[macro_use]
 extern crate clap;
 
 mod cli;
 mod commands;
+mod common;
 
-fn main() -> Result<(), &'static str> {
+fn main() -> Result<(), String> {
 	cli::process_cli()
 }

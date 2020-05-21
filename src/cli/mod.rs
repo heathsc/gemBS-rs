@@ -5,7 +5,7 @@ use crate::commands;
 pub mod utils;
 use utils::LogLevel;
 
-pub fn process_cli() -> Result<(), &'static str> {
+pub fn process_cli() -> Result<(), String> {
 	let yaml = load_yaml!("cli.yml");
     let m = App::from_yaml(yaml)
         .setting(AppSettings::VersionlessSubcommands)
@@ -43,8 +43,7 @@ pub fn process_cli() -> Result<(), &'static str> {
 			commands::index::index_command(m_sum)
 		},
 		_ => {
-			error!("Unknown subcomamnd");
-			Err("Unknown subcommand")
+			Err("Unknown subcommand".to_string())
 		},
 	}
 }

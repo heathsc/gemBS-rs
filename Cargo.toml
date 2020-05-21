@@ -1,6 +1,6 @@
 [package]
 name = "gemBS"
-version = "0.1.0"
+version = "4.0.0"
 authors = ["Simon Heath <simon.heath@gmail.com>"]
 edition = "2018"
 
@@ -10,3 +10,5 @@ edition = "2018"
 log = "~0.4"
 stderrlog = "~0.4"
 clap = {version = "~2", features = ["yaml"]}
+libc = "~0.2"
+compress = { path = "../rust/compress" }
