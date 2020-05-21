@@ -43,15 +43,24 @@ enum LexRawToken {
 	Null, // Do nothing token
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum LexToken {
+#[derive(Debug, Clone, Copy)]
+pub enum IntLexToken {
 	Section,
 	Name,
 	Value,
-	Equals,
-	Comma,
 	Include,
+	Null,
 	End,		
+}
+
+// These are the tokens that are emitted by the parser
+#[derive(Debug)]
+pub enum LexToken {
+	Name(String),
+	Value(String),	
+	Include(String),	
+	Section(String),	
+	End,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,7 +80,7 @@ enum LexState {
 struct LexAction {
 	new_state: LexState,
 	consume: bool,
-	emit: Option<LexToken>,
+	emit: Option<IntLexToken>,
 }
 
 struct LexBuf<'a> {
@@ -205,7 +214,7 @@ impl Lexer {
 			Some(format!("{}: line {}, pos {}", file.name, file.line + 1, file.pos + 1))
 		} else { None }
 	}
-	fn add_lex_action(&mut self, state: LexState, raw_token: LexRawToken, new_state: LexState, consume: bool, emit: Option<LexToken>) {
+	fn add_lex_action(&mut self, state: LexState, raw_token: LexRawToken, new_state: LexState, consume: bool, emit: Option<IntLexToken>) {
 		self.action_table.entry(state).or_insert_with(HashMap::new);
 		// We know the value exists as this is assured by the previous line
 		self.action_table.get_mut(&state).unwrap()
@@ -217,14 +226,14 @@ impl Lexer {
 		self.add_lex_action(LexState::Init, LexRawToken::LineFeed, LexState::Init, true, None);
 		self.add_lex_action(LexState::Init, LexRawToken::LeftSquareBracket, LexState::AfterBracket, true, None);
 		self.add_lex_action(LexState::Init, LexRawToken::Letter, LexState::InName, false, None);
-		self.add_lex_action(LexState::Init, LexRawToken::End, LexState::End, false, Some(LexToken::End));
+		self.add_lex_action(LexState::Init, LexRawToken::End, LexState::End, false, Some(IntLexToken::End));
 		self.add_lex_action(LexState::InName, LexRawToken::Letter, LexState::InName, false, None);
 		self.add_lex_action(LexState::InName, LexRawToken::Number, LexState::InName, false, None);
 		self.add_lex_action(LexState::InName, LexRawToken::Punct, LexState::InName, false, None);
-		self.add_lex_action(LexState::InName, LexRawToken::LineFeed, LexState::AfterName, true, Some(LexToken::Name));
-		self.add_lex_action(LexState::InName, LexRawToken::WhiteSpace, LexState::AfterName, true, Some(LexToken::Name));
-		self.add_lex_action(LexState::InName, LexRawToken::Equals, LexState::AfterName, false, Some(LexToken::Name));
-		self.add_lex_action(LexState::AfterName, LexRawToken::Equals, LexState::AfterEquals, true, Some(LexToken::Equals));
+		self.add_lex_action(LexState::InName, LexRawToken::LineFeed, LexState::AfterName, true, Some(IntLexToken::Name));
+		self.add_lex_action(LexState::InName, LexRawToken::WhiteSpace, LexState::AfterName, true, Some(IntLexToken::Name));
+		self.add_lex_action(LexState::InName, LexRawToken::Equals, LexState::AfterName, false, Some(IntLexToken::Name));
+		self.add_lex_action(LexState::AfterName, LexRawToken::Equals, LexState::AfterEquals, true, Some(IntLexToken::Null));
 		self.add_lex_action(LexState::AfterName, LexRawToken::WhiteSpace, LexState::AfterName, true, None);
 		self.add_lex_action(LexState::AfterName, LexRawToken::LineFeed, LexState::AfterName, true, None);
 		self.add_lex_action(LexState::AfterEquals, LexRawToken::WhiteSpace, LexState::AfterEquals, true, None);
@@ -235,35 +244,35 @@ impl Lexer {
 		self.add_lex_action(LexState::InValue, LexRawToken::Letter, LexState::InValue, false, None);
 		self.add_lex_action(LexState::InValue, LexRawToken::Number, LexState::InValue, false, None);
 		self.add_lex_action(LexState::InValue, LexRawToken::Punct, LexState::InValue, false, None);
-		self.add_lex_action(LexState::InValue, LexRawToken::LineFeed, LexState::AfterValue, true, Some(LexToken::Value));
-		self.add_lex_action(LexState::InValue, LexRawToken::WhiteSpace, LexState::AfterValue, true, Some(LexToken::Value));
-		self.add_lex_action(LexState::InValue, LexRawToken::End, LexState::Init, false, Some(LexToken::Value));
-		self.add_lex_action(LexState::InValue, LexRawToken::Comma, LexState::AfterValue, false, Some(LexToken::Value));
-		self.add_lex_action(LexState::AfterValue, LexRawToken::Comma, LexState::AfterEquals, true, Some(LexToken::Comma));
+		self.add_lex_action(LexState::InValue, LexRawToken::LineFeed, LexState::AfterValue, true, Some(IntLexToken::Value));
+		self.add_lex_action(LexState::InValue, LexRawToken::WhiteSpace, LexState::AfterValue, true, Some(IntLexToken::Value));
+		self.add_lex_action(LexState::InValue, LexRawToken::End, LexState::Init, false, Some(IntLexToken::Value));
+		self.add_lex_action(LexState::InValue, LexRawToken::Comma, LexState::AfterValue, false, Some(IntLexToken::Value));
+		self.add_lex_action(LexState::AfterValue, LexRawToken::Comma, LexState::AfterEquals, true, Some(IntLexToken::Null));
 		self.add_lex_action(LexState::AfterValue, LexRawToken::WhiteSpace, LexState::AfterValue, true, None);
 		self.add_lex_action(LexState::AfterValue, LexRawToken::LineFeed, LexState::AfterValue, true, None);
 		self.add_lex_action(LexState::AfterValue, LexRawToken::Letter, LexState::InName, false, None);
 		self.add_lex_action(LexState::AfterValue, LexRawToken::LeftSquareBracket, LexState::AfterBracket, true, None);
-		self.add_lex_action(LexState::AfterValue, LexRawToken::End, LexState::End, false, Some(LexToken::End));
+		self.add_lex_action(LexState::AfterValue, LexRawToken::End, LexState::End, false, Some(IntLexToken::End));
 		self.add_lex_action(LexState::AfterBracket, LexRawToken::WhiteSpace, LexState::AfterBracket, true, None);
 		self.add_lex_action(LexState::AfterBracket, LexRawToken::LineFeed, LexState::AfterBracket, true, None);
 		self.add_lex_action(LexState::AfterBracket, LexRawToken::Letter, LexState::InSection, false, None);
 		self.add_lex_action(LexState::InSection, LexRawToken::Letter, LexState::InSection, false, None);
 		self.add_lex_action(LexState::InSection, LexRawToken::Number, LexState::InSection, false, None);
 		self.add_lex_action(LexState::InSection, LexRawToken::Punct, LexState::InSection, false, None);
-		self.add_lex_action(LexState::InSection, LexRawToken::WhiteSpace, LexState::AfterSection, true, Some(LexToken::Section));
+		self.add_lex_action(LexState::InSection, LexRawToken::WhiteSpace, LexState::AfterSection, true, Some(IntLexToken::Section));
 		self.add_lex_action(LexState::InSection, LexRawToken::LineFeed, LexState::AfterSection, true, None);
-		self.add_lex_action(LexState::InSection, LexRawToken::RightSquareBracket, LexState::Init, true, Some(LexToken::Section));
+		self.add_lex_action(LexState::InSection, LexRawToken::RightSquareBracket, LexState::Init, true, Some(IntLexToken::Section));
 		self.add_lex_action(LexState::AfterSection, LexRawToken::RightSquareBracket, LexState::Init, true, None);
 		self.add_lex_action(LexState::AfterSection, LexRawToken::WhiteSpace, LexState::AfterSection, true, None);
 		self.add_lex_action(LexState::AfterSection, LexRawToken::LineFeed, LexState::AfterSection, true, None);
-		self.add_lex_action(LexState::AfterSection, LexRawToken::End, LexState::End, true, Some(LexToken::End));
+		self.add_lex_action(LexState::AfterSection, LexRawToken::End, LexState::End, true, Some(IntLexToken::End));
 		self.add_lex_action(LexState::InInclude, LexRawToken::Letter, LexState::InInclude, false, None);
 		self.add_lex_action(LexState::InInclude, LexRawToken::Number, LexState::InInclude, false, None);
 		self.add_lex_action(LexState::InInclude, LexRawToken::Punct, LexState::InInclude, false, None);
-		self.add_lex_action(LexState::InInclude, LexRawToken::LineFeed, LexState::Init, true, Some(LexToken::Name));
-		self.add_lex_action(LexState::InInclude, LexRawToken::WhiteSpace, LexState::Init, true, Some(LexToken::Name));
-		self.add_lex_action(LexState::InInclude, LexRawToken::End, LexState::Init, false, Some(LexToken::Name));
+		self.add_lex_action(LexState::InInclude, LexRawToken::LineFeed, LexState::Init, true, Some(IntLexToken::Name));
+		self.add_lex_action(LexState::InInclude, LexRawToken::WhiteSpace, LexState::Init, true, Some(IntLexToken::Name));
+		self.add_lex_action(LexState::InInclude, LexRawToken::End, LexState::Init, false, Some(IntLexToken::Name));
 	}
 
 	pub fn init_lexer(&mut self, name: &str) -> Result<(), String> {
@@ -272,10 +281,10 @@ impl Lexer {
 		Ok(())
 	}
 
-	fn int_get_token(&mut self) -> Result<(LexToken, Option<String>), String> {
+	fn int_get_token(&mut self) -> Result<LexToken, String> {
 		let in_file = match self.in_files.last_mut() {
 			Some(file) => file,
-			None => return Ok((LexToken::End, None)),
+			None => return Ok(LexToken::End),
 		};
 		let reader = &mut in_file.bufreader;
 		let action_table = &self.action_table;
@@ -313,12 +322,12 @@ impl Lexer {
 					// Handle action
 					Some(action) => {
 						trace!("Got action {:?}", action);
-						// End of a LexToken - we should emit or otherwise handle token
+						// End of a IntLexToken - we should emit or otherwise handle token
 						if let Some(tok) = action.emit {
 							
 							// Copy command to ostr
 							let ostr = match tok {
-								LexToken::Name | LexToken::Value | LexToken::Section => {
+								IntLexToken::Name | IntLexToken::Value | IntLexToken::Section => {
 									if let Some(s) = buffer.get_str_range() { tbuf.push_str(s); }
 									Some(tbuf.clone())					
 								},
@@ -347,7 +356,27 @@ impl Lexer {
 								let end = buffer.end;
 								drop(buffer);
 								reader.consume(end);
-								return Ok((token, ostr));
+								let etok = match token {
+									IntLexToken::End => Ok(LexToken::End),
+									IntLexToken::Name => {
+										if ostr.is_some() { Ok(LexToken::Name(ostr.unwrap())) }
+										else { Err("Internal error - empty Name".to_string()) }
+									},
+									IntLexToken::Value => {
+										if ostr.is_some() { Ok(LexToken::Value(ostr.unwrap())) }
+										else { Err("Internal error - empty Value".to_string()) }
+									},
+									IntLexToken::Include => {
+										if ostr.is_some() { Ok(LexToken::Include(ostr.unwrap())) }
+										else { Err("Internal error - empty Value".to_string()) }
+									},
+									IntLexToken::Section => {
+										if ostr.is_some() { Ok(LexToken::Section(ostr.unwrap())) }
+										else { Err("Internal error - empty Value".to_string()) }
+									},
+									_ => Err("Internal error - unexpected emitted token".to_string()),									
+								};
+								return etok;
 							} else { buffer.start = buffer.end + 1;	}
 						} else {
 							self.state = action.new_state;
@@ -370,41 +399,35 @@ impl Lexer {
 		self.int_get_token()
 	}
 
-	pub fn get_token(&mut self) -> Result<(LexToken, Option<String>), String> {
+	pub fn get_token(&mut self) -> Result<LexToken, String> {
 		loop {
 			let s = self.int_get_token()?;
-			match s.0 {
+			match s {
 				LexToken::End => {
 					if let Some(file) = self.pop_file() {
 						trace!("Returning from file {}", file.name);
 					} else { break; }
 				},
-				LexToken::Include => if let Some(name) = s.1 {
+				LexToken::Include(name) => {
 					if let Err(e) = self.push_file(&name) {
 						return Err(format!("File {}, {}", self.get_file_pos_str().unwrap(), e));
 					}
 					trace!("Moving to include file '{}'", name);
 					return self.get_token();
-				} else { 
-					// This should be forbidden by the lexer, so we won't bother putting the file position here
-					return Err("Expected file for Include command".to_string()); 
 				},
-				LexToken::Section => if let Some(sec) = s.1 {
+				LexToken::Section(sec) => {
 					if let Ok(section) = Section::from_str(&sec) {
 						if let Err(e) = self.set_section(section) { return Err(e.to_string()); }
 					} else {
 						// We can use unwrap() here because if this fails then we should panic!
 						return Err(format!("Unknown Section {} in file {}", sec, self.get_file_pos_str().unwrap()))
 					} 
-				} else {
-					// This should be forbidden by the lexer, so we won't bother putting the file position here
-					return Err("Expected Section name".to_string())
 				},
 				_ => return Ok(s)
 
 			}
 		}	
-		Ok((LexToken::End, None))
+		Ok(LexToken::End)
 	}
 }
 
@@ -462,7 +485,7 @@ fn handle_quotes_and_comments(mut quote_mode: QuoteMode, mut tok: LexRawToken, t
 // we do not emit the command, but we switch to InInclude state.
 // If we have finished the InInclude state then we emit an Include Token with the name of the include file as
 // the argument
-fn handle_include(state: LexState, action: LexAction, tok: LexToken, buf: &str) -> (bool, LexState, LexToken) {
+fn handle_include(state: LexState, action: LexAction, tok: IntLexToken, buf: &str) -> (bool, LexState, IntLexToken) {
 	let mut emit = true;
 	let mut new_state = action.new_state;
 	let mut token = tok;
@@ -472,8 +495,9 @@ fn handle_include(state: LexState, action: LexAction, tok: LexToken, buf: &str) 
 			trace!("Switch to InInclude");	
 			emit = false; 
 		} else if state == LexState::InInclude { 
-			token = LexToken::Include;
+			token = IntLexToken::Include;
 		}
+		if let IntLexToken::Null = token { emit = false; }
 	}
 	(emit, new_state, token)
 }

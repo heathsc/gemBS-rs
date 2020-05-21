@@ -28,6 +28,6 @@ impl FromStr for Section {
 #[derive(Clone)]
 #[derive(Copy)]
 pub enum VarType {
-	StringVar, BoolVar, IntVar, FloatVar
+	StringVar, BoolVar, IntVar, FloatVar, FloatVec,
 }
 

@@ -1,19 +1,19 @@
 use std::collections::HashMap;
-use std::io::BufRead;
-
 use crate::common::defs::{Section, VarType};
 	
 pub mod lex;
 use lex::{Lexer, LexToken};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RawVar {
-	StringVar(Option<String>),
-	BoolVar(Option<bool>), 
-	IntVar(Option<isize>),	
+	StringVar(String),
+	BoolVar(bool), 
+	IntVar(isize),	
+	FloatVar(f64),
+	FloatVec(Vec<f64>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PrepConfigVar {
 	var: RawVar,
 	section: Section,
@@ -36,7 +36,6 @@ impl KnownVar {
 
 #[derive(Debug)]
 struct KnownVarList {
-//	known_var: Vec<KnownVar>
 	known_var: HashMap<&'static str, KnownVar>
 }
 
@@ -45,10 +44,13 @@ impl KnownVarList {
 		KnownVarList{known_var: HashMap::new()}	
 	}	
 	fn add_known_var(&mut self, name: &'static str, vtype: VarType, sections: Vec<Section>) {
-		self.known_var.insert(name, KnownVar::new(vtype, sections));
+		let mut v = sections;
+		v.push(Section::Default);
+		self.known_var.insert(name, KnownVar::new(vtype, v));
 	}
 	fn check_vtype(&self, name: &str, section: Section) -> Option<VarType> {
-	 	match self.known_var.get(name) {
+		let tstr = name.to_lowercase();
+	 	match self.known_var.get(&tstr.as_str()) {
 			Some(v) => if v.sections.contains(&section) { Some(v.vtype) } else { None }
 			None => None,    
 		}			
@@ -97,7 +99,7 @@ fn make_known_var_list() -> KnownVarList {
 	kv_list.add_known_var("reference_bias", VarType::FloatVar, vec!(Section::Calling, Section::Extract));
 	kv_list.add_known_var("over_conversion_rate", VarType::FloatVar, vec!(Section::Calling));
 	kv_list.add_known_var("under_conversion_rate", VarType::FloatVar, vec!(Section::Calling));
-	kv_list.add_known_var("conversion", VarType::StringVar, vec!(Section::Calling));
+	kv_list.add_known_var("conversion", VarType::FloatVec, vec!(Section::Calling));
 	kv_list.add_known_var("contig_list", VarType::StringVar, vec!(Section::Calling));
 	kv_list.add_known_var("contig_pool_limit", VarType::IntVar, vec!(Section::Calling));
 	kv_list.add_known_var("extract_dir", VarType::StringVar, vec!(Section::Extract));
@@ -112,19 +114,24 @@ fn make_known_var_list() -> KnownVarList {
 	kv_list.add_known_var("make_noncpg", VarType::BoolVar, vec!(Section::Extract));
 	kv_list.add_known_var("make_bedmethyl", VarType::BoolVar, vec!(Section::Extract));
 	kv_list.add_known_var("make_snps", VarType::BoolVar, vec!(Section::Extract));
-	kv_list.add_known_var("bigwig_strand-specific", VarType::BoolVar, vec!(Section::Extract));
-	kv_list.add_known_var("strand-specific", VarType::BoolVar, vec!(Section::Extract));
+	kv_list.add_known_var("bigwig_strand_specific", VarType::BoolVar, vec!(Section::Extract));
+	kv_list.add_known_var("strand_specific", VarType::BoolVar, vec!(Section::Extract));
 	kv_list.add_known_var("project", VarType::StringVar, vec!(Section::Report));
 	kv_list.add_known_var("report_dir", VarType::StringVar, vec!(Section::Report));
 	kv_list
 }
 
-#[derive(Debug, PartialEq)]
-enum ParserState { WaitingForName, WaitingForEquals, WaitingForValue, AfterValue, End }	
+#[derive(Debug)]
+enum ParserState { 
+	WaitingForName, 
+	WaitingForValue(String), 
+	AfterValue((String, Section, PrepConfigVar)), 
+	End 
+}	
 
 pub struct PrepConfig {
 	kv_list: KnownVarList,
-	var: HashMap<&'static str, Vec<PrepConfigVar>>,
+	var: HashMap<String, Vec<PrepConfigVar>>,
 	lexer: Lexer,
 }
 
@@ -143,56 +150,111 @@ impl PrepConfig {
 		self.lexer.init_lexer(name)
 	}
 
-	fn handle_name(&mut self, tok: LexToken, ostr: Option<String>) -> Result<ParserState, String> {
+	fn handle_name(&self, tok: LexToken) -> Result<ParserState, String> {
 		match tok {
+			LexToken::Name(name) => Ok(ParserState::WaitingForValue(name)),
 			LexToken::End => Ok(ParserState::End),
-			LexToken::Name => Ok(ParserState::WaitingForEquals),
 			_ => Err("Unexpected token - waiting for variable name".to_string()),
 		}
+	}
+		
+	fn get_raw_var_from_string(&mut self, val_string: String, vtype: VarType, name: &str) -> Result<RawVar, String> {
+		match vtype {
+			VarType::StringVar => Ok(RawVar::StringVar(val_string)),
+			VarType::IntVar => match val_string.parse::<isize>() {
+				Ok(x) => Ok(RawVar::IntVar(x)),
+				Err(_) => Err(format!("Error for variable {} when converting '{}' to integer value", name, val_string)),
+			},
+			VarType::BoolVar => match val_string.to_lowercase().parse::<bool>() {
+				Ok(x) => Ok(RawVar::BoolVar(x)),
+				Err(_) => Err(format!("Error for variable {} when converting '{}' to boolean value", name, val_string)),
+			},
+			VarType::FloatVar | VarType::FloatVec => match val_string.parse::<f64>() {
+				Ok(x) => Ok(RawVar::FloatVar(x)),
+				Err(_) => Err(format!("Error for variable {} when converting '{}' to float value", name, val_string)),
+			},		
+		}		
+	}
+	
+	fn handle_value(&mut self, tok: LexToken, name: String) -> Result <ParserState, String> {
+		match tok {
+			LexToken::Value(val_str) => {
+				let section = if let Some(s) = self.lexer.get_section() { s } else { return Err("Internal error - no section".to_string()) };
+				let vt = self.check_vtype(&name, section);
+				let known = vt.is_some();
+				let vt = vt.unwrap_or(VarType::StringVar);
+				let mut rv = self.get_raw_var_from_string(val_str, vt, &name)?;
+				if let VarType::FloatVec = vt {
+					if let RawVar::FloatVar(x) = rv { rv = RawVar::FloatVec(vec!(x; 1)); }
+				}
+				let pvar = PrepConfigVar{var: rv, section, known, used: false};
+				Ok(ParserState::AfterValue((name, section, pvar)))
+			},
+			_ => Err(format!("Unexpected token - waiting for value after variable {}", name)),
+		}
+	}
+	fn handle_next_value(&mut self, val_str: String, mut pvar: PrepConfigVar, name: String, section: Section) -> Result<ParserState, String> {
+		let mut vector = match pvar.var {
+			RawVar::FloatVec(x) => x,
+			_ => return Err("Internal error in handle_next_value()".to_string()),
+		};
+		let rv = self.get_raw_var_from_string(val_str, VarType::FloatVar, &name)?;
+		if let RawVar::FloatVar(x) = rv { vector.push(x); }
+		pvar.var = RawVar::FloatVec(vector);
+		Ok(ParserState::AfterValue((name, section, pvar)))
 	}	
-	fn handle_equals(&mut self, tok: LexToken) -> Result <ParserState, String> {
+	fn handle_after_value(&mut self, tok: LexToken, x: (String, Section, PrepConfigVar)) -> Result<ParserState, String> {
+		let name = x.0;
+		let section = x.1;
+		let pvar = x.2;
+		let vector = if let RawVar::FloatVec(_) = pvar.var { true } else { false };
 		match tok {
-			LexToken::Equals => Ok(ParserState::WaitingForValue),
-			_ => Err("Unexpected token - waiting for variable name".to_string()),
+			LexToken::Name(_) => {
+				self.handle_assignment(name, section, pvar);
+				self.handle_name(tok)
+			},
+			LexToken::Value(st) if vector => self.handle_next_value(st, pvar, name, section),
+			LexToken::End => {
+				self.handle_assignment(name, section, pvar);
+				Ok(ParserState::End)
+			},
+			_ => Err(format!("Unexpected token - waiting for variable name or value after variable {}", name)),
 		}
+	} 
+	fn handle_assignment(&mut self, name: String, section: Section, pvar: PrepConfigVar) {
+		let name = self.interpolation(name);
+		println!("Making assignment {:?}: {} = {:?}", section, name, pvar.var);
+		self.var.entry(name.clone()).or_insert_with(Vec::new);	
+		// We know the value exists as this is assured by the previous line
+		self.var.get_mut(&name).unwrap().push(pvar);	
 	}
-	fn handle_value(&mut self, tok: LexToken, ostr: Option<String>) -> Result <ParserState, String> {
-		match tok {
-			LexToken::Value => Ok(ParserState::WaitingForValue),
-			_ => Err("Unexpected token - waiting for variable name".to_string()),
-		}
-	}
-	fn handle_after_value(&mut self, tok: LexToken, ostr: Option<String>) -> ParserState {
-		return ParserState::WaitingForName;
-	}
+	fn interpolation(&self, name: String) -> String {
+		let len = name.len();
+		 
+		name
+	}	
 	pub fn parse(&mut self) -> Result<(), String> {
-		let mut state = ParserState::WaitingForValue; 
+		let mut state = ParserState::WaitingForName; 
 		loop {
 			let s = self.lexer.get_token()?;
-			match s.0 {
-				LexToken::End => break,
-				_ => println!("Got {:?} {:?}", s.0, s.1),
-			}
-/*
 			match state {
 				ParserState::WaitingForName => {
-					state = self.handle_name(s.0, s.1)?;
+					state = self.handle_name(s)?;
 				},
-				ParserState::WaitingForEquals => {
-					state = self.handle_equals(s.0)?;
-					
+				ParserState::WaitingForValue(name) => {
+					state = self.handle_value(s, name)?;				
 				},
-				ParserState::WaitingForValue => {
-					state = self.handle_value(s.0, s.1)?;
-					
+				ParserState::AfterValue(x) => {
+					state = self.handle_after_value(s, x)?;					
 				},
-				ParserState::AfterValue => {
-					state = self.handle_after_value(s.0, s.1);
-					
-				}
 				_ => (),
 			}
-			if state == ParserState::End { break; } */
+			if let ParserState::End = state { break; } 
+		}
+		for(k, v) in self.var.iter() {
+			for pv in v {
+				println!("HASH: {:?}:{} = {:?}", pv.section, k, pv.var);
+			}
 		}
 		Ok(())
 	}	
