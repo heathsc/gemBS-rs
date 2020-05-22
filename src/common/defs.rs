@@ -1,9 +1,6 @@
 use std::str::FromStr;
 
-#[derive(Debug)]
-#[derive(PartialEq)]
-#[derive(Clone)]
-#[derive(Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Section {
 	Default, Index, Mapping, Calling, Extract, Report,
 }
@@ -24,9 +21,7 @@ impl FromStr for Section {
     }
 }
 
-#[derive(Debug)]
-#[derive(Clone)]
-#[derive(Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum VarType {
 	StringVar, BoolVar, IntVar, FloatVar, FloatVec,
 }

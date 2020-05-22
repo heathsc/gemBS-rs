@@ -1,12 +1,18 @@
 use std::collections::HashMap;
+use std::str::FromStr;
+use std::env;
+
 use crate::common::defs::{Section, VarType};
 	
 pub mod lex;
+mod find_var;
 use lex::{Lexer, LexToken};
+use find_var::{find_var, Segment};
 
 #[derive(Debug, Clone)]
 pub enum RawVar {
 	StringVar(String),
+	StringVec(Vec<String>),
 	BoolVar(bool), 
 	IntVar(isize),	
 	FloatVar(f64),
@@ -16,6 +22,7 @@ pub enum RawVar {
 #[derive(Debug, Clone)]
 pub struct PrepConfigVar {
 	var: RawVar,
+	vtype:VarType,
 	section: Section,
 	known: bool,
 	used: bool,
@@ -149,33 +156,32 @@ impl PrepConfig {
 	pub fn start_parse(&mut self, name: &str) -> Result<(), String> {
 		self.lexer.init_lexer(name)
 	}
-
+	pub fn get(&self, name: &str, section: Section) -> Option<&PrepConfigVar> {
+		if name.is_empty() { return None; }
+		match self.var.get(&name.to_lowercase()) {			
+			Some(v) => {
+				let mut default_var = None;
+				let mut var = None;
+				for pv in v.iter() {
+					if pv.section == section {
+						var = Some(pv);
+					} else if pv.section == Section::Default {
+						default_var = Some(pv);
+					}
+				}
+				if var.is_some() { var } else { default_var }
+			},
+			None => None,	
+		}
+	}
 	fn handle_name(&self, tok: LexToken) -> Result<ParserState, String> {
 		match tok {
-			LexToken::Name(name) => Ok(ParserState::WaitingForValue(name)),
+			LexToken::Name(name) => Ok(ParserState::WaitingForValue(name.to_lowercase())),
 			LexToken::End => Ok(ParserState::End),
 			_ => Err("Unexpected token - waiting for variable name".to_string()),
 		}
 	}
 		
-	fn get_raw_var_from_string(&mut self, val_string: String, vtype: VarType, name: &str) -> Result<RawVar, String> {
-		match vtype {
-			VarType::StringVar => Ok(RawVar::StringVar(val_string)),
-			VarType::IntVar => match val_string.parse::<isize>() {
-				Ok(x) => Ok(RawVar::IntVar(x)),
-				Err(_) => Err(format!("Error for variable {} when converting '{}' to integer value", name, val_string)),
-			},
-			VarType::BoolVar => match val_string.to_lowercase().parse::<bool>() {
-				Ok(x) => Ok(RawVar::BoolVar(x)),
-				Err(_) => Err(format!("Error for variable {} when converting '{}' to boolean value", name, val_string)),
-			},
-			VarType::FloatVar | VarType::FloatVec => match val_string.parse::<f64>() {
-				Ok(x) => Ok(RawVar::FloatVar(x)),
-				Err(_) => Err(format!("Error for variable {} when converting '{}' to float value", name, val_string)),
-			},		
-		}		
-	}
-	
 	fn handle_value(&mut self, tok: LexToken, name: String) -> Result <ParserState, String> {
 		match tok {
 			LexToken::Value(val_str) => {
@@ -183,11 +189,16 @@ impl PrepConfig {
 				let vt = self.check_vtype(&name, section);
 				let known = vt.is_some();
 				let vt = vt.unwrap_or(VarType::StringVar);
-				let mut rv = self.get_raw_var_from_string(val_str, vt, &name)?;
-				if let VarType::FloatVec = vt {
-					if let RawVar::FloatVar(x) = rv { rv = RawVar::FloatVec(vec!(x; 1)); }
-				}
-				let pvar = PrepConfigVar{var: rv, section, known, used: false};
+//		let mut rv = self.get_raw_var_from_string(val_str, vt, &name)?;
+
+				// We initially keep everything as a string until after finishing parsing the config file(s)
+				// To allow interpolation to work as expected
+				let rv = if let VarType::FloatVec = vt {
+					RawVar::StringVec(vec!(val_str;1))
+				} else {
+					RawVar::StringVar(val_str)
+				};
+				let pvar = PrepConfigVar{var: rv, vtype: vt, section, known, used: false};
 				Ok(ParserState::AfterValue((name, section, pvar)))
 			},
 			_ => Err(format!("Unexpected token - waiting for value after variable {}", name)),
@@ -195,43 +206,98 @@ impl PrepConfig {
 	}
 	fn handle_next_value(&mut self, val_str: String, mut pvar: PrepConfigVar, name: String, section: Section) -> Result<ParserState, String> {
 		let mut vector = match pvar.var {
-			RawVar::FloatVec(x) => x,
+			RawVar::StringVec(x) => x,
 			_ => return Err("Internal error in handle_next_value()".to_string()),
 		};
-		let rv = self.get_raw_var_from_string(val_str, VarType::FloatVar, &name)?;
-		if let RawVar::FloatVar(x) = rv { vector.push(x); }
-		pvar.var = RawVar::FloatVec(vector);
+		vector.push(val_str);
+		pvar.var = RawVar::StringVec(vector);
 		Ok(ParserState::AfterValue((name, section, pvar)))
 	}	
 	fn handle_after_value(&mut self, tok: LexToken, x: (String, Section, PrepConfigVar)) -> Result<ParserState, String> {
 		let name = x.0;
 		let section = x.1;
 		let pvar = x.2;
-		let vector = if let RawVar::FloatVec(_) = pvar.var { true } else { false };
+		let vector = if let RawVar::StringVec(_) = pvar.var { true } else { false };
 		match tok {
 			LexToken::Name(_) => {
-				self.handle_assignment(name, section, pvar);
+				self.handle_assignment(name, section, pvar)?;
 				self.handle_name(tok)
 			},
 			LexToken::Value(st) if vector => self.handle_next_value(st, pvar, name, section),
 			LexToken::End => {
-				self.handle_assignment(name, section, pvar);
+				self.handle_assignment(name, section, pvar)?;
 				Ok(ParserState::End)
 			},
 			_ => Err(format!("Unexpected token - waiting for variable name or value after variable {}", name)),
 		}
 	} 
-	fn handle_assignment(&mut self, name: String, section: Section, pvar: PrepConfigVar) {
-		let name = self.interpolation(name);
+	fn handle_assignment(&mut self, name: String, section: Section, mut pvar: PrepConfigVar) -> Result<(), String>
+	{
+		if let RawVar::StringVar(x) = pvar.var {
+			pvar.var = RawVar::StringVar(self.interpolation(x, section, &name)?);
+		}	
 		println!("Making assignment {:?}: {} = {:?}", section, name, pvar.var);
 		self.var.entry(name.clone()).or_insert_with(Vec::new);	
 		// We know the value exists as this is assured by the previous line
-		self.var.get_mut(&name).unwrap().push(pvar);	
+		self.var.get_mut(&name).unwrap().push(pvar);
+		Ok(())
 	}
-	fn interpolation(&self, name: String) -> String {
-		let len = name.len();
-		 
-		name
+	fn check_var_and_env(&self, vname: &str, vname1: &str, section: Section) -> Option<String> {
+		let stored_var = match self.get(vname, section) {
+			Some(pv) => { if let RawVar::StringVar(st) = &pv.var { Some(st.clone()) } else { None }},
+			None => { None },
+		};
+		// Apparently env::var_os() if the name contains an equals or Nul character
+		if stored_var.is_none() && !(vname1.is_empty() || vname1.contains('=') || vname1.contains('\0')) {
+			match env::var(vname1) {
+				Ok(st) => { Some(st) },
+				Err(_) => None,
+			}
+		} else {
+			stored_var
+		}	
+	}
+	fn interpolation(&self, var_str: String, section: Section, name: &str) -> Result<String, String> {
+		let mut v = Vec::new();
+		find_var(&var_str, &mut v);
+		if v.is_empty() {return Ok(var_str); }
+		if let Segment::End(_) = v[0] { return Ok(var_str); }
+		// In the following section we can use unwrap() etc. because the indexes should be correct, and
+		// if not then we should panic!
+		let mut buf = String::new();
+		for seg in v.iter() {
+			match seg {
+				Segment::NameOnly(idx) => {
+					let vname = var_str.get(idx[2]..idx[3]).unwrap();
+					let stored_var = self.check_var_and_env(vname, vname, section);
+					buf.push_str(var_str.get(idx[0]..idx[1]).unwrap());
+					match stored_var { 
+						Some(x) => buf.push_str(&x),
+						None => warn!("Unknown variable '{}' in assignment for variable '{}'", vname, name),
+					}					
+				},
+				Segment::SectionName(idx) => {
+					let vname = var_str.get(idx[4]..idx[5]).unwrap();
+					let vname1 = var_str.get(idx[2]..idx[5]).unwrap();
+					let sec = if idx[3] != idx[2] { 
+						match Section::from_str(var_str.get(idx[2]..idx[3]).unwrap()) {
+							Ok(s) => s,
+							Err(_) => return Err(format!("Unknown Section '{}' in assignment for variable '{}'", vname, name)),
+						}
+					} else { section };
+					let stored_var = self.check_var_and_env(vname, vname1, sec);					
+					buf.push_str(var_str.get(idx[0]..idx[1]).unwrap());
+					match stored_var { 
+						Some(x) => buf.push_str(&x),
+						None => warn!("Unknown variable '{}' in assignment for variable '{}'", vname, name),
+					}					
+				},
+				Segment::End(idx) => {
+					buf.push_str(var_str.get(*idx..).unwrap());
+				},
+			}
+		}	
+		Ok(buf)
 	}	
 	pub fn parse(&mut self) -> Result<(), String> {
 		let mut state = ParserState::WaitingForName; 
@@ -251,12 +317,50 @@ impl PrepConfig {
 			}
 			if let ParserState::End = state { break; } 
 		}
-		for(k, v) in self.var.iter() {
+		for(name, v) in self.var.iter_mut() {
 			for pv in v {
-				println!("HASH: {:?}:{} = {:?}", pv.section, k, pv.var);
+				match pv.vtype {
+					VarType::StringVar => { },
+					VarType::FloatVec => { 
+						if let RawVar::StringVec(vv) = &pv.var {
+							let mut v = Vec::new();
+							for s in vv.iter() {
+								let rv = get_raw_var_from_string(s.to_string(), VarType::FloatVar, &name)?;
+								if let RawVar::FloatVar(x) = rv { v.push(x); }
+							}	
+							pv.var = RawVar::FloatVec(v);					
+						}	
+					},
+					_ => {
+						if let RawVar::StringVar(var_str) = &pv.var {
+							pv.var = get_raw_var_from_string(var_str.to_string(), pv.vtype, &name)?;
+						}					
+					},
+				}
+				println!("HASH: {:?}:{} = {:?}", pv.section, name, pv.var);
 			}
 		}
 		Ok(())
 	}	
 }
+
+fn get_raw_var_from_string(val_string: String, vtype: VarType, name: &str) -> Result<RawVar, String> {
+	match vtype {
+		VarType::StringVar => Ok(RawVar::StringVar(val_string)),
+		VarType::IntVar => match val_string.parse::<isize>() {
+			Ok(x) => Ok(RawVar::IntVar(x)),
+			Err(_) => Err(format!("Error for variable {} when converting '{}' to integer value", name, val_string)),
+		},
+		VarType::BoolVar => match val_string.to_lowercase().parse::<bool>() {
+			Ok(x) => Ok(RawVar::BoolVar(x)),
+			Err(_) => Err(format!("Error for variable {} when converting '{}' to boolean value", name, val_string)),
+		},
+		VarType::FloatVar | VarType::FloatVec => match val_string.parse::<f64>() {
+			Ok(x) => Ok(RawVar::FloatVar(x)),
+			Err(_) => Err(format!("Error for variable {} when converting '{}' to float value", name, val_string)),
+		},		
+	}		
+}
+	
+
 
