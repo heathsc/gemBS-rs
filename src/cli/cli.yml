@@ -11,6 +11,7 @@ args:
     - loglevel: {short: l, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
     - json: {short: j, long: json-file, takes_value: true, value_name: JSON, help: Location of gemBS JSON file}
     - dir: {short: d, long: dir, takes_value: true, value_name: DIR, help: set working directory}
+    - gembs_root: {short :r, long: gembs-root, takes_value: true, value_name: DIR, help: set root of gemBS installation}
 subcommands:
     - prepare:
         setting: DeriveDisplayOrder
@@ -19,7 +20,6 @@ subcommands:
            - config: {short: c, long: config, value_name: CONFIG, help: Text config file with gemBS parameters, takes_value: true, required: true}
            - cvs_metadata: {short: t, long: text-metadata, value_name: TEXT_METADATA, help: Sample data in csv format, takes_value: true}
            - json_metadata: {short: l, long: lims-cnag-json, value_name: JSON_METADATA, help: Use JSON metadata file from CNAG lims, takes_value: true}
-           - output: {short: o, long: output, value_name: OUTPUT, help: Output JSON file, takes_value: true}
            - no_db: {short: d, long: no-db, help: Do not use on-disk database}
         groups:
            - metadata:

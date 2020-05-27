@@ -1,11 +1,15 @@
-use clap::{App, AppSettings};
 use std::str::FromStr;
+use std::env;
+use std::path::Path;
+use clap::{App, AppSettings};
+
 use crate::commands;
+use crate::config::GemBS;
 
 pub mod utils;
 use utils::LogLevel;
 
-pub fn process_cli() -> Result<(), String> {
+pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 	let yaml = load_yaml!("cli.yml");
     let m = App::from_yaml(yaml)
         .setting(AppSettings::VersionlessSubcommands)
@@ -31,15 +35,25 @@ pub fn process_cli() -> Result<(), String> {
         .init()
         .unwrap();
 
+	if let Some(f) = m.value_of("dir") {
+		let wd = Path::new(f);
+		if env::set_current_dir(&wd).is_ok() { debug!("Moved working directory to {}", f); } else {
+			return Err(format!("Can not switch working directory to {}", f));
+		} 	
+	}	
+
+	let json_dir = m.value_of("json");
+	let root_dir = m.value_of("gembs_root");
 	// Now handle subcommands
 	
 	match m.subcommand() {
 		("prepare", Some(m_sum)) => {
 			debug!("User entered 'prepare' command");
-			commands::prepare::prepare_command(m_sum)
+			commands::prepare::prepare_command(m_sum, gem_bs, json_dir, root_dir)
 		},
 		("index", Some(m_sum)) => {
 			debug!("User entered 'index' command");
+			// gem_bs.setup_fs(json_dir, root_dir, false)?;
 			commands::index::index_command(m_sum)
 		},
 		_ => {

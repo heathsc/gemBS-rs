@@ -1,22 +1,33 @@
 use clap::ArgMatches;
-use crate::common::defs::{Section, VarType};
+use crate::config::GemBS;
+use crate::common::defs::{Section, DataValue};
+use crate::cli::utils;
 
-mod config;
+mod config_file;
+pub mod metadata;
 
-pub fn prepare_command(m: &ArgMatches) -> Result<(), String> {
+pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS, json_option: Option<&str>, root_option: Option<&str>) -> Result<(), String> {
 	
+	// Process configuration file	
 	// We can just unwrap here because we should only get here if the config option is present,
 	// so if it is not present then there has been an internal error an we can panic...
-	let config = m.value_of("config").unwrap();
-	println!("config: {}", config);
-	let mut prep_config = config::PrepConfig::new();
-/*	let x = prep_config.check_vtype("bcf_dir", Section::Calling);
-	let y = prep_config.check_vtype("bcf_dir", Section::Mapping);
-	let z = prep_config.check_vtype("threads", Section::Report);
-	println!("x: {:?}", x);
-	println!("y: {:?}", y);
-	println!("z: {:?}", z); */
-	prep_config.start_parse(config)?;
-	prep_config.parse()?;
+	config_file::process_config_file(m.value_of("config").unwrap(), gem_bs)?;
+
+	// Command line arguments overwrite options set in the config file
+	if let Some(s) = json_option { gem_bs.set_config(Section::Default, "json_file", DataValue::String(s.to_string())); }
+	if let Some(s) = root_option { gem_bs.set_config(Section::Default, "gembs_root", DataValue::String(s.to_string())); }
+	let db_option: Option<bool> = utils::from_arg_matches(m, "no_db");
+	if let Some(b) = db_option { gem_bs.set_config(Section::Default, "no_db", DataValue::Bool(b)); }
+	
+	gem_bs.setup_fs(true)?;
+	
+	// Process sample metadata file
+	// This can either be a cvs file or a json file
+	if let Some(f) = m.value_of("cvs_metadata") { 
+		metadata::process_csv::process_cvs_metatdata_file(f, gem_bs)?;
+	} else if let Some(f) = m.value_of("json_metadata") {
+		metadata::process_json::process_json_metadata_file(f, gem_bs)?;
+	}
+	gem_bs.write_json_config()?;
 	Ok(())
 }
