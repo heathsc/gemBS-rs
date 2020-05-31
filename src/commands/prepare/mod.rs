@@ -1,7 +1,10 @@
 use clap::ArgMatches;
 use crate::config::GemBS;
+use crate::config::check_ref;
 use crate::common::defs::{Section, DataValue};
 use crate::cli::utils;
+use crate::common::utils::Pipeline;
+use std::path::Path;
 
 mod config_file;
 pub mod metadata;
@@ -28,6 +31,21 @@ pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS, json_option: Option<&
 	} else if let Some(f) = m.value_of("json_metadata") {
 		metadata::process_json::process_json_metadata_file(f, gem_bs)?;
 	}
+	
+	check_ref::check_ref_and_indices(gem_bs)?;
+	
+	let mut pipeline = Pipeline::new();
+	pipeline.add_stage(Path::new("zcat"), Some(&["A34002_contig_list.bed.gz"]))
+		.add_stage(Path::new("head"), Some(&["-12"]))
+		.add_stage(Path::new("wc"), None);
+	let mut child = pipeline.run()?;
+	if child.wait().is_err() { 
+		return Err("Error from pipeline run".to_string());
+	}
+	
+	// Dump JSON config file to disk
 	gem_bs.write_json_config()?;
+	
+	
 	Ok(())
 }

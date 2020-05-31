@@ -14,4 +14,5 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 csv = "1.1"
 lazy_static = "1.4.0"
+rusqlite = "0.23"
 compress = { path = "../rust/compress" }

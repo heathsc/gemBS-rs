@@ -7,8 +7,12 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::env;
 use serde::{Serialize, Deserialize};
+use rusqlite::Connection;
 
 use crate::common::defs::{Section, Metadata, DataValue};
+
+mod database;
+pub mod check_ref;
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GemBSHash {
@@ -16,26 +20,28 @@ enum GemBSHash {
 	SampleData(HashMap<String, HashMap<Metadata, DataValue>>),
 }
 
-enum DBType {
-	DBFile(&'static str),
-	DBMem(&'static str),	
+enum SQLiteDB {
+	File(Connection),
+	Mem(Connection),
+	None,
 }
 
 struct GemBSFiles {
 	config_dir: PathBuf,
 	json_file: PathBuf,
 	gem_bs_root: PathBuf,		
-	db: DBType,
+	db_path: PathBuf,
 }
 
 pub struct GemBS {
 	var: Vec<GemBSHash>,
 	fs: Option<GemBSFiles>,
+	db: SQLiteDB,
 }
 
 impl GemBS {
 	pub fn new() -> Self {
-		let mut gem_bs = GemBS{var: Vec::new(), fs: None};
+		let mut gem_bs = GemBS{var: Vec::new(), fs: None, db: SQLiteDB::None};
 		gem_bs.var.push(GemBSHash::Config(HashMap::new()));
 		gem_bs.var.push(GemBSHash::SampleData(HashMap::new()));	
 		gem_bs
@@ -54,7 +60,9 @@ impl GemBS {
 	}
 	pub fn get_config(&self, section: Section, name: &str) -> Option<&DataValue> {
 		if let GemBSHash::Config(href) = &self.var[0] {
-			if let Some(h) = href.get(&section) { return h.get(name); }		
+			if let Some(h) = href.get(&section) { 
+				if let Some(s) = h.get(name) { return Some(s); } 
+			}		
 			if let Some(h) = href.get(&Section::Default) { return h.get(name); }
 			None
 		} else { None }
@@ -76,6 +84,14 @@ impl GemBS {
 		} else { return Err(format!("Error: Failed to create JSON config file {:?}", json_file)); } 
 		Ok(())
 	}
+	pub fn create_db_tables(&self) -> Result<(), String> {
+		let c = match &self.db {
+			SQLiteDB::File(c) => c,
+			SQLiteDB::Mem(c) => c,
+			SQLiteDB::None => return Err("create_db_tables(): database not yet opened".to_string()),
+		};
+		database::create_tables(&c)
+	}
 	pub fn setup_fs(&mut self, initial: bool) -> Result<(), String> {
 		let config_dir = PathBuf::from(".gemBS");
 		let json_file = if let Some(DataValue::String(x)) = self.get_config(Section::Default, "json_file") { PathBuf::from(x) } else { 
@@ -93,9 +109,12 @@ impl GemBS {
 		if !check_root(&gem_bs_root) {
 			return Err(format!("Could not find (installation) root directory for gemBS at {:?}.  Use root-dir option or set GEMBS_ROOT environment variable", gem_bs_root));
 		}
-
+		let db_path = {
+			let mut tpath = config_dir.clone();
+			tpath.push("gemBS.db");
+			tpath
+		};		
 		let no_db = if let Some(DataValue::Bool(x)) = self.get_config(Section::Default, "no_db") { *x } else { false }; 
-		let db = if no_db { DBType::DBMem("gemBS") } else { DBType::DBFile("gemBS.db") };
 		if initial {
 			if config_dir.exists() {
 				if !config_dir.is_dir() {
@@ -105,15 +124,22 @@ impl GemBS {
 		} else {
 			if !config_dir.is_dir() { return Err(format!("Config directory {:?} does not exist (or is not accessible)", config_dir)); }
 			if !json_file.exists() { return Err(format!("Config JSON file {:?} does not exist (or is not accessible)", json_file)); }
-			if let DBType::DBFile(s) = db {
-				let mut tpath = config_dir.clone();
-				tpath.push(s);
-				if !tpath.exists() { return Err(format!("Database file {:?} does not exist (or is not accessible)", tpath)); }
-			}
+			if !no_db && !db_path.exists() { return Err(format!("Database file {:?} does not exist (or is not accessible)", db_path)); }
 		}
-		self.fs = Some(GemBSFiles{config_dir, json_file, gem_bs_root, db});	
+		let db_conn = database::open_db_connection(&db_path, no_db, initial)?;
+		self.db = if no_db { SQLiteDB::Mem(db_conn) } else { SQLiteDB::File(db_conn) };
+		self.create_db_tables()?;
+		self.fs = Some(GemBSFiles{config_dir, json_file, gem_bs_root, db_path});	
 		Ok(())
 	}
+	
+	pub fn get_reference(&self) -> Result<&str, String> {
+		match self.get_config(Section::Index, "reference") {
+			Some(DataValue::String(x)) => Ok(x),
+			_ => Err("No reference file supplied in config file.   Use key: reference to indicate a valid reference file".to_string()),
+		}
+	}
+
 }
 
 
