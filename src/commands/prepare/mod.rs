@@ -5,6 +5,7 @@ use crate::common::defs::{Section, DataValue};
 use crate::cli::utils;
 use crate::common::utils::Pipeline;
 use std::path::Path;
+use std::io::Read;
 
 mod config_file;
 pub mod metadata;
@@ -35,12 +36,16 @@ pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS, json_option: Option<&
 	check_ref::check_ref_and_indices(gem_bs)?;
 	
 	let mut pipeline = Pipeline::new();
-	pipeline.add_stage(Path::new("zcat"), Some(&["A34002_contig_list.bed.gz"]))
-		.add_stage(Path::new("head"), Some(&["-12"]))
+	let arg1 = vec!("A34002_contig_list.bed.gz");
+	let arg2 = vec!("-14", "-q");
+	pipeline.add_stage(Path::new("zcat"), Some(arg1.iter()))
+		.add_stage(Path::new("head"), Some(arg2.iter()))
 		.add_stage(Path::new("wc"), None);
-	let mut child = pipeline.run()?;
-	if child.wait().is_err() { 
-		return Err("Error from pipeline run".to_string());
+	let childout = pipeline.run(false)?;
+	if let Some(mut pipe) = childout {
+		let mut buf = String::new();
+		let _ = pipe.read_to_string(&mut buf);
+		println!("Got: {}", buf);		
 	}
 	
 	// Dump JSON config file to disk
