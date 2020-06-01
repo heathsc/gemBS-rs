@@ -6,10 +6,12 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::env;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Serialize, Deserialize};
 use rusqlite::Connection;
 
-use crate::common::defs::{Section, Metadata, DataValue};
+use crate::common::defs::{Section, Metadata, DataValue, SIGTERM, SIGINT, SIGQUIT, SIGHUP};
 
 mod database;
 pub mod check_ref;
@@ -37,14 +39,22 @@ pub struct GemBS {
 	var: Vec<GemBSHash>,
 	fs: Option<GemBSFiles>,
 	db: SQLiteDB,
+	signal: Arc<AtomicUsize>,
 }
 
 impl GemBS {
 	pub fn new() -> Self {
-		let mut gem_bs = GemBS{var: Vec::new(), fs: None, db: SQLiteDB::None};
+		let mut gem_bs = GemBS{var: Vec::new(), fs: None, db: SQLiteDB::None, signal: Arc::new(AtomicUsize::new(0))};
+		let _ = signal_hook::flag::register_usize(signal_hook::SIGTERM, Arc::clone(&gem_bs.signal), SIGTERM);		
+		let _ = signal_hook::flag::register_usize(signal_hook::SIGINT, Arc::clone(&gem_bs.signal), SIGINT);		
+		let _ = signal_hook::flag::register_usize(signal_hook::SIGQUIT, Arc::clone(&gem_bs.signal), SIGQUIT);		
+		let _ = signal_hook::flag::register_usize(signal_hook::SIGHUP, Arc::clone(&gem_bs.signal), SIGHUP);		
 		gem_bs.var.push(GemBSHash::Config(HashMap::new()));
 		gem_bs.var.push(GemBSHash::SampleData(HashMap::new()));	
 		gem_bs
+	}
+	pub fn get_signal(& self) -> usize {
+		self.signal.load(Ordering::Relaxed)
 	}
 	pub fn set_config(&mut self, section: Section, name: &str, val: DataValue) {
 		if let GemBSHash::Config(href) = &mut self.var[0] {
@@ -140,6 +150,20 @@ impl GemBS {
 		}
 	}
 
+	pub fn get_threads(&self, section: Section) -> usize {
+		match self.get_config(section, "threads") {
+			Some(DataValue::Int(x)) => *x as usize,
+			_ => num_cpus::get(),
+		}
+	}
+	
+	pub fn get_exec_path(&self, name: &str) -> PathBuf {
+		let root = &self.fs.as_ref().unwrap().gem_bs_root;
+		let mut tpath = root.clone();
+		tpath.push("bin");
+		tpath.push(name);
+		tpath
+	}
 }
 
 

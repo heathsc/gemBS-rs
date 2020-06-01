@@ -15,4 +15,6 @@ serde_json = "1.0"
 csv = "1.1"
 lazy_static = "1.4.0"
 rusqlite = "0.23"
+num_cpus = "1.13.0"
+signal-hook = "0.1.15"
 compress = { path = "../rust/compress" }

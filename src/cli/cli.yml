@@ -21,6 +21,7 @@ subcommands:
            - cvs_metadata: {short: t, long: text-metadata, value_name: TEXT_METADATA, help: Sample data in csv format, takes_value: true}
            - json_metadata: {short: l, long: lims-cnag-json, value_name: JSON_METADATA, help: Use JSON metadata file from CNAG lims, takes_value: true}
            - no_db: {short: d, long: no-db, help: Do not use on-disk database}
+           - populate: {short: p, long: populate-cache, help: Populate reference cache if required (for CRAM)}
         groups:
            - metadata:
               args: [cvs_metadata, json_metadata]
@@ -31,7 +32,6 @@ subcommands:
         args:
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads (default - all available cores)}
           - sampling: {short: s, long: sampling-rate, value_name: SAMPLING_RATE, takes_value: true, help: Text sampling rate - increasing will decrease index size but also performance}
-          - populate: {short: p, long: populate-cache, help: Populate reference cache if required (for CRAM)}
           - dbsnp_files: {short: d, long: list-dbsnp-files, value_name: DBSNP_FILES, multiple: true, takes_value: true, help: List of input files from dbSNP}
     - map:
         setting: DeriveDisplayOrder

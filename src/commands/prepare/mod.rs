@@ -3,9 +3,9 @@ use crate::config::GemBS;
 use crate::config::check_ref;
 use crate::common::defs::{Section, DataValue};
 use crate::cli::utils;
-use crate::common::utils::Pipeline;
-use std::path::Path;
-use std::io::Read;
+// use crate::common::utils::Pipeline;
+// use std::path::Path;
+// use std::io::Read;
 
 mod config_file;
 pub mod metadata;
@@ -20,8 +20,8 @@ pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS, json_option: Option<&
 	// Command line arguments overwrite options set in the config file
 	if let Some(s) = json_option { gem_bs.set_config(Section::Default, "json_file", DataValue::String(s.to_string())); }
 	if let Some(s) = root_option { gem_bs.set_config(Section::Default, "gembs_root", DataValue::String(s.to_string())); }
-	let db_option: Option<bool> = utils::from_arg_matches(m, "no_db");
-	if let Some(b) = db_option { gem_bs.set_config(Section::Default, "no_db", DataValue::Bool(b)); }
+	if m.is_present("no_db") { gem_bs.set_config(Section::Default, "no_db", DataValue::Bool(true)); }
+	if m.is_present("populate") { gem_bs.set_config(Section::Index, "populate_cache", DataValue::Bool(true)); }
 	
 	gem_bs.setup_fs(true)?;
 	
@@ -34,19 +34,6 @@ pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS, json_option: Option<&
 	}
 	
 	check_ref::check_ref_and_indices(gem_bs)?;
-	
-	let mut pipeline = Pipeline::new();
-	let arg1 = vec!("A34002_contig_list.bed.gz");
-	let arg2 = vec!("-14", "-q");
-	pipeline.add_stage(Path::new("zcat"), Some(arg1.iter()))
-		.add_stage(Path::new("head"), Some(arg2.iter()))
-		.add_stage(Path::new("wc"), None);
-	let childout = pipeline.run(false)?;
-	if let Some(mut pipe) = childout {
-		let mut buf = String::new();
-		let _ = pipe.read_to_string(&mut buf);
-		println!("Got: {}", buf);		
-	}
 	
 	// Dump JSON config file to disk
 	gem_bs.write_json_config()?;

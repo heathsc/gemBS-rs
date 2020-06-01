@@ -123,3 +123,9 @@ pub enum VarType {
 	String, StringVec, Bool, Int, Float, FloatVec, ReadEnd, FileType,
 }
 
+pub const SIGTERM: usize = signal_hook::SIGTERM as usize;
+pub const SIGINT: usize = signal_hook::SIGINT as usize;
+pub const SIGQUIT: usize = signal_hook::SIGQUIT as usize;		
+pub const SIGHUP: usize = signal_hook::SIGHUP as usize;
+
+

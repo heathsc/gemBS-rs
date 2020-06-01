@@ -2,7 +2,9 @@
 
 use crate::common::defs::{Section, Metadata, DataValue};
 use crate::config::GemBS;
+use crate::common::utils::Pipeline;
 use std::path::{Path, PathBuf};
+use std::fs;
 
 fn check_ref(gem_bs: &GemBS) -> Result<(), String> {
 	// Check reference file
@@ -111,7 +113,52 @@ fn check_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 	Ok(())	
 }
 
+fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {	
+	let reference = gem_bs.get_reference()?;
+	let index_dir = if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::Index, "index_dir") { idx } else { panic!("Internal error - missing index_dir") }; 
+	let tpath = Path::new(Path::new(reference).file_stem().unwrap()).with_extension("gemBS.ref");	
+	let mut gref = PathBuf::from(index_dir);
+	gref.push(tpath);
+	let gref_fai = gref.clone().with_extension("ref.fai");
+	let gref_gzi = gref.clone().with_extension("ref.gzi");
+	let tpath = Path::new(Path::new(reference).file_stem().unwrap()).with_extension("gemBS.contig_md5");
+	let mut ctg_md5 = PathBuf::from(index_dir);
+	ctg_md5.push(tpath);
+	// Create gemBS reference if it does not already exist		
+	if !(gref.exists() && ctg_md5.exists()) {
+		info!("Creating gemBS compressed reference and calculating md5 sums of contigs");
+		let _ = fs::remove_file(&gref_fai);
+		let _ = fs::remove_file(&gref_gzi);
+		let mut md5_args = vec!("-o", ctg_md5.to_str().unwrap(), "-s");
+		let populate_cache = if let Some(DataValue::Bool(x)) = gem_bs.get_config(Section::Index, "populate_cache") { *x } else { false };
+		if populate_cache { md5_args.push("-p"); }
+		md5_args.push(reference);
+		if let Some(DataValue::String(s)) = gem_bs.get_config(Section::Index, "extra_references") { md5_args.push(s); }
+		let md5_path = gem_bs.get_exec_path("md5_fasta");
+		let thr = gem_bs.get_threads(Section::Index).to_string();
+		let bgzip_args = vec!("-@", &thr);
+		let bgzip_path = gem_bs.get_exec_path("bgzip");
+		let mut pipeline = Pipeline::new();
+		pipeline.add_stage(&md5_path, Some(md5_args.iter()))
+			    .add_stage(&bgzip_path, Some(bgzip_args.iter()))
+				.out_file(&gref).add_output(&ctg_md5);
+		pipeline.run(gem_bs)?;
+	}
+	// Create faidx index if required		
+	if !(gref_fai.exists() && gref_gzi.exists()) {
+		info!("Creating gemBS faidx index");
+		let faidx_args = vec!("faidx", gref.to_str().unwrap());
+		let samtools_path = gem_bs.get_exec_path("samtools");
+		let mut pipeline = Pipeline::new();
+		pipeline.add_stage(&samtools_path, Some(faidx_args.iter()))
+				.add_output(&gref_fai).add_output(&gref_gzi);
+		pipeline.run(gem_bs)?;
+	}
+	Ok(())
+}
+
 pub fn check_ref_and_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 	check_ref(gem_bs)?;
-	check_indices(gem_bs)
+	check_indices(gem_bs)?;
+	make_gem_ref(gem_bs)
 }
