@@ -1,4 +1,5 @@
 use serde_json::{Value, Map};
+use std::path::Path;
 use crate::config::GemBS;
 use crate::commands::prepare::metadata::SampleData;
 
@@ -33,7 +34,7 @@ fn check_pass(href: &Map<String, Value>) -> bool {
 }
 	
 pub fn process_json_metadata_file(file_name: &str, gem_bs: &mut GemBS) -> Result<(), String> {
-	let rdr = match compress::open_reader(file_name) {
+	let rdr = match compress::open_bufreader(Path::new(file_name)) {
 		Ok(reader) => { reader },
 		Err(_) => {	return Err(format!("Could not open JSON metadata file {}", file_name)); }
 	};

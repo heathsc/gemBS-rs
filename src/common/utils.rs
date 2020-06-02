@@ -6,6 +6,7 @@ use std::ffi::OsStr;
 use std::io::{BufReader, BufRead};
 use std::{thread, time};
 
+use compress::ReadType;
 use crate::common::defs::{SIGTERM, SIGINT, SIGQUIT, SIGHUP};
 use crate::config::GemBS;
 
@@ -25,6 +26,12 @@ pub enum PipelineOutput<'a> {
 	None,
 }
 
+pub enum PipelineInput<'a> {
+	File(&'a Path),
+	Pipe,
+	None,
+}
+
 pub struct Pipeline<'a, I, S>
 where
 	I: IntoIterator<Item = S>,
@@ -32,6 +39,7 @@ where
 {
 	stage: Vec<(&'a Path, Option<I>)>,
 	output: PipelineOutput<'a>,
+	input: PipelineInput<'a>,
 	expected_outputs: Vec<&'a Path>,
 }
 
@@ -41,7 +49,7 @@ where
     S: AsRef<OsStr>,
 {
 	pub fn new() -> Self {
-		Pipeline{stage: Vec::new(), output: PipelineOutput::None, expected_outputs: Vec::new() }
+		Pipeline{stage: Vec::new(), output: PipelineOutput::None, input: PipelineInput::None, expected_outputs: Vec::new() }
 	}
 	// Add pipeline stage (command + optional vector of arguments)
 	pub fn add_stage(&mut self, command: &'a Path, args: Option<I>) -> &mut Pipeline<'a, I, S> {
@@ -51,6 +59,11 @@ where
 	// Send output of pipeline to file
 	pub fn out_file(&mut self, file: &'a Path) -> &mut Pipeline<'a, I, S> {
 		self.output = PipelineOutput::File(file);
+		self.add_output(file)
+	}
+	// Get output of pipeline to file
+	pub fn in_file(&mut self, file: &'a Path) -> &mut Pipeline<'a, I, S> {
+		self.input = PipelineInput::File(file);
 		self.add_output(file)
 	}
 	// Send output of pipeline to BufReader
@@ -91,8 +104,23 @@ where
 				desc.push_str(format!(" | {}", com.to_string_lossy()).as_str());
 				cc.stdin(c.0.stdout.take().unwrap()) 
 			} else {
-				desc.push_str(format!("{}",com.to_string_lossy()).as_str());
-				cc.stdin(Stdio::null())
+				match self.input {
+					PipelineInput::File(file) => {
+						desc.push_str(format!("<cat> {} | {}",file.to_string_lossy(), com.to_string_lossy()).as_str());
+						let f = match compress::open_reader(file) {
+							Ok(x) => x,
+							Err(e) => return Err(format!("Couldn't open input file {}: {}", file.to_string_lossy(), e)),
+						};
+						match f {
+							ReadType::File(file) => cc.stdin(file),
+							ReadType::Pipe(pipe) => cc.stdin(pipe),
+						}
+					},
+					_ => {
+						desc.push_str(format!("{}", com.to_string_lossy()).as_str());
+						cc.stdin(Stdio::null())
+					}, 
+				}
 			};
 			let mut arg_vec = Vec::new();
 			if let Some(a) = args { 
@@ -108,7 +136,7 @@ where
 					PipelineOutput::File(file) => {
 						let f = match fs::File::create(file) {
 							Ok(x) => x,
-							Err(e) => return Err(format!("COuldn't open output file {}: {}", file.to_string_lossy(), e)),
+							Err(e) => return Err(format!("Couldn't open output file {}: {}", file.to_string_lossy(), e)),
 						};
 						desc.push_str(format!(" > {}", file.to_string_lossy()).as_str());
 						cc = cc.stdout(Stdio::from(f));
@@ -124,39 +152,15 @@ where
 			};
 			trace!("Launched pipeline command {:?}", com);
 			if let PipelineOutput::Pipe = self.output {
-				if len == 0 { opipe = Some(child.stdout.take().unwrap()) };
+				if len == 0 { 
+					desc.push_str(" |");
+					opipe = Some(child.stdout.take().unwrap()) 
+				};
 			}
 			cinfo.push((child, com));
 		}
 		info!("{}", desc);
-		let mut err_com = None;
-		let delay = time::Duration::from_millis(250);
-		for (child, com) in cinfo.iter_mut().rev() {
-			if err_com.is_some() { 
-				trace!("Sending kill signal to {:?} command", com.to_string_lossy());
-				let _ = child.kill(); 
-			} else {	
-				trace!("Waiting for {} to finish", com.to_string_lossy());
-				loop {
-					if match child.try_wait() {
-						Ok(Some(st)) => {
-							if !st.success() { err_com = Some(format!("Error from pipeline: {} exited with error", com.to_string_lossy())) }
-							true
-						},
-						Ok(None) => {
-							if gem_bs.get_signal() != 0 { let _ = child.kill(); } 
-							false
-						},
-						Err(e) => {
-							err_com = Some(format!("Error from pipeline: {} exited with error {}", com.to_string_lossy(), e));
-							true
-						}, 
-					} { break;}
-					thread::sleep(delay);
-				}
-			}
-		}
-		match err_com {
+		match wait_sub_proc(gem_bs, &mut cinfo) {
 			Some(com) => {
 				match gem_bs.get_signal() {
 					SIGTERM => Err("Pipeline terminated with a SIGTERM signal".to_string()),
@@ -167,9 +171,42 @@ where
 				}
 			},
 			None => {
-				trace!("Pipeline terminated succesfully");
+				debug!("Pipeline terminated succesfully");
 				if let Some(pipe) = opipe { Ok(Some(Box::new(BufReader::new(pipe)))) } else { Ok(None) }
 			},
 		}
 	}
 }
+
+fn wait_sub_proc(gem_bs: &GemBS, cinfo: &mut Vec<(Child, &Path)>) -> Option<String> {
+	let mut err_com = None;
+	let delay = time::Duration::from_millis(250);
+	for (child, com) in cinfo.iter_mut().rev() {
+		if err_com.is_some() { 
+			trace!("Sending kill signal to {:?} command", com.to_string_lossy());
+			let _ = child.kill(); 
+		} else {	
+			trace!("Waiting for {} to finish", com.to_string_lossy());
+			loop {
+				if match child.try_wait() {
+					Ok(Some(st)) => {
+						if !st.success() { err_com = Some(format!("Error from pipeline: {} exited with error", com.to_string_lossy())) }
+						true
+					},
+					Ok(None) => {
+						if gem_bs.get_signal() != 0 { let _ = child.kill(); } 
+						false
+					},
+					Err(e) => {
+						err_com = Some(format!("Error from pipeline: {} exited with error {}", com.to_string_lossy(), e));
+						true
+					}, 
+				} { break;}
+				thread::sleep(delay);
+			}
+		}
+	}
+	err_com
+}
+		
+

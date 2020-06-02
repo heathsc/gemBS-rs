@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::BufRead;
 use std::str;
 use std::str::FromStr;
+use std::path::Path;
 
 use crate::common::utils::get_inode;
 use crate::common::defs::Section;
@@ -19,7 +20,7 @@ impl InFile {
 	fn new(name: &str) -> Option<Self> {
 		match get_inode(name) {
 			Some(inode) => {
-				match compress::open_reader(name) {
+				match compress::open_bufreader(Path::new(name)) {
 					Ok(reader) => {
 						Some(InFile{name: name.to_string(), inode, line: 0, pos: 0, section: Section::Default, bufreader: reader})
 					},
