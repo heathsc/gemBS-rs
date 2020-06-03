@@ -103,7 +103,7 @@ fn make_known_var_list() -> KnownVarList {
 	kv_list.add_known_var("over_conversion_rate", VarType::Float, vec!(Section::Calling));
 	kv_list.add_known_var("under_conversion_rate", VarType::Float, vec!(Section::Calling));
 	kv_list.add_known_var("conversion", VarType::FloatVec, vec!(Section::Calling));
-	kv_list.add_known_var("contig_list", VarType::String, vec!(Section::Calling));
+	kv_list.add_known_var("contig_list", VarType::StringVec, vec!(Section::Calling));
 	kv_list.add_known_var("contig_pool_limit", VarType::Int, vec!(Section::Calling));
 	kv_list.add_known_var("extract_dir", VarType::String, vec!(Section::Extract));
 	kv_list.add_known_var("snp_list", VarType::String, vec!(Section::Extract));
@@ -188,11 +188,11 @@ impl PrepConfig {
 
 				// We initially keep everything as a string until after finishing parsing the config file(s)
 				// To allow interpolation to work as expected
-				let rv = if let VarType::FloatVec = vt {
-					DataValue::StringVec(vec!(val_str;1))
-				} else {
-					DataValue::String(val_str)
+				let rv = match vt {
+					VarType::FloatVec | VarType::StringVec => DataValue::StringVec(vec!(val_str;1)),
+					_ => DataValue::String(val_str),
 				};
+
 				let pvar = PrepConfigVar{var: rv, vtype: vt, section, known, used: false};
 				Ok(ParserState::AfterValue((name, section, pvar)))
 			},
@@ -331,13 +331,19 @@ impl PrepConfig {
 								Some(DataValue::FloatVec(v))					
 							} else { None }
 						},
+						VarType::StringVec => { 
+							if let DataValue::StringVec(vv) = &pv.var {
+								let mut v = Vec::new();
+								for s in vv.iter() { v.push(s.clone()); }
+								Some(DataValue::StringVec(v))					
+							} else { None }
+						},
 						_ => {
 							if let DataValue::String(var_str) = &pv.var {
 								Some(DataValue::from_str(&var_str, pv.vtype)?)
 							} else { None }				
 						},
 					};
-					trace!("Storing in GemBS: {:?}:{} = {:?}", pv.section, name, rv);
 					if let Some(v) = rv { gem_bs.set_config(pv.section, &name, v); }
 				} else if !pv.used {
 					warn!("Warning: Variable '{}' in section '{:?}' not used", name, pv.section);

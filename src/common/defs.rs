@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use serde::{Deserialize, Serialize};
-
+use crate::config::contig;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Section {
 	Default, Index, Mapping, Calling, Extract, Report,
@@ -20,6 +20,17 @@ impl FromStr for Section {
             _ => Err("no match"),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ContigInfo {
+	Contigs, ContigPools,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ContigData {
+	Contig(contig::Contig),
+	ContigPool(contig::ContigPool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
 use clap::ArgMatches;
 use crate::config::GemBS;
-use crate::config::check_ref;
+use crate::config::{check_ref, contig};
 use crate::common::defs::{Section, DataValue};
 
 mod config_file;
@@ -30,6 +30,7 @@ pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS, json_option: Option<&
 	}
 	
 	check_ref::check_ref_and_indices(gem_bs)?;
+	contig::setup_contigs(gem_bs)?;
 	
 	// Dump JSON config file to disk
 	gem_bs.write_json_config()?;

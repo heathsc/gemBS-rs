@@ -10,16 +10,19 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Serialize, Deserialize};
 use rusqlite::Connection;
+use std::path::Path;
 
-use crate::common::defs::{Section, Metadata, DataValue, SIGTERM, SIGINT, SIGQUIT, SIGHUP};
+use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, SIGTERM, SIGINT, SIGQUIT, SIGHUP};
 
 mod database;
 pub mod check_ref;
+pub mod contig;
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GemBSHash {
 	Config(HashMap<Section, HashMap<String, DataValue>>),
 	SampleData(HashMap<String, HashMap<Metadata, DataValue>>),
+	Contig(HashMap<ContigInfo, HashMap<String, ContigData>>),
 }
 
 enum SQLiteDB {
@@ -50,7 +53,8 @@ impl GemBS {
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGQUIT, Arc::clone(&gem_bs.signal), SIGQUIT);		
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGHUP, Arc::clone(&gem_bs.signal), SIGHUP);		
 		gem_bs.var.push(GemBSHash::Config(HashMap::new()));
-		gem_bs.var.push(GemBSHash::SampleData(HashMap::new()));	
+		gem_bs.var.push(GemBSHash::SampleData(HashMap::new()));
+		gem_bs.var.push(GemBSHash::Contig(HashMap::new()));
 		gem_bs
 	}
 	pub fn get_signal(& self) -> usize {
@@ -58,14 +62,33 @@ impl GemBS {
 	}
 	pub fn set_config(&mut self, section: Section, name: &str, val: DataValue) {
 		if let GemBSHash::Config(href) = &mut self.var[0] {
+			debug!("Setting {:?}:{} to {:?}", section, name, val);
 			href.entry(section).or_insert_with(HashMap::new);	
 			href.get_mut(&section).unwrap().insert(name.to_string(), val);
 		} else { panic!("Internal error!"); }
+	}
+	pub fn set_config_path(&mut self, section: Section, name: &str, path: &Path) {
+		let tstr = path.to_string_lossy().to_string();
+		self.set_config(section, name, DataValue::String(tstr));
 	}
 	pub fn set_sample_data(&mut self, dataset: &str, mt: Metadata, val: DataValue) {
 		if let GemBSHash::SampleData(href) = &mut self.var[1] {
 			href.entry(dataset.to_string()).or_insert_with(HashMap::new);	
 			href.get_mut(dataset).unwrap().insert(mt, val);
+		} else { panic!("Internal error!"); }
+	}
+	pub fn set_contig_def(&mut self, ctg: contig::Contig) {
+		if let GemBSHash::Contig(href) = &mut self.var[2] {
+			href.entry(ContigInfo::Contigs).or_insert_with(HashMap::new);
+			let name = ctg.name.clone();
+			href.get_mut(&ContigInfo::Contigs).unwrap().insert(name, ContigData::Contig(ctg));
+		} else { panic!("Internal error!"); }
+	}
+	pub fn set_contig_pool_def(&mut self, pool: contig::ContigPool) {
+		if let GemBSHash::Contig(href) = &mut self.var[2] {
+			href.entry(ContigInfo::ContigPools).or_insert_with(HashMap::new);
+			let name = pool.name.clone();
+			href.get_mut(&ContigInfo::ContigPools).unwrap().insert(name, ContigData::ContigPool(pool));
 		} else { panic!("Internal error!"); }
 	}
 	pub fn get_config(&self, section: Section, name: &str) -> Option<&DataValue> {
@@ -168,7 +191,7 @@ impl GemBS {
 
 
 fn check_root(path: &PathBuf) -> bool {
-	let apps = ["gemBS_cat", "md5_fasta", "mextr", "readNameClean", "snpxtr", "bs_call", "dbSNP_idx",
+	let apps = ["md5_fasta", "mextr", "readNameClean", "snpxtr", "bs_call", "dbSNP_idx",
 		"gem-indexer", "gem-mapper", "samtools", "bcftools", "bgzip"];
 	
 	trace!("Checking for gemBS root in {:?}", path);

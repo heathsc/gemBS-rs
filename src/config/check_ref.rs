@@ -20,22 +20,15 @@ fn check_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 		if !tpath.exists() { return Err(format!("Extra references file {} does not exist or is not accessible", ref_file)); }
 		debug!("Extra references file {} found", ref_file);
 		trace!("Getting names of contigs in extra references file {}", ref_file);
-		let mut pipeline = Pipeline::new();
-		pipeline.add_stage(Path::new("grep"), Some(&["^>"])).in_file(tpath).out_pipe();
-		match pipeline.run(gem_bs)? {
-			Some(reader) => {
-				let mut omit_ctgs = Vec::new();
-				for line in reader.lines() {
-					if let Ok(s) = line { omit_ctgs.push(s.trim_start_matches('>').to_string()) }
-				}
-				if !omit_ctgs.is_empty() {
-					debug!("Setting need_omit_ctgs to {:?}", omit_ctgs);
-					gem_bs.set_config(Section::Index, "omit_ctgs", DataValue::StringVec(omit_ctgs));
-				}
-			},
-			None => return Err("Expecting output from pipeline".to_string()),
-		};
-	}
+		let rdr = compress::open_bufreader(Path::new(ref_file)).map_err(|x| format!("{}", x))?;
+		let mut omit_ctgs = Vec::new();
+		for line in rdr.lines() {
+			if let Ok(s) = line {
+				if s.starts_with('>') { omit_ctgs.push(s.trim_start_matches('>').to_string()) }
+			}
+		}
+		if !omit_ctgs.is_empty() { gem_bs.set_config(Section::Index, "omit_ctgs", DataValue::StringVec(omit_ctgs)); }
+	} 
 	Ok(())
 }
 
@@ -112,20 +105,15 @@ fn check_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 		
 	}
 	if let Some(x) = infer_idx {
-		debug!("Setting index to {}", x);
 		gem_bs.set_config(Section::Index, "index", DataValue::String(x));
 	}
 	if let Some(x) = infer_nonbs_idx {
-		debug!("Setting non BS index to {}", x);
 		gem_bs.set_config(Section::Index, "nonbs_index", DataValue::String(x));
 	}
 	if let Some(x) = infer_idx_dir {
-		debug!("Setting index_dir to {}", x);
 		gem_bs.set_config(Section::Index, "index_dir", DataValue::String(x));
 	}
-	debug!("Setting need_bs_index to {}", need_bs_index);
 	gem_bs.set_config(Section::Index, "need_bs_index", DataValue::Bool(need_bs_index));
-	debug!("Setting need_non_bs_index to {}", need_bs_index);
 	gem_bs.set_config(Section::Index, "need_nonbs_index", DataValue::Bool(need_nonbs_index));
 	Ok(())	
 }
@@ -171,12 +159,9 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 				.add_output(&gref_fai).add_output(&gref_gzi);
 		pipeline.run(gem_bs)?;
 	}
-	let tstr = gref.to_string_lossy().to_string();
-	debug!("Setting gembs_ref to {}", tstr);
-	gem_bs.set_config(Section::Index, "gembs_reference", DataValue::String(tstr));
-	let tstr = gref_fai.to_string_lossy().to_string();
-	debug!("Setting gembs_fai to {}", tstr);
-	gem_bs.set_config(Section::Index, "gembs_fai", DataValue::String(tstr));
+	gem_bs.set_config_path(Section::Index, "gembs_reference", &gref);
+	gem_bs.set_config_path(Section::Index, "gembs_fai", &gref_fai);
+	gem_bs.set_config_path(Section::Index, "ctg_md5", &ctg_md5);
 	Ok(())
 }
 
