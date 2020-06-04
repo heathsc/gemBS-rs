@@ -97,8 +97,8 @@ impl GemBS {
 				if let Some(s) = h.get(name) { return Some(s); } 
 			}		
 			if let Some(h) = href.get(&Section::Default) { return h.get(name); }
-			None
-		} else { None }
+		}
+		None
 	}
 	pub fn get_config_ref(&self) ->  &HashMap<Section, HashMap<String, DataValue>> {
 		if let GemBSHash::Config(href) = &self.var[0] { &href }
@@ -126,11 +126,9 @@ impl GemBS {
 		database::create_tables(&c)
 	}
 	pub fn setup_fs(&mut self, initial: bool) -> Result<(), String> {
-		let config_dir = PathBuf::from(".gemBS");
+		let cdir = ".gemBS";
 		let json_file = if let Some(DataValue::String(x)) = self.get_config(Section::Default, "json_file") { PathBuf::from(x) } else { 
-			let mut tpath = config_dir.clone();
-			tpath.push("gemBS.json");
-			tpath
+			[cdir, "gemBS.json"].iter().collect()
 		};
 		let gem_bs_root = if let Some(DataValue::String(x)) = self.get_config(Section::Default, "gembs_root") { 
 			PathBuf::from(x) 
@@ -142,11 +140,8 @@ impl GemBS {
 		if !check_root(&gem_bs_root) {
 			return Err(format!("Could not find (installation) root directory for gemBS at {:?}.  Use root-dir option or set GEMBS_ROOT environment variable", gem_bs_root));
 		}
-		let db_path = {
-			let mut tpath = config_dir.clone();
-			tpath.push("gemBS.db");
-			tpath
-		};		
+		let db_path: PathBuf = [cdir, "gemBS.db"].iter().collect();	
+		let config_dir = Path::new(cdir);	
 		let no_db = if let Some(DataValue::Bool(x)) = self.get_config(Section::Default, "no_db") { *x } else { false }; 
 		if initial {
 			if config_dir.exists() {
@@ -162,7 +157,7 @@ impl GemBS {
 		let db_conn = database::open_db_connection(&db_path, no_db, initial)?;
 		self.db = if no_db { SQLiteDB::Mem(db_conn) } else { SQLiteDB::File(db_conn) };
 		self.create_db_tables()?;
-		self.fs = Some(GemBSFiles{config_dir, json_file, gem_bs_root, db_path});	
+		self.fs = Some(GemBSFiles{config_dir: config_dir.to_path_buf(), json_file, gem_bs_root, db_path});	
 		Ok(())
 	}
 	

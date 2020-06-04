@@ -77,14 +77,9 @@ lazy_static! {
 }
 
 pub fn process_cvs_metatdata_file(file_name: &str, gem_bs: &mut GemBS) -> Result<(), String> {
-	let mut rdr = match Reader::from_path(file_name) {
-		Ok(x) => x,
-		Err(_) => return Err(format!("Error opening cvs metadata file '{}' for input", file_name)),	
-	};
-	let header = match rdr.headers() {
-		Ok(x) => { Header::from_record(&x)? },
-		Err(_) => return Err(format!("Error reading header line from cvs metadata file '{}' for input", file_name)),	
-	};
+	let mut rdr = Reader::from_path(file_name).map_err(|e| format!("Error opening cvs metadata file {} for input: {}", file_name, e))?;
+	let hrecord = rdr.headers().map_err(|e| format!("Error reading header line from cvs metadata file {} for input: {}", file_name, e))?;
+	let header = Header::from_record(&hrecord)?;
 	let mut sample_data = SampleData::new();
    	let mut record = StringRecord::new();
 	let mut line = 2;
@@ -112,7 +107,7 @@ pub fn process_cvs_metatdata_file(file_name: &str, gem_bs: &mut GemBS) -> Result
 					return Err(format!("Error reading record at line {} of cvs metadata file {}: {}", line, file_name, e));
 				}
 			},
-			Err(_) => return Err(format!("Error reading record at line {} of cvs metadata file {} for input", line, file_name)),	
+			Err(e) => return Err(format!("Error reading record at line {} of cvs metadata file {} for input: {}", line, file_name, e)),	
 		}
 		line += 1;
 	}

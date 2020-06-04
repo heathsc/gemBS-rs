@@ -47,10 +47,7 @@ impl KnownVarList {
 	}
 	fn check_vtype(&self, name: &str, section: Section) -> Option<VarType> {
 		let tstr = name.to_lowercase();
-	 	match self.known_var.get(&tstr.as_str()) {
-			Some(v) => if v.sections.contains(&section) { Some(v.vtype) } else { None }
-			None => None,    
-		}			
+		self.known_var.get(&tstr.as_str()).and_then(|v| if v.sections.contains(&section) { Some(v.vtype) } else { None })			
 	}
 }
 
@@ -146,30 +143,27 @@ impl PrepConfig {
 			lexer: Lexer::new()
 		}
 	}
+	
 	fn check_vtype(&self, name: &str, section: Section) -> Option<VarType> {
 		self.kv_list.check_vtype(name, section)		
 	}
+	
 	fn start_parse(&mut self, name: &str) -> Result<(), String> {
 		self.lexer.init_lexer(name)
 	}
+	
 	fn get(&mut self, name: &str, section: Section) -> Option<&mut PrepConfigVar> {
 		if name.is_empty() { return None; }
-		match self.var.get_mut(&name.to_lowercase()) {			
-			Some(v) => {
-				let mut default_var = None;
-				let mut var = None;
-				for pv in v.iter_mut() {
-					if pv.section == section {
-						var = Some(pv);
-					} else if pv.section == Section::Default {
-						default_var = Some(pv);
-					}
-				}
-				if var.is_some() { var } else { default_var }
-			},
-			None => None,	
-		}
+		self.var.get_mut(&name.to_lowercase()).and_then(|v| {
+			let mut default_var = None;
+			let mut var = None;
+			for pv in v.iter_mut() {
+				if pv.section == section { var = Some(pv) } else if pv.section == Section::Default { default_var = Some(pv) }
+			}
+			var.or(default_var)
+		})
 	}
+	
 	fn handle_name(&self, tok: LexToken) -> Result<ParserState, String> {
 		match tok {
 			LexToken::Name(name) => Ok(ParserState::WaitingForValue(name.to_lowercase())),
@@ -199,6 +193,7 @@ impl PrepConfig {
 			_ => Err(format!("Unexpected token - waiting for value after variable {}", name)),
 		}
 	}
+	
 	fn handle_next_value(&mut self, val_str: String, mut pvar: PrepConfigVar, name: String, section: Section) -> Result<ParserState, String> {
 		let mut vector = match pvar.var {
 			DataValue::StringVec(x) => x,
@@ -207,7 +202,8 @@ impl PrepConfig {
 		vector.push(val_str);
 		pvar.var = DataValue::StringVec(vector);
 		Ok(ParserState::AfterValue((name, section, pvar)))
-	}	
+	}
+		
 	fn handle_after_value(&mut self, tok: LexToken, x: (String, Section, PrepConfigVar)) -> Result<ParserState, String> {
 		let name = x.0;
 		let section = x.1;
@@ -226,41 +222,38 @@ impl PrepConfig {
 			_ => Err(format!("Unexpected token - waiting for variable name or value after variable {}", name)),
 		}
 	} 
-	fn handle_assignment(&mut self, name: String, section: Section, mut pvar: PrepConfigVar) -> Result<(), String>
-	{
+	
+	fn handle_assignment(&mut self, name: String, section: Section, mut pvar: PrepConfigVar) -> Result<(), String> {
 		if let DataValue::String(x) = pvar.var {
 			pvar.var = DataValue::String(self.interpolation(x, section, &name)?);
 		}	
 		trace!("Making assignment {:?}: {} = {:?}", section, name, pvar.var);
-		self.var.entry(name.clone()).or_insert_with(Vec::new);	
-		// We know the value exists as this is assured by the previous line
-		self.var.get_mut(&name).unwrap().push(pvar);
+		self.var.entry(name).or_insert_with(Vec::new).push(pvar);	
 		Ok(())
 	}
+	
 	fn check_var_and_env(&mut self, vname: &str, vname1: &str, section: Section) -> Option<String> {
-		let stored_var = match self.get(vname, section) {
-			Some(pv) => { 
-				if let DataValue::String(st) = &pv.var {
-					pv.used = true; 
-					Some(st.clone()) 
-				} else { None }
-			},
-			None => { None },
-		};
+		let stored_var = self.get(vname, section).and_then(|pv| {
+			if let DataValue::String(st) = &pv.var {
+				pv.used = true; 
+				Some(st.clone()) 
+			} else { None }	
+		});	
 		// Apparently env::var_os() can panic if the name contains an equals or Nul character
-		if stored_var.is_none() && !(vname1.is_empty() || vname1.contains('=') || vname1.contains('\0')) {
-			match env::var(vname1) {
-				Ok(st) => { Some(st) },
-				Err(_) => None,
-			}
-		} else {
-			stored_var
-		}	
+		stored_var.or_else(|| {
+			if !(vname1.is_empty() || vname1.contains('=') || vname1.contains('\0')) {
+				match env::var(vname1) {
+					Ok(st) => { Some(st) },
+					Err(_) => None,
+				}
+			} else { None }
+		})
 	}
+	
 	fn interpolation(&mut self, var_str: String, section: Section, name: &str) -> Result<String, String> {
 		let mut v = Vec::new();
 		find_var(&var_str, &mut v);
-		if v.is_empty() {return Ok(var_str); }
+		if v.is_empty() { return Ok(var_str); }
 		if let Segment::End(_) = v[0] { return Ok(var_str); }
 		// In the following section we can use unwrap() etc. because the indexes should be correct, and
 		// if not then we should panic!
@@ -298,7 +291,8 @@ impl PrepConfig {
 			}
 		}	
 		Ok(buf)
-	}	
+	}
+		
 	fn parse(&mut self, gem_bs: &mut GemBS) -> Result<(), String> {
 		let mut state = ParserState::WaitingForName; 
 		loop {
@@ -360,5 +354,3 @@ pub fn process_config_file(file_name: &str, gem_bs: &mut GemBS) -> Result<(), St
 	prep_config.parse(gem_bs)?;
 	Ok(())
 }
-
-

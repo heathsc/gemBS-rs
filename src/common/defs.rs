@@ -84,8 +84,7 @@ pub enum ReadEnd { End1, End2 }
 impl FromStr for ReadEnd {
     type Err = &'static str;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-		
+    fn from_str(s: &str) -> Result<Self, Self::Err> {		
         match s.to_lowercase().as_str() {
 			"1" | "end1" => Ok(ReadEnd::End1),
 			"2" | "end2" => Ok(ReadEnd::End2),

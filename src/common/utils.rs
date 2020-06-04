@@ -79,18 +79,15 @@ where
 	}
 	// Execute the pipeline
 	pub fn run(&mut self, gem_bs: &GemBS) -> Result<Option<Box<dyn BufRead>>, String> {
-		match self.do_run(gem_bs) {
-			Ok(res) => Ok(res),
-			Err(e) => {
-				for file in self.expected_outputs.iter() { 
-					if file.exists() {
-						warn!("Removing output file {}", file.to_string_lossy());
-						let _ = fs::remove_file(file); 
-					}
+		self.do_run(gem_bs).map_err(|e| {
+			for file in self.expected_outputs.iter() { 
+				if file.exists() {
+					warn!("Removing output file {}", file.to_string_lossy());
+					let _ = fs::remove_file(file); 
 				}
-				Err(e)
-			},
-		}		
+			}
+			e
+		})
 	}
 	fn do_run(&mut self, gem_bs: &GemBS) -> Result<Option<Box<dyn BufRead>>, String> {
 		if self.stage.is_empty() { return Err("Error - Empty pipeline".to_string()); }	
@@ -106,12 +103,9 @@ where
 			} else {
 				match self.input {
 					PipelineInput::File(file) => {
-						desc.push_str(format!("<cat> {} | {}",file.to_string_lossy(), com.to_string_lossy()).as_str());
-						let f = match compress::open_reader(file) {
-							Ok(x) => x,
-							Err(e) => return Err(format!("Couldn't open input file {}: {}", file.to_string_lossy(), e)),
-						};
-						match f {
+						let fname = file.to_string_lossy();
+						desc.push_str(format!("<cat> {} | {}",fname, com.to_string_lossy()).as_str());
+						match compress::open_reader(file).map_err(|e| format!("Couldn't open input file {} for pipeline: {}", fname, e))? {
 							ReadType::File(file) => cc.stdin(file),
 							ReadType::Pipe(pipe) => cc.stdin(pipe),
 						}
@@ -134,11 +128,9 @@ where
 			if len > 0 { cc = cc.stdout(Stdio::piped()); } else {
 				match self.output {
 					PipelineOutput::File(file) => {
-						let f = match fs::File::create(file) {
-							Ok(x) => x,
-							Err(e) => return Err(format!("Couldn't open output file {}: {}", file.to_string_lossy(), e)),
-						};
-						desc.push_str(format!(" > {}", file.to_string_lossy()).as_str());
+						let fname = file.to_string_lossy();
+						let f = fs::File::create(file).map_err(|e| format!("Couldn't open output file {}: {}", fname, e))?;
+						desc.push_str(format!(" > {}", fname).as_str());
 						cc = cc.stdout(Stdio::from(f));
 					},
 					PipelineOutput::Pipe => cc = cc.stdout(Stdio::piped()),
@@ -146,11 +138,8 @@ where
 				}
 			}
 			if !arg_vec.is_empty() { cc = cc.args(arg_vec.iter())}
-			let mut child = match cc.spawn() {
-				Ok(c) => { c },
-				Err(e) => return Err(format!("Error - problem launching command {}: {}", com.to_string_lossy(), e)),
-			};
-			trace!("Launched pipeline command {:?}", com);
+			let mut child = cc.spawn().map_err(|e| format!("Error - problem launching command {}: {}", com.to_string_lossy(), e))?;
+			trace!("Launched pipeline command {}", com.to_string_lossy());
 			if let PipelineOutput::Pipe = self.output {
 				if len == 0 { 
 					desc.push_str(" |");

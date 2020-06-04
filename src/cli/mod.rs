@@ -37,9 +37,8 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 
 	if let Some(f) = m.value_of("dir") {
 		let wd = Path::new(f);
-		if env::set_current_dir(&wd).is_ok() { debug!("Moved working directory to {}", f); } else {
-			return Err(format!("Can not switch working directory to {}", f));
-		} 	
+		env::set_current_dir(&wd).map_err(|e| format!("Can not switch working directory to {}: {}", f, e))?;
+		debug!("Moved working directory to {}", f);
 	}	
 
 	let json_dir = m.value_of("json");

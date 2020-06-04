@@ -35,6 +35,5 @@ pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS, json_option: Option<&
 	// Dump JSON config file to disk
 	gem_bs.write_json_config()?;
 	
-	
 	Ok(())
 }

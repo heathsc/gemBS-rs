@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::common::defs::{Section, DataValue, ContigInfo, ContigData};
+use crate::common::defs::{Section, DataValue};
 use crate::config::GemBS;
 use std::collections::HashSet;
 use std::path::Path;
