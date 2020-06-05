@@ -42,12 +42,14 @@ impl FromStr for Metadata {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "sample_barcode" | "sampleid" | "barcode" | "samplebarcode" => Ok(Metadata::SampleBarcode),
-            "sample_name" | "sample" | "name" | "samplename" => Ok(Metadata::SampleName),
-			"library_barcode" | "library" | "librarybarcode" | "lib" | "libbarcode"  => Ok(Metadata::LibraryBarcode),
+		let mut st = s.to_lowercase();
+		st.retain(|c| c != '_');
+        match st.as_str() {
+            "sampleid" | "barcode" | "samplebarcode" => Ok(Metadata::SampleBarcode),
+            "sample" | "name" | "samplename" => Ok(Metadata::SampleName),
+			"library" | "librarybarcode" | "lib" | "libbarcode"  => Ok(Metadata::LibraryBarcode),
 			"dataset" | "fileid" | "fli" => Ok(Metadata::Dataset),
-			"file_type" | "filetype" | "type" => Ok(Metadata::FileType),
+			"filetype" | "type" => Ok(Metadata::FileType),
 			"file" | "location" | "path" | "command" => Ok(Metadata::FilePath),
 			"file1" | "end1" | "location1" | "path1" | "command1" => Ok(Metadata::FilePath1),
 			"file2" | "end2" | "location2" | "path2" | "command2" => Ok(Metadata::FilePath2),
