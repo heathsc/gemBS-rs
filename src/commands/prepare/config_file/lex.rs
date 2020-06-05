@@ -216,9 +216,7 @@ impl Lexer {
 		} else { None }
 	}
 	fn add_lex_action(&mut self, state: LexState, raw_token: LexRawToken, new_state: LexState, consume: bool, emit: Option<IntLexToken>) {
-		self.action_table.entry(state).or_insert_with(HashMap::new);
-		// We know the value exists as this is assured by the previous line
-		self.action_table.get_mut(&state).unwrap()
+		self.action_table.entry(state).or_insert_with(HashMap::new)
 			.insert(raw_token, LexAction{new_state, consume, emit});
 	}
 	

@@ -1,13 +1,14 @@
 use serde::{Deserialize, Serialize};
 use crate::common::defs::{Section, DataValue};
+use crate::common::assets::{AssetStatus};
 use crate::config::GemBS;
 use std::collections::HashSet;
-use std::path::Path;
 use std::io::BufRead;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contig {
-	pub name: String,
+	pub name: Rc<String>,
 	pub md5: String,
 	pub len: usize,
 	pub omit: bool,
@@ -15,31 +16,31 @@ pub struct Contig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContigPool {
-	pub name: String,
-	pub contigs: Vec<String>,
+	pub name: Rc<String>,
+	pub contigs: Vec<Rc<String>>,
 	pub len: usize,
 }
 
 fn setup_contig_pools(contigs: &[Contig], pools: &mut Vec<ContigPool>, pool_size: usize) -> Result<(), String> {
 	// First step - assign all contigs larger than pool_size to their own contig pools, and add all remaining
-	// contigs to small_contigs vector
+	// contigs to small_cfct.ceeci.natural.sc@fct.pt ontigs vector
 	
 	let mut small_contigs: Vec<&Contig> = Vec::new();
 	for ctg in contigs.iter().filter(|c| !c.omit) {
 		if ctg.len < pool_size { small_contigs.push(ctg) }
-		else { pools.push(ContigPool{name: ctg.name.clone(), contigs: vec!(ctg.name.clone()), len: ctg.len}) }
+		else { pools.push(ContigPool{name: Rc::clone(&ctg.name), contigs: vec!(Rc::clone(&ctg.name)), len: ctg.len}) }
 	}
 	if !small_contigs.is_empty() {
 		let mut tpool = Vec::new();
 		let size_left = small_contigs.iter().fold(0, |sum, c| sum + c.len);
 		let n_pools = (size_left + pool_size - 1) / pool_size;
 		for i in 0..n_pools {
-			let name = format!("Pool@{}", i + 1);
+			let name = Rc::new(format!("Pool@{}", i + 1));
 			tpool.push(ContigPool{name, contigs: Vec::new(), len: 0});
 		}
 		small_contigs.sort_by_key(|c| -(c.len as isize));
 		for ctg in small_contigs.iter() {
-			tpool[0].contigs.push(ctg.name.clone());
+			tpool[0].contigs.push(Rc::clone(&ctg.name));
 			tpool[0].len += ctg.len;
 			tpool.sort_by_key(|c| c.len)
 		}
@@ -50,11 +51,17 @@ fn setup_contig_pools(contigs: &[Contig], pools: &mut Vec<ContigPool>, pool_size
 }
 
 pub fn setup_contigs(gem_bs: &mut GemBS) -> Result<(), String> {
-	let ctg_md5 = if let Some(DataValue::String(file)) = gem_bs.get_config(Section::Index, "ctg_md5") { 
+/*	let ctg_md5 = if let Some(DataValue::String(file)) = gem_bs.get_config(Section::Index, "ctg_md5") { 
 		let path = Path::new(file);
 		if !path.exists() { return Err(format!("Contig MD5 file {} does not exist or is not accessible", file)) }
 		path
-	} else { panic!("Internal error - missing ctg_md5") };
+	} else { panic!("Internal error - missing ctg_md5") }; */
+	let ctg_md5 = if let Some(asset) = gem_bs.get_asset("contig_md5") {
+		if asset.status() != AssetStatus::Present { 
+			return Err(format!("Contig MD5 file {} does not exist or is not accessible", asset.path().to_string_lossy())) 
+		}
+		asset.path()
+	} else { panic!("Internal error - missing contig_md5") }; 
 	let mut omit_ctg = HashSet::new();
 	if let Some(DataValue::StringVec(v)) = gem_bs.get_config(Section::Index, "omit_ctgs") {
 		for ctg in v.iter() { omit_ctg.insert(ctg.as_str()); }
@@ -79,7 +86,7 @@ pub fn setup_contigs(gem_bs: &mut GemBS) -> Result<(), String> {
 				else if s.starts_with("M5:") { md5_str = Some(s.trim_start_matches("M5:")) }
 			}
 			let (omit, name) = if let Some(s) = name_str { 
-				(if omit_ctg.contains(s) { true } else if include_ctg.is_empty() { false } else { !include_ctg.contains(s) }, s.to_owned())
+				(if omit_ctg.contains(s) { true } else if include_ctg.is_empty() { false } else { !include_ctg.contains(s) }, Rc::new(s.to_owned()))
 			} else { 
 				return Err(format!("Error reading contig name from file {} at line {}", ctg_md5.to_string_lossy(), i)) 
 			};

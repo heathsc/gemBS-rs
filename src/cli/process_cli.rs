@@ -6,8 +6,7 @@ use clap::{App, AppSettings};
 use crate::commands;
 use crate::config::GemBS;
 
-pub mod utils;
-use utils::LogLevel;
+use super::utils::LogLevel;
 
 pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 	let yaml = load_yaml!("cli.yml");

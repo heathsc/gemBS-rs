@@ -11,18 +11,21 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Serialize, Deserialize};
 use rusqlite::Connection;
 use std::path::Path;
+use std::rc::Rc;
 
 use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, SIGTERM, SIGINT, SIGQUIT, SIGHUP};
+use crate::common::assets::{Asset, AssetList};
 
 mod database;
 pub mod check_ref;
 pub mod contig;
+pub mod check_map;
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GemBSHash {
 	Config(HashMap<Section, HashMap<String, DataValue>>),
 	SampleData(HashMap<String, HashMap<Metadata, DataValue>>),
-	Contig(HashMap<ContigInfo, HashMap<String, ContigData>>),
+	Contig(HashMap<ContigInfo, HashMap<Rc<String>, ContigData>>),
 }
 
 enum SQLiteDB {
@@ -42,12 +45,13 @@ pub struct GemBS {
 	var: Vec<GemBSHash>,
 	fs: Option<GemBSFiles>,
 	db: SQLiteDB,
+	assets: AssetList,
 	signal: Arc<AtomicUsize>,
 }
 
 impl GemBS {
 	pub fn new() -> Self {
-		let mut gem_bs = GemBS{var: Vec::new(), fs: None, db: SQLiteDB::None, signal: Arc::new(AtomicUsize::new(0))};
+		let mut gem_bs = GemBS{var: Vec::new(), fs: None, db: SQLiteDB::None, assets: AssetList::new(), signal: Arc::new(AtomicUsize::new(0))};
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGTERM, Arc::clone(&gem_bs.signal), SIGTERM);		
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGINT, Arc::clone(&gem_bs.signal), SIGINT);		
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGQUIT, Arc::clone(&gem_bs.signal), SIGQUIT);		
@@ -63,8 +67,7 @@ impl GemBS {
 	pub fn set_config(&mut self, section: Section, name: &str, val: DataValue) {
 		if let GemBSHash::Config(href) = &mut self.var[0] {
 			debug!("Setting {:?}:{} to {:?}", section, name, val);
-			href.entry(section).or_insert_with(HashMap::new);	
-			href.get_mut(&section).unwrap().insert(name.to_string(), val);
+			href.entry(section).or_insert_with(HashMap::new).insert(name.to_string(), val);
 		} else { panic!("Internal error!"); }
 	}
 	pub fn set_config_path(&mut self, section: Section, name: &str, path: &Path) {
@@ -73,22 +76,21 @@ impl GemBS {
 	}
 	pub fn set_sample_data(&mut self, dataset: &str, mt: Metadata, val: DataValue) {
 		if let GemBSHash::SampleData(href) = &mut self.var[1] {
-			href.entry(dataset.to_string()).or_insert_with(HashMap::new);	
-			href.get_mut(dataset).unwrap().insert(mt, val);
+			href.entry(dataset.to_string()).or_insert_with(HashMap::new).insert(mt, val);
 		} else { panic!("Internal error!"); }
 	}
 	pub fn set_contig_def(&mut self, ctg: contig::Contig) {
 		if let GemBSHash::Contig(href) = &mut self.var[2] {
-			href.entry(ContigInfo::Contigs).or_insert_with(HashMap::new);
-			let name = ctg.name.clone();
-			href.get_mut(&ContigInfo::Contigs).unwrap().insert(name, ContigData::Contig(ctg));
+			let name = Rc::clone(&ctg.name);
+			href.entry(ContigInfo::Contigs).or_insert_with(HashMap::new)
+				.insert(name, ContigData::Contig(ctg));
 		} else { panic!("Internal error!"); }
 	}
 	pub fn set_contig_pool_def(&mut self, pool: contig::ContigPool) {
 		if let GemBSHash::Contig(href) = &mut self.var[2] {
-			href.entry(ContigInfo::ContigPools).or_insert_with(HashMap::new);
-			let name = pool.name.clone();
-			href.get_mut(&ContigInfo::ContigPools).unwrap().insert(name, ContigData::ContigPool(pool));
+			let name = Rc::clone(&pool.name);
+			href.entry(ContigInfo::ContigPools).or_insert_with(HashMap::new)
+				.insert(name, ContigData::ContigPool(pool));
 		} else { panic!("Internal error!"); }
 	}
 	pub fn get_config(&self, section: Section, name: &str) -> Option<&DataValue> {
@@ -107,6 +109,13 @@ impl GemBS {
 	pub fn get_sample_data_ref(&self) ->  &HashMap<String, HashMap<Metadata, DataValue>> {
 		if let GemBSHash::SampleData(href) = &self.var[1] { &href }
 		else { panic!("Internal error!"); }
+	}
+	pub fn insert_asset(&mut self, asset: Asset) -> Option<Asset> {
+		debug!("Inserting {:?}", asset);
+		self.assets.insert(asset)
+	}
+	pub fn get_asset(&self, id: &str) -> Option<&Asset> {
+		self.assets.get(id)
 	}
 	// This will panic if called before fs is set, which is fine
 	pub fn write_json_config(&self) -> Result<(), String> {

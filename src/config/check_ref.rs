@@ -1,8 +1,11 @@
 // Check requirements and presence of reference, index files and index_dir
+// Make gemBS reference if required
+// Make asset list for refererences, indicies and other associated files
 
 use crate::common::defs::{Section, Metadata, DataValue};
 use crate::config::GemBS;
 use crate::common::utils::Pipeline;
+use crate::common::assets::{Asset, AssetType};
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::BufRead;
@@ -10,17 +13,19 @@ use std::io::BufRead;
 fn check_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	// Check reference file
 	let reference = gem_bs.get_reference()?;
-	let tpath = Path::new(reference);
+	let tpath = PathBuf::from(reference);
 	if !tpath.exists() { return Err(format!("Reference file {} does not exist or is not accessible", reference)); }
 	debug!("Reference file {} found", reference);
-	
+	gem_bs.insert_asset(Asset::new("reference", &tpath, AssetType::Supplied));
 	// Check extra references - these are not required, but if specified in the config file, the file should be present
-	if let Some(DataValue::String(ref_file)) = gem_bs.get_config(Section::Index, "extra_references") { 
-		let tpath = Path::new(ref_file);
+	let extra_ref = gem_bs.get_config(Section::Index, "extra_references").cloned();
+	if let Some(DataValue::String(ref_file)) = extra_ref {
+		let tpath = Path::new(&ref_file);
 		if !tpath.exists() { return Err(format!("Extra references file {} does not exist or is not accessible", ref_file)); }
 		debug!("Extra references file {} found", ref_file);
+		gem_bs.insert_asset(Asset::new("extra_reference", tpath, AssetType::Supplied));
 		trace!("Getting names of contigs in extra references file {}", ref_file);
-		let rdr = compress::open_bufreader(Path::new(ref_file)).map_err(|x| format!("{}", x))?;
+		let rdr = compress::open_bufreader(tpath).map_err(|x| format!("{}", x))?;
 		let mut omit_ctgs = Vec::new();
 		for line in rdr.lines() {
 			if let Ok(s) = line {
@@ -28,7 +33,7 @@ fn check_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 			}
 		}
 		if !omit_ctgs.is_empty() { gem_bs.set_config(Section::Index, "omit_ctgs", DataValue::StringVec(omit_ctgs)); }
-	} 
+	} 	
 	Ok(())
 }
 
@@ -115,6 +120,16 @@ fn check_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 	}
 	gem_bs.set_config(Section::Index, "need_bs_index", DataValue::Bool(need_bs_index));
 	gem_bs.set_config(Section::Index, "need_nonbs_index", DataValue::Bool(need_nonbs_index));
+	if need_bs_index {
+		if let Some(DataValue::String(index)) = gem_bs.get_config(Section::Index, "index").cloned() {
+			gem_bs.insert_asset(Asset::new("index", Path::new(&index), AssetType::Derived));			
+		} else { return Err("Internal error - no index".to_string()); }
+	}
+	if need_nonbs_index {
+		if let Some(DataValue::String(index)) = gem_bs.get_config(Section::Index, "nonbs_index").cloned() {
+			gem_bs.insert_asset(Asset::new("nonbs_index", Path::new(&index), AssetType::Derived));			
+		} else { return Err("Internal error - no index".to_string()); }
+	}
 	Ok(())	
 }
 
@@ -159,9 +174,10 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 				.add_output(&gref_fai).add_output(&gref_gzi);
 		pipeline.run(gem_bs)?;
 	}
-	gem_bs.set_config_path(Section::Index, "gembs_reference", &gref);
-	gem_bs.set_config_path(Section::Index, "gembs_fai", &gref_fai);
-	gem_bs.set_config_path(Section::Index, "ctg_md5", &ctg_md5);
+	gem_bs.insert_asset(Asset::new("gembs_reference", &gref, AssetType::Derived));			
+	gem_bs.insert_asset(Asset::new("gembs_reference_fai", &gref_fai, AssetType::Derived));			
+	gem_bs.insert_asset(Asset::new("gembs_reference_gzi", &gref_gzi, AssetType::Derived));			
+	gem_bs.insert_asset(Asset::new("contig_md5", &ctg_md5, AssetType::Derived));			
 	Ok(())
 }
 
