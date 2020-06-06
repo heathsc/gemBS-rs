@@ -12,9 +12,11 @@ use serde::{Serialize, Deserialize};
 use rusqlite::Connection;
 use std::path::Path;
 use std::rc::Rc;
+use std::cell::RefCell;
 
-use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, SIGTERM, SIGINT, SIGQUIT, SIGHUP};
-use crate::common::assets::{Asset, AssetList};
+use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP};
+use crate::common::assets::{Asset, AssetList, AssetType};
+use crate::common::tasks::{Task, TaskList};
 
 mod database;
 pub mod check_ref;
@@ -46,12 +48,14 @@ pub struct GemBS {
 	fs: Option<GemBSFiles>,
 	db: SQLiteDB,
 	assets: AssetList,
+	tasks: TaskList,
 	signal: Arc<AtomicUsize>,
 }
 
 impl GemBS {
 	pub fn new() -> Self {
-		let mut gem_bs = GemBS{var: Vec::new(), fs: None, db: SQLiteDB::None, assets: AssetList::new(), signal: Arc::new(AtomicUsize::new(0))};
+		let mut gem_bs = GemBS{var: Vec::new(), fs: None, db: SQLiteDB::None,
+		assets: AssetList::new(), tasks: TaskList::new(), signal: Arc::new(AtomicUsize::new(0))};
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGTERM, Arc::clone(&gem_bs.signal), SIGTERM);		
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGINT, Arc::clone(&gem_bs.signal), SIGINT);		
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGQUIT, Arc::clone(&gem_bs.signal), SIGQUIT);		
@@ -110,13 +114,23 @@ impl GemBS {
 		if let GemBSHash::SampleData(href) = &self.var[1] { &href }
 		else { panic!("Internal error!"); }
 	}
-	pub fn insert_asset(&mut self, asset: Asset) -> Option<Asset> {
-		debug!("Inserting {:?}", asset);
-		self.assets.insert(asset)
+	pub fn insert_asset(&mut self, id: &str, path: &Path, asset_type: AssetType) -> usize {
+		let ix = self.assets.insert(id, path, asset_type);
+		debug!("Inserting Asset({}): {} {} {:?}", ix, id, path.to_string_lossy(), asset_type);
+		ix
 	}
-	pub fn get_asset(&self, id: &str) -> Option<&Asset> {
+	pub fn get_asset(&self, id: &str) -> Option<&Rc<Asset>> {
 		self.assets.get(id)
 	}
+	pub fn add_task(&mut self, id: &str, desc: &str, command: Command, args: &str, inputs: Vec<usize>, outputs: Vec<usize>) -> usize {
+		debug!("Adding task: {} {} {:?} {} in: {:?} out: {:?}", id, desc, command, args, inputs, outputs);
+		self.tasks.add_task(id, desc, command, args, inputs, outputs)
+	}
+	pub fn add_parent_child(&mut self, child: usize, parent: usize) {
+		self.tasks.get_idx(child).add_parent(parent);
+		self.tasks.get_idx(parent).add_child(child);
+	}
+	pub fn list_tasks(&self) { self.tasks.list_tasks();	}
 	// This will panic if called before fs is set, which is fine
 	pub fn write_json_config(&self) -> Result<(), String> {
 		let json_file = &self.fs.as_ref().unwrap().json_file;
