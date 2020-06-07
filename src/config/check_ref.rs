@@ -2,10 +2,10 @@
 // Make gemBS reference if required
 // Make asset list for refererences, indicies and other associated files
 
-use crate::common::defs::{Section, Metadata, DataValue};
+use crate::common::defs::{Section, Metadata, DataValue, Command};
 use crate::config::GemBS;
 use crate::common::utils::Pipeline;
-use crate::common::assets::{Asset, AssetType};
+use crate::common::assets::{AssetType, GetAsset};
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::BufRead;
@@ -94,7 +94,11 @@ fn check_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 		};
 		// Check directory exists
 		let tpath = Path::new(idx_dir);
-		if !tpath.is_dir() { return Err(format!("Index_dir directory {} not accessible", idx_dir)); } 
+		if !tpath.is_dir() { 
+			if let Err(e) = fs::create_dir(tpath) {
+				return Err(format!("Could not create index_dir directory {}: {}", idx_dir, e)); 
+			}
+		} 
 		if missing_index {
 			let tpath = Path::new(Path::new(reference).file_stem().unwrap()).with_extension("BS.gem");	
 			let mut idx = PathBuf::from(idx_dir);
@@ -181,8 +185,33 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	Ok(())
 }
 
+fn add_make_index_task(gem_bs: &mut GemBS, idx_name: &str, desc: &str, command: &str) {
+	let gref = if let Some(x) = gem_bs.get_asset("gembs_reference") { x.idx() } else { panic!("gembs_reference not found")};
+	let index = if let Some(x) = gem_bs.get_asset(idx_name) { x.idx() } else { panic!("{} not found", idx_name)};
+	let (id, desc, command, args) = (idx_name.to_string(), desc.to_string(), Command::Index, command.to_string());
+	let index_task = gem_bs.add_task(&id, &desc, command, &args, vec!(gref), vec!(index));
+	gem_bs.get_asset_mut(index).unwrap().set_creator(index_task);
+}
+
+fn make_index_tasks(gem_bs: &mut GemBS) -> Result<(), String> {
+	match gem_bs.get_config(Section::Index, "need_bs_index") {
+		Some(DataValue::Bool(x)) => {
+			if *x { add_make_index_task(gem_bs, "index", "Make GEM3 bisulfite index", "-b"); }			
+		},
+		_ => panic!("No value stored for need_bs_index"),
+	}
+	match gem_bs.get_config(Section::Index, "need_nonbs_index") {
+		Some(DataValue::Bool(x)) => {
+			if *x { add_make_index_task(gem_bs, "nonbs_index", "Make GEM3 non-bisulfite bisulfite index", "-n"); }	
+		},
+		_ => panic!("No value stored for need_nonbs_index"),
+	}
+	Ok(())
+}
+
 pub fn check_ref_and_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 	check_ref(gem_bs)?;
 	check_indices(gem_bs)?;
-	make_gem_ref(gem_bs)
+	make_gem_ref(gem_bs)?;
+	make_index_tasks(gem_bs)
 }

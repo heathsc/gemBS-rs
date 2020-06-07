@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use crate::common::defs::{Section, DataValue};
-use crate::common::assets::{AssetStatus};
+use crate::common::assets::{AssetStatus, GetAsset};
 use crate::config::GemBS;
 use std::collections::HashSet;
 use std::io::BufRead;

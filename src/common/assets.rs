@@ -13,6 +13,7 @@ pub struct Asset {
 	id: Rc<String>,
 	path: PathBuf,
 	idx: usize,
+	creator: Option<usize>,
 	asset_type: AssetType,
 	status: AssetStatus,
 }
@@ -26,18 +27,49 @@ impl Asset {
 			AssetStatus::Absent 
 		};
 		let id = Rc::new(id_str.to_owned());		
-		Asset{id, path: path.to_owned(), idx, asset_type, status}
+		Asset{id, path: path.to_owned(), idx, creator: None, asset_type, status}
 	}	
 	pub fn path(&self) -> &Path { &self.path }
 	pub fn status(&self) -> AssetStatus { self.status }
 	pub fn idx(&self) -> usize { self.idx }
+	pub fn creator(&self) -> Option<usize> { self.creator }
+	pub fn set_creator(&mut self, idx: usize) { self.creator = Some(idx); }
 }
 
 pub struct AssetList {
 	asset_hash: HashMap<Rc<String>, usize>, 
-	assets: Vec<Rc<Asset>>,
+	assets: Vec<Asset>,
 }
 
+pub trait GetAsset<T> {
+	fn get_asset(&self, idx: T) -> Option<&Asset>; 	
+	fn get_asset_mut(&mut self, idx: T) -> Option<&mut Asset>; 	
+}
+
+impl GetAsset<usize> for AssetList {
+	fn get_asset(&self, idx: usize) -> Option<&Asset> {
+		if idx < self.assets.len() { Some(&self.assets[idx]) }
+		else { None }
+	}
+	fn get_asset_mut(&mut self, idx: usize) -> Option<&mut Asset> {
+		if idx < self.assets.len() { Some(&mut self.assets[idx]) }
+		else { None }
+	}
+}
+
+
+impl GetAsset<&str> for AssetList {
+	fn get_asset(&self, idx: &str) -> Option<&Asset> {
+		self.asset_hash.get(&idx.to_string()).map(|x| &self.assets[*x])
+	}
+	fn get_asset_mut(&mut self, idx: &str) -> Option<&mut Asset> {
+		if let Some(x) = self.asset_hash.get(&idx.to_string()) {
+			let ix = *x;
+			Some(&mut self.assets[ix])		
+		} else { None }
+	}
+}
+	
 impl AssetList {
 	pub fn new() -> Self { AssetList{asset_hash: HashMap::new(), assets: Vec::new() }}
 
@@ -45,12 +77,9 @@ impl AssetList {
 		let idx = self.assets.len();
 		let asset = Asset::new(id, path, idx, asset_type);
 		let asset_id = Rc::clone(&asset.id);
-		let rc_asset = Rc::new(asset);
-		self.assets.push(rc_asset);
+		self.assets.push(asset);
 		self.asset_hash.insert(asset_id, idx);
 		idx
 	}
-	pub fn get(&self, id: &str) -> Option<&Rc<Asset>> {
-		self.asset_hash.get(&id.to_string()).map(|x| &self.assets[*x])
-	}
+
 }

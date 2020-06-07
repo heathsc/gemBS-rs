@@ -32,6 +32,8 @@ subcommands:
         args:
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads (default - all available cores)}
           - sampling: {short: s, long: sampling-rate, value_name: SAMPLING_RATE, takes_value: true, help: Text sampling rate - increasing will decrease index size but also performance}
+          - bs_index: {short: b, long: bs-index, help: Generate bisulfite index}
+          - nonbs_index: {short: n, long: nonbs-index, help: Generate non-bisulfite (regular) index}
           - dbsnp_files: {short: d, long: list-dbsnp-files, value_name: DBSNP_FILES, multiple: true, takes_value: true, help: List of input files from dbSNP}
     - map:
         setting: DeriveDisplayOrder

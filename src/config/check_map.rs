@@ -1,11 +1,9 @@
 // Check requirements and presence of source and derived files for mapping
 // Make asset list for FASTQs, BAMs etc. associated with mapping
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::collections::HashMap;
-use std::rc::Rc;
 use crate::common::defs::{Metadata, Section, DataValue, Command};
-use crate::common::assets::{Asset, AssetType};
-use crate::common::tasks::{Task, TaskList};
+use crate::common::assets::{AssetType, GetAsset};
 use super::GemBS;
 
 #[derive(Debug)]
@@ -31,6 +29,14 @@ impl<'a> Sample<'a> {
 pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 	let seq_dir = if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Mapping, "sequence_dir") { x } else { "." };
 	let bam_dir = if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Mapping, "bam_dir") { x } else { "." };
+	let make_cram = if let Some(DataValue::Bool(x)) = gem_bs.get_config(Section::Mapping, "make_cram") { *x } else { false };
+	let mut reqd_files = vec!("index");
+	if make_cram { reqd_files.append(&mut vec!("gembs_reference", "gembs_reference_fai", "gembs_reference_gzi", "contig_md5")); }
+	let mut common_inputs = Vec::new();
+	for f in reqd_files.iter() {
+		if let Some(x) = gem_bs.get_asset(*f) { common_inputs.push(x.idx()) } else { panic!("{} not found", f) };
+	}
+	let suffix = if make_cram { ".cram" } else { ".bam" };
 	// Build hashtable with sample barcodes and their associated datasets
 	let mut barcodes: HashMap<&str, Sample> = HashMap::new();
 	let href = gem_bs.get_sample_data_ref();
@@ -43,28 +49,22 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 			sample.check_name(name, bcode)?;
 			sample.datasets.push(dataset);
 		} else { return Err(format!("No barcode associated with dataset {}", dataset)) }
-	}
-//	let mut asset_vec = Vec::new();
+	}	
 	let mut task_vec = Vec::new();
 	let handle_file = |dt: &str, s: &str, nm: &str, p: &Path, asset: AssetType| {
 		let tpath = Path::new(s);
 		let path = if tpath.has_root() { tpath.to_owned() } else { [p, tpath].iter().collect()	};
 		let name = format!("{}{}", dt, nm);
 		(name, path, asset)
-	};
+	}; 
 	for (bcode, sample) in barcodes.iter() {
 		let replace_meta_var = |s: &str| {
 			if let Some(sm) = sample.name {	s.replace("@BARCODE", bcode).replace("@SAMPLE", sm)	} else { s.replace("@BARCODE", bcode) }
 		};
 		let bdir = replace_meta_var(bam_dir);
 		let bpath = Path::new(&bdir);
-//		asset_vec.push(handle_file(bcode, format!("{}.bam", bcode).as_str(), ".bam", &bpath, AssetType::Derived));
 		let sdir = replace_meta_var(seq_dir);
 		let spath = Path::new(&sdir);
-//		if sample.datasets.len() > 1 {
-//			let merge = (format!("merge-bam_{}", bcode), format!("Merge datasetsfor barcode {}", bcode),
-//				Command::MergeBams, format!("-b {}", bcode));
-//		};
 		let mut tvec = Vec::new();
 		for dat in sample.datasets.iter() {
 			if let Some(dr) = href.get(*dat) {
@@ -80,14 +80,14 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 				}
 				let mut out_vec = Vec::new();
 				let map_dataset = if sample.datasets.len() == 1 {
-					out_vec.push(handle_file(bcode, format!("{}.bam", bcode).as_str(), ".bam", &bpath, AssetType::Derived));
+					out_vec.push(handle_file(bcode, format!("{}{}", bcode, suffix).as_str(), suffix, &bpath, AssetType::Derived)); 
 					out_vec.push(handle_file(bcode, format!("{}.json", bcode).as_str(), ".json", &bpath, AssetType::Derived));
-					(format!("map_{}", bcode), format!("Map single dataset {} for barcode {}", sample.datasets[0], bcode),
+					(format!("map_{}", bcode), format!("Map single dataset {} for barcode {}", dat, bcode),
 						Command::Map, format!("-b {}", bcode))
 				} else {
 					out_vec.push(handle_file(dat, format!("{}.bam", dat).as_str(), ".bam", &bpath, AssetType::Temp));
 					out_vec.push(handle_file(dat, format!("{}.json", dat).as_str(), ".json", &bpath, AssetType::Derived));
-					(format!("map_{}", dat), format!("Map single dataset {} for barcode {}", sample.datasets[0], bcode),
+					(format!("map_{}", dat), format!("Map single dataset {} for barcode {}", dat, bcode),
 						Command::Map, format!("-D {}", dat))
 				};
 				tvec.push((map_dataset, in_vec, out_vec));
@@ -97,28 +97,30 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 		task_vec.push((bcode, bpath.to_owned(), tvec));
 	}
 	for(bcode, bpath, tvec) in task_vec.iter() {
-		let mut jobs = Vec::new();
 		let mut out_bams = Vec::new();
 		for ((id, desc, command, args), in_vec, out_vec) in tvec.iter() {
-			let mut v1 = Vec::new();
+			let mut v1 = common_inputs.clone();
 			for (name, path, atype) in in_vec.iter() { v1.push(gem_bs.insert_asset(name.as_str(), &path, *atype)); }
 			let mut v2 = Vec::new();
 			for (name, path, atype) in out_vec.iter() { v2.push(gem_bs.insert_asset(name.as_str(), &path, *atype)); }
 			out_bams.push(v2[0]);
+			let tv = v2.clone();
 			let map_task = gem_bs.add_task(id, desc, *command, args, v1, v2);
-			jobs.push(map_task);
-		}
-		if jobs.len() > 1 {
-			let (id, desc, command, args) = (format!("merge-bam_{}", bcode), format!("Merge datasetsfor barcode {}", bcode),
-				Command::MergeBams, format!("-b {}", bcode));
-			let(name, path, atype) = handle_file(bcode, format!("{}.bam", bcode).as_str(), ".bam", &bpath, AssetType::Derived);
-			let ix = gem_bs.insert_asset(name.as_str(), &path, atype);
-			let merge_task = gem_bs.add_task(&id, &desc, command, &args, out_bams, vec!(ix));
-			for parent in jobs.iter() {
-				gem_bs.add_parent_child(merge_task, *parent);
+			for id in tv.iter() {
+				gem_bs.get_asset_mut(*id).unwrap().set_creator(map_task);
 			}
 		}
-	}
+		if tvec.len() > 1 {
+			let (id, desc, command, args) = (format!("merge-bam_{}", bcode), format!("Merge datasetsfor barcode {}", bcode),
+				Command::MergeBams, format!("-b {}", bcode));
+			let(name, path, atype) = handle_file(bcode, format!("{}{}", bcode, suffix).as_str(), suffix, &bpath, AssetType::Derived);
+			let ix = gem_bs.insert_asset(name.as_str(), &path, atype);
+			let merge_task = gem_bs.add_task(&id, &desc, command, &args, out_bams, vec!(ix));
+			gem_bs.get_asset_mut(ix).unwrap().set_creator(merge_task);
+
+		}
+	} 
 	gem_bs.list_tasks();
 	Ok(())
 }
+

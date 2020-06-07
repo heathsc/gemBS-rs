@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP};
-use crate::common::assets::{Asset, AssetList, AssetType};
+use crate::common::assets::{Asset, AssetList, AssetType, GetAsset};
 use crate::common::tasks::{Task, TaskList};
 
 mod database;
@@ -119,12 +119,14 @@ impl GemBS {
 		debug!("Inserting Asset({}): {} {} {:?}", ix, id, path.to_string_lossy(), asset_type);
 		ix
 	}
-	pub fn get_asset(&self, id: &str) -> Option<&Rc<Asset>> {
-		self.assets.get(id)
-	}
 	pub fn add_task(&mut self, id: &str, desc: &str, command: Command, args: &str, inputs: Vec<usize>, outputs: Vec<usize>) -> usize {
 		debug!("Adding task: {} {} {:?} {} in: {:?} out: {:?}", id, desc, command, args, inputs, outputs);
-		self.tasks.add_task(id, desc, command, args, inputs, outputs)
+		let v = inputs.clone();
+		let task = self.tasks.add_task(id, desc, command, args, inputs, outputs);
+		for inp in v.iter() {
+			if let Some(x) = self.assets.get_asset(*inp).unwrap().creator() { self.add_parent_child(task, x); }
+		}
+		task
 	}
 	pub fn add_parent_child(&mut self, child: usize, parent: usize) {
 		self.tasks.get_idx(child).add_parent(parent);
@@ -206,6 +208,25 @@ impl GemBS {
 		tpath
 	}
 }
+
+impl GetAsset<usize> for GemBS {
+	fn get_asset(&self, idx: usize) -> Option<&Asset> {
+		self.assets.get_asset(idx)
+	}
+	fn get_asset_mut(&mut self, idx: usize) -> Option<&mut Asset> {
+		self.assets.get_asset_mut(idx)
+	}
+}
+
+impl GetAsset<&str> for GemBS {
+	fn get_asset(&self, idx: &str) -> Option<&Asset> {
+		self.assets.get_asset(idx)
+	}
+	fn get_asset_mut(&mut self, idx: &str) -> Option<&mut Asset> {
+		self.assets.get_asset_mut(idx)
+	}
+}
+
 
 
 fn check_root(path: &PathBuf) -> bool {
