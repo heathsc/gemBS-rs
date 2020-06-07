@@ -22,6 +22,7 @@ mod database;
 pub mod check_ref;
 pub mod contig;
 pub mod check_map;
+pub mod check_call;
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GemBSHash {
@@ -83,19 +84,21 @@ impl GemBS {
 			href.entry(dataset.to_string()).or_insert_with(HashMap::new).insert(mt, val);
 		} else { panic!("Internal error!"); }
 	}
+	fn get_contig_hash_mut(&mut self) -> &mut HashMap<ContigInfo, HashMap<Rc<String>, ContigData>> {
+		if let GemBSHash::Contig(href) = &mut self.var[2] {	href } else { panic!("Internal error!"); }
+	}
+	pub fn get_contig_hash(&self) -> &HashMap<ContigInfo, HashMap<Rc<String>, ContigData>> {
+		if let GemBSHash::Contig(href) = &self.var[2] {	href } else { panic!("Internal error!"); }
+	}
 	pub fn set_contig_def(&mut self, ctg: contig::Contig) {
-		if let GemBSHash::Contig(href) = &mut self.var[2] {
-			let name = Rc::clone(&ctg.name);
-			href.entry(ContigInfo::Contigs).or_insert_with(HashMap::new)
-				.insert(name, ContigData::Contig(ctg));
-		} else { panic!("Internal error!"); }
+		let href = self.get_contig_hash_mut();
+		let name = Rc::clone(&ctg.name);
+		href.entry(ContigInfo::Contigs).or_insert_with(HashMap::new).insert(name, ContigData::Contig(ctg));
 	}
 	pub fn set_contig_pool_def(&mut self, pool: contig::ContigPool) {
-		if let GemBSHash::Contig(href) = &mut self.var[2] {
-			let name = Rc::clone(&pool.name);
-			href.entry(ContigInfo::ContigPools).or_insert_with(HashMap::new)
-				.insert(name, ContigData::ContigPool(pool));
-		} else { panic!("Internal error!"); }
+		let href = self.get_contig_hash_mut();
+		let name = Rc::clone(&pool.name);
+		href.entry(ContigInfo::ContigPools).or_insert_with(HashMap::new).insert(name, ContigData::ContigPool(pool));
 	}
 	pub fn get_config(&self, section: Section, name: &str) -> Option<&DataValue> {
 		if let GemBSHash::Config(href) = &self.var[0] {
@@ -105,6 +108,9 @@ impl GemBS {
 			if let Some(h) = href.get(&Section::Default) { return h.get(name); }
 		}
 		None
+	}
+	pub fn get_config_bool(&self, section: Section, name: &str) -> bool {
+		if let Some(DataValue::Bool(x)) = self.get_config(section, name) { *x } else { false }
 	}
 	pub fn get_config_ref(&self) ->  &HashMap<Section, HashMap<String, DataValue>> {
 		if let GemBSHash::Config(href) = &self.var[0] { &href }
