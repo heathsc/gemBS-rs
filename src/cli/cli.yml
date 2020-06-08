@@ -34,6 +34,7 @@ subcommands:
           - sampling: {short: s, long: sampling-rate, value_name: SAMPLING_RATE, takes_value: true, help: Text sampling rate - increasing will decrease index size but also performance}
           - bs_index: {short: b, long: bs-index, help: Generate bisulfite index}
           - nonbs_index: {short: n, long: nonbs-index, help: Generate non-bisulfite (regular) index}
+          - dbsnp_index: {short: D, long: dbsnp-index, help: Generate dbSNP index}
           - dbsnp_files: {short: d, long: list-dbsnp-files, value_name: DBSNP_FILES, multiple: true, takes_value: true, help: List of input files from dbSNP}
     - map:
         setting: DeriveDisplayOrder

@@ -9,6 +9,7 @@ use crate::common::assets::{AssetType, GetAsset};
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::BufRead;
+use glob::glob;
 
 fn check_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	// Check reference file
@@ -137,14 +138,47 @@ fn check_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 	Ok(())	
 }
 
+fn make_dbsnp_tasks(gem_bs: &mut GemBS, dbsnp_files: Vec<PathBuf>) {
+	let dbsnp_index = if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::Index, "dbsnp_index") { PathBuf::from(idx) } 
+	else { 
+		let dir = if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::Index, "index_dir" ) { idx } else { "." };
+		let p: PathBuf = [dir, "dbSNP_gemBS.idx"].iter().collect();
+		gem_bs.set_config(Section::Index, "dbsnp_index", DataValue::String(p.to_string_lossy().to_string()));
+		p
+	};
+	let mut in_vec = Vec::new();
+	for (ix, f) in dbsnp_files.iter().enumerate() { in_vec.push(gem_bs.insert_asset(format!("dbsnp_file_{}", ix + 1).as_str(), &f, AssetType::Supplied)); }
+	let index = gem_bs.insert_asset("dbsnp_index", &dbsnp_index, AssetType::Derived);
+	let (id, desc, command, args) = ("dbsnp_index", "Generate dbSNP index", Command::Index, "--dbsnp-index");
+	let index_task = gem_bs.add_task(id, desc, command, args, in_vec, vec!(index));
+	gem_bs.get_asset_mut(index).unwrap().set_creator(index_task);	
+}
+
+fn check_dbsnp_ref(gem_bs: &mut GemBS) -> Result<(), String> {	
+	if let Some(DataValue::StringVec(dbsnp_list)) = gem_bs.get_config(Section::Index, "dbsnp_files") { 
+		let mut dbsnp_files = Vec::new();
+		for pat in dbsnp_list.iter() {
+			for mat in glob(pat).map_err(|e| format!("{}",e))? {
+				match mat {
+					Ok(f) => dbsnp_files.push(f),
+					Err(e) => return Err(format!("{}", e)),
+				}
+			}
+		}
+		if !dbsnp_files.is_empty() { make_dbsnp_tasks(gem_bs, dbsnp_files); }
+	}
+	Ok(())
+}
+	
 fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {	
 	let reference = gem_bs.get_reference()?;
 	let index_dir = if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::Index, "index_dir") { idx } else { panic!("Internal error - missing index_dir") }; 
 	let tpath = Path::new(Path::new(reference).file_stem().unwrap()).with_extension("gemBS.ref");	
 	let mut gref = PathBuf::from(index_dir);
 	gref.push(tpath);
-	let gref_fai = gref.clone().with_extension("ref.fai");
-	let gref_gzi = gref.clone().with_extension("ref.gzi");
+	let gref_fai = gref.with_extension("ref.fai");
+	let gref_gzi = gref.
+	with_extension("ref.gzi");
 	let tpath = Path::new(Path::new(reference).file_stem().unwrap()).with_extension("gemBS.contig_md5");
 	let mut ctg_md5 = PathBuf::from(index_dir);
 	ctg_md5.push(tpath);
@@ -196,13 +230,13 @@ fn add_make_index_task(gem_bs: &mut GemBS, idx_name: &str, desc: &str, command: 
 fn make_index_tasks(gem_bs: &mut GemBS) -> Result<(), String> {
 	match gem_bs.get_config(Section::Index, "need_bs_index") {
 		Some(DataValue::Bool(x)) => {
-			if *x { add_make_index_task(gem_bs, "index", "Make GEM3 bisulfite index", "-b"); }			
+			if *x { add_make_index_task(gem_bs, "index", "Make GEM3 bisulfite index", "--bs-index"); }			
 		},
 		_ => panic!("No value stored for need_bs_index"),
 	}
 	match gem_bs.get_config(Section::Index, "need_nonbs_index") {
 		Some(DataValue::Bool(x)) => {
-			if *x { add_make_index_task(gem_bs, "nonbs_index", "Make GEM3 non-bisulfite bisulfite index", "-n"); }	
+			if *x { add_make_index_task(gem_bs, "nonbs_index", "Make GEM3 non-bisulfite bisulfite index", "--nonbs-index"); }	
 		},
 		_ => panic!("No value stored for need_nonbs_index"),
 	}
@@ -213,5 +247,6 @@ pub fn check_ref_and_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 	check_ref(gem_bs)?;
 	check_indices(gem_bs)?;
 	make_gem_ref(gem_bs)?;
+	check_dbsnp_ref(gem_bs)?;
 	make_index_tasks(gem_bs)
 }

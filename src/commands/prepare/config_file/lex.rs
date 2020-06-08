@@ -153,6 +153,8 @@ impl Lexer {
 		tab[b':' as usize] = LexRawToken::Punct;
 		tab[b'_' as usize] = LexRawToken::Letter;
 		tab[b'@' as usize] = LexRawToken::Letter;
+		tab[b'*' as usize] = LexRawToken::Letter;
+		tab[b'?' as usize] = LexRawToken::Letter;
 		tab[b'\n' as usize] = LexRawToken::LineFeed;
 		tab[b'.' as usize] = LexRawToken::Number;
 		tab[b'-' as usize] = LexRawToken::Number;

@@ -23,6 +23,7 @@ pub mod check_ref;
 pub mod contig;
 pub mod check_map;
 pub mod check_call;
+pub mod check_extract;
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GemBSHash {
@@ -213,6 +214,25 @@ impl GemBS {
 		tpath.push(name);
 		tpath
 	}
+	pub fn get_samples(&self) -> Vec<(String, Option<String>)> {
+	let mut bc_set = HashMap::new();
+	let href = self.get_sample_data_ref();	
+	for (dataset, href1) in href.iter() {
+		let name = href1.get(&Metadata::SampleName).and_then(|x| {
+			if let DataValue::String(s) = x {Some(s) } else { None }
+		});
+		if let Some(DataValue::String(bcode)) = href1.get(&Metadata::SampleBarcode) {
+			bc_set.insert(bcode, name);
+		} else { panic!("No barcode associated with dataset {}", dataset); }
+	}	
+	let mut sample = Vec::new();
+	for (bc, name) in bc_set.iter() {
+		let n = if let Some(x) = name {Some((*x).to_owned())} else {None};
+		sample.push(((*bc).clone(), n));
+	}
+	sample
+}
+
 }
 
 impl GetAsset<usize> for GemBS {
