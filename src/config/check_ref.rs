@@ -155,17 +155,17 @@ fn make_dbsnp_tasks(gem_bs: &mut GemBS, dbsnp_files: Vec<PathBuf>) {
 }
 
 fn check_dbsnp_ref(gem_bs: &mut GemBS) -> Result<(), String> {	
-	if let Some(DataValue::StringVec(dbsnp_list)) = gem_bs.get_config(Section::Index, "dbsnp_files") { 
-		let mut dbsnp_files = Vec::new();
-		for pat in dbsnp_list.iter() {
+	if let Some(DataValue::StringVec(dbsnp_files)) = gem_bs.get_config(Section::Index, "dbsnp_files") { 
+		let mut files = Vec::new();
+		for pat in dbsnp_files.iter() {
 			for mat in glob(pat).map_err(|e| format!("{}",e))? {
 				match mat {
-					Ok(f) => dbsnp_files.push(f),
+					Ok(f) => files.push(f),
 					Err(e) => return Err(format!("{}", e)),
 				}
 			}
 		}
-		if !dbsnp_files.is_empty() { make_dbsnp_tasks(gem_bs, dbsnp_files); }
+		if !files.is_empty() { make_dbsnp_tasks(gem_bs, files); }
 	}
 	Ok(())
 }

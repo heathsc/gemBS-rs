@@ -74,12 +74,16 @@ impl AssetList {
 	pub fn new() -> Self { AssetList{asset_hash: HashMap::new(), assets: Vec::new() }}
 
 	pub fn insert(&mut self, id: &str, path: &Path, asset_type: AssetType) -> usize {
-		let idx = self.assets.len();
-		let asset = Asset::new(id, path, idx, asset_type);
-		let asset_id = Rc::clone(&asset.id);
-		self.assets.push(asset);
-		self.asset_hash.insert(asset_id, idx);
-		idx
+		if let Some(a) = self.get_asset(id) {
+			warn!("Warning - Can not insert asset {}, path {} as asset already exists with path {}", id, path.to_string_lossy(), a.path().to_string_lossy());
+			a.idx()
+		} else {		
+			let idx = self.assets.len();
+			let asset = Asset::new(id, path, idx, asset_type);
+			let asset_id = Rc::clone(&asset.id);
+			self.assets.push(asset);
+			self.asset_hash.insert(asset_id, idx);
+			idx
+		}
 	}
-
 }
