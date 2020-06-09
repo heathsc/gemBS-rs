@@ -12,11 +12,10 @@ use serde::{Serialize, Deserialize};
 use rusqlite::Connection;
 use std::path::Path;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP};
 use crate::common::assets::{Asset, AssetList, AssetType, GetAsset};
-use crate::common::tasks::{Task, TaskList};
+use crate::common::tasks::TaskList;
 
 mod database;
 pub mod check_ref;
@@ -209,11 +208,14 @@ impl GemBS {
 	
 	pub fn get_exec_path(&self, name: &str) -> PathBuf {
 		let root = &self.fs.as_ref().unwrap().gem_bs_root;
-		let mut tpath = root.clone();
-		tpath.push("bin");
-		tpath.push(name);
-		tpath
+		[root, Path::new("bin"), Path::new(name)].iter().collect()
 	}
+	
+	pub fn get_config_script_path(&self) -> PathBuf {
+		let root = &self.fs.as_ref().unwrap().gem_bs_root;
+		[root, Path::new("etc"), Path::new("config_scripts")].iter().collect()
+	} 
+
 	pub fn get_samples(&self) -> Vec<(String, Option<String>)> {
 	let mut bc_set = HashMap::new();
 	let href = self.get_sample_data_ref();	

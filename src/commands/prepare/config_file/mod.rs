@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::env;
+use std::path::{PathBuf, Path};
 
 use crate::common::defs::*;
 use crate::config::GemBS;
@@ -53,9 +54,6 @@ impl KnownVarList {
 
 fn make_known_var_list() -> KnownVarList {
 	let mut kv_list = KnownVarList::new();
-	kv_list.add_known_var("no_db", VarType::Bool, Vec::new());
-	kv_list.add_known_var("json_file", VarType::String, Vec::new());
-	kv_list.add_known_var("gembs_root", VarType::String, Vec::new());
 	kv_list.add_known_var("index", VarType::String, vec!(Section::Index));
 	kv_list.add_known_var("nonbs_index", VarType::String, vec!(Section::Index));
 	kv_list.add_known_var("index_dir", VarType::String, vec!(Section::Index));
@@ -136,11 +134,11 @@ struct PrepConfig {
 }
 
 impl PrepConfig {
-	fn new() -> Self {
+	fn new(config_script_path: &Path) -> Self {
 		PrepConfig{
 			kv_list: make_known_var_list(), 
 			var: HashMap::new(), 
-			lexer: Lexer::new()
+			lexer: Lexer::new(config_script_path)
 		}
 	}
 	
@@ -349,7 +347,7 @@ impl PrepConfig {
 }
 
 pub fn process_config_file(file_name: &str, gem_bs: &mut GemBS) -> Result<(), String> {
-	let mut prep_config = PrepConfig::new();
+	let mut prep_config = PrepConfig::new(&gem_bs.get_config_script_path());
 	prep_config.start_parse(file_name)?;
 	prep_config.parse(gem_bs)?;
 	Ok(())

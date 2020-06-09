@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::BufRead;
 use std::str;
 use std::str::FromStr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::common::utils::get_inode;
 use crate::common::defs::Section;
@@ -17,12 +17,21 @@ struct InFile {
 }
 
 impl InFile {
-	fn new(name: &str) -> Option<Self> {
-		match get_inode(name) {
+	fn new(name: &str, path: &Path) -> Option<Self> {
+		let mut pb = PathBuf::from(name);
+		if !pb.exists() {
+			let tpb: PathBuf = [path, &pb].iter().collect();
+			if tpb.exists() { pb = tpb } else {
+				error!("Could not find config file {}", name);
+				return None;
+			}
+		}
+		let pname = pb.to_string_lossy();
+		match get_inode(&pname) {
 			Some(inode) => {
-				match compress::open_bufreader(Path::new(name)) {
+				match compress::open_bufreader(&pb) {
 					Ok(reader) => {
-						Some(InFile{name: name.to_string(), inode, line: 0, pos: 0, section: Section::Default, bufreader: reader})
+						Some(InFile{name: pname.to_string(), inode, line: 0, pos: 0, section: Section::Default, bufreader: reader})
 					},
 					Err(_) => {
 						error!("Could not open config file {}", name);
@@ -123,11 +132,12 @@ pub struct Lexer {
 	in_files: Vec<InFile>,
 	state: LexState,
 	tbuf: String,
+	config_script_path: PathBuf,
 	quote_mode: QuoteMode,
 }
 
 impl Lexer {
-	pub fn new() -> Self {
+	pub fn new(config_script_path: &Path) -> Self {
 		let mut tab = [LexRawToken::Illegal; 256];
 		for t in &mut tab[32..127] {
 			*t = LexRawToken::Invalid;
@@ -167,12 +177,13 @@ impl Lexer {
 			in_files: Vec::new(),
 			state: LexState::Init,
 			tbuf: String::new(),
+			config_script_path: config_script_path.to_owned(),
 			quote_mode: QuoteMode::None,
 		}
 	}
 	
 	fn add_in_file(&mut self, name: &str) -> Result<(), String> {
-		match InFile::new(name) {
+		match InFile::new(name, &self.config_script_path) {
 			Some(cf) => {
 				for f in &self.in_files {
 					if f.inode == cf.inode {
