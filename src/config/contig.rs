@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
-use crate::common::defs::{Section, DataValue};
+use crate::common::defs::{Section, DataValue, CONTIG_POOL_SIZE};
 use crate::common::assets::{AssetStatus, GetAsset};
 use crate::config::GemBS;
 use std::collections::HashSet;
 use std::io::BufRead;
 use std::rc::Rc;
+use blake2::{Blake2b, Digest};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contig {
@@ -50,12 +51,7 @@ fn setup_contig_pools(contigs: &[Contig], pools: &mut Vec<ContigPool>, pool_size
 	Ok(())
 }
 
-pub fn setup_contigs(gem_bs: &mut GemBS) -> Result<(), String> {
-/*	let ctg_md5 = if let Some(DataValue::String(file)) = gem_bs.get_config(Section::Index, "ctg_md5") { 
-		let path = Path::new(file);
-		if !path.exists() { return Err(format!("Contig MD5 file {} does not exist or is not accessible", file)) }
-		path
-	} else { panic!("Internal error - missing ctg_md5") }; */
+pub fn setup_contigs(gem_bs: &mut GemBS) -> Result<String, String> {
 	let ctg_md5 = if let Some(asset) = gem_bs.get_asset("contig_md5") {
 		if asset.status() != AssetStatus::Present { 
 			return Err(format!("Contig MD5 file {} does not exist or is not accessible", asset.path().to_string_lossy())) 
@@ -101,16 +97,30 @@ pub fn setup_contigs(gem_bs: &mut GemBS) -> Result<(), String> {
 	} 
 	
 	let ctg_pools_limit = if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Calling, "contig_pool_limit") { *x as usize } else { 
-		let x: usize = 25_000_000;
+		let x = CONTIG_POOL_SIZE;
 		gem_bs.set_config(Section::Calling, "contig_pool_limit", DataValue::Int(x as isize));
 		x
 	};
 
 	let mut contig_pools = Vec::new();
-	setup_contig_pools(&contigs, &mut contig_pools, 
-	ctg_pools_limit)?;
+	setup_contig_pools(&contigs, &mut contig_pools, ctg_pools_limit)?;
+	
+	// Construct Hash of pool names and contents
+	
+	// First we construct a list of pools sorted by size
+	let mut tvec = contig_pools.iter().collect::<Vec<_>>();
+	tvec.sort_by_key(|p| &p.name);
+	// Now make the hash from a list of each pool name followed by a sorted list of contig names for that pool
+	let mut hasher = Blake2b::new();
+	for p in tvec {
+		hasher.input(p.name.as_bytes());
+		itertools::sorted(p.contigs.iter().collect::<Vec<_>>()).for_each(|x| hasher.input(x.as_bytes()));
+	}
+	let digest = hasher.result().iter().fold(String::new(), |mut s, x| { s.push_str(format!("{:02x}", x).as_str()); s});
+	println!("contig pool digest = {}", digest);
+	debug!("Contig pool digest = {}", digest);
 	debug!("Storing contig and contig pools definitions");
 	for ctg in contigs.drain(..) { gem_bs.set_contig_def(ctg); }
 	for pool in contig_pools.drain(..) { gem_bs.set_contig_pool_def(pool); }
-	Ok(())
+	Ok(digest)
 }

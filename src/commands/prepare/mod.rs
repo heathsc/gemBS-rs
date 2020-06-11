@@ -1,7 +1,5 @@
 use clap::ArgMatches;
 use crate::config::GemBS;
-use crate::config::{check_ref, contig, check_map, check_call, check_extract
-};
 use crate::common::defs::{Section, DataValue};
 
 mod config_file;
@@ -16,7 +14,6 @@ pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String>
 	// so if it is not present then there has been an internal error an we can panic...
 	config_file::process_config_file(m.value_of("config").unwrap(), gem_bs)?;
 
-	if m.is_present("no_db") { gem_bs.set_config(Section::Default, "no_db", DataValue::Bool(true)); }
 	if m.is_present("populate") { gem_bs.set_config(Section::Index, "populate_cache", DataValue::Bool(true)); }
 	
 	// Process sample metadata file
@@ -26,15 +23,12 @@ pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String>
 	} else if let Some(f) = m.value_of("json_metadata") {
 		metadata::process_json::process_json_metadata_file(f, gem_bs)?;
 	}
-	
-	check_ref::check_ref_and_indices(gem_bs)?;
-	contig::setup_contigs(gem_bs)?;
-	check_map::check_map(gem_bs)?;
-	check_call::check_call(gem_bs)?;
-	check_extract::check_extract(gem_bs)?;
-	gem_bs.list_tasks();
+	gem_bs.setup_assets_and_tasks()?;
+//	gem_bs.list_tasks();
 	// Dump JSON config file to disk
 	gem_bs.write_json_config()?;
 	
+	gem_bs.read_json_config()?;
+
 	Ok(())
 }

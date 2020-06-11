@@ -1,9 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::rc::Rc;
+use super::utils::calc_digest;
 
 #[derive(Debug, Clone, Copy)]
-pub enum AssetType { Supplied, Derived, Temp, Log }
+pub enum AssetType { Supplied, Derived, Temp }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AssetStatus { Present, Absent, Incomplete }
@@ -86,4 +87,11 @@ impl AssetList {
 			idx
 		}
 	}
+	
+	// Make a digest from all of the Asset names.  We sort them as the standard HashMap helpfully randomizes
+	// the order.
+	pub fn get_digest(&self) -> String {
+		calc_digest(itertools::sorted(self.assets.iter().map(|x| x.id.as_bytes()).collect::<Vec<_>>()))
+	}
 }
+

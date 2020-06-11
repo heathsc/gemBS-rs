@@ -20,7 +20,6 @@ subcommands:
            - config: {short: c, long: config, value_name: CONFIG, help: Text config file with gemBS parameters, takes_value: true, required: true}
            - cvs_metadata: {short: t, long: text-metadata, value_name: TEXT_METADATA, help: Sample data in csv format, takes_value: true}
            - json_metadata: {short: l, long: lims-cnag-json, value_name: JSON_METADATA, help: Use JSON metadata file from CNAG lims, takes_value: true}
-           - no_db: {short: d, long: no-db, help: Do not use on-disk database}
            - populate: {short: p, long: populate-cache, help: Populate reference cache if required (for CRAM)}
         groups:
            - metadata:

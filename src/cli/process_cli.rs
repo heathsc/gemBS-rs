@@ -41,9 +41,6 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 		debug!("Moved working directory to {}", f);
 	}	
 
-	let json_dir = m.value_of("json");
-	let root_dir = m.value_of("gembs_root");
-	
 	if let Some(s) = m.value_of("json") { gem_bs.set_config(Section::Default, "json_file", DataValue::String(s.to_string())); }
 	if let Some(s) = m.value_of("gembs_root") { gem_bs.set_config(Section::Default, "gembs_root", DataValue::String(s.to_string())); }
 

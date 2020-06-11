@@ -21,6 +21,7 @@ fn check_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	// Check extra references - these are not required, but if specified in the config file, the file should be present
 	let extra_ref = gem_bs.get_config(Section::Index, "extra_references").cloned();
 	if let Some(DataValue::String(ref_file)) = extra_ref {
+		gem_bs.check_signal()?;
 		let tpath = Path::new(&ref_file);
 		if !tpath.exists() { return Err(format!("Extra references file {} does not exist or is not accessible", ref_file)); }
 		debug!("Extra references file {} found", ref_file);
@@ -35,6 +36,7 @@ fn check_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 		}
 		if !omit_ctgs.is_empty() { gem_bs.set_config(Section::Index, "omit_ctgs", DataValue::StringVec(omit_ctgs)); }
 	} 	
+	gem_bs.check_signal()?;
 	Ok(())
 }
 
@@ -135,8 +137,9 @@ fn check_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 			gem_bs.insert_asset("nonbs_index", Path::new(&index), AssetType::Derived);			
 		} else { return Err("Internal error - no index".to_string()); }
 	}
-	Ok(())	
+	gem_bs.check_signal()	
 }
+
 
 fn make_dbsnp_tasks(gem_bs: &mut GemBS, dbsnp_files: Vec<PathBuf>) {
 	let dbsnp_index = if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::Index, "dbsnp_index") { PathBuf::from(idx) } 
@@ -155,6 +158,7 @@ fn make_dbsnp_tasks(gem_bs: &mut GemBS, dbsnp_files: Vec<PathBuf>) {
 }
 
 fn check_dbsnp_ref(gem_bs: &mut GemBS) -> Result<(), String> {	
+	gem_bs.check_signal()?;
 	if let Some(DataValue::StringVec(dbsnp_files)) = gem_bs.get_config(Section::Index, "dbsnp_files") { 
 		let mut files = Vec::new();
 		for pat in dbsnp_files.iter() {
@@ -167,7 +171,7 @@ fn check_dbsnp_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 		}
 		if !files.is_empty() { make_dbsnp_tasks(gem_bs, files); }
 	}
-	Ok(())
+	gem_bs.check_signal()
 }
 	
 fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {	
@@ -184,6 +188,7 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	ctg_md5.push(tpath);
 	// Create gemBS reference if it does not already exist		
 	if !(gref.exists() && ctg_md5.exists()) {
+		gem_bs.check_signal()?;
 		info!("Creating gemBS compressed reference and calculating md5 sums of contigs");
 		let _ = fs::remove_file(&gref_fai);
 		let _ = fs::remove_file(&gref_gzi);
@@ -204,6 +209,7 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	}
 	// Create faidx index if required		
 	if !(gref_fai.exists() && gref_gzi.exists()) {
+		gem_bs.check_signal()?;
 		info!("Creating gemBS faidx index");
 		let faidx_args = vec!("faidx", gref.to_str().unwrap());
 		let samtools_path = gem_bs.get_exec_path("samtools");
@@ -216,7 +222,7 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.insert_asset("gembs_reference_fai", &gref_fai, AssetType::Derived);			
 	gem_bs.insert_asset("gembs_reference_gzi", &gref_gzi, AssetType::Derived);			
 	gem_bs.insert_asset("contig_md5", &ctg_md5, AssetType::Derived);			
-	Ok(())
+	gem_bs.check_signal()
 }
 
 fn add_make_index_task(gem_bs: &mut GemBS, idx_name: &str, desc: &str, command: &str) {
@@ -240,7 +246,7 @@ fn make_index_tasks(gem_bs: &mut GemBS) -> Result<(), String> {
 		},
 		_ => panic!("No value stored for need_nonbs_index"),
 	}
-	Ok(())
+	gem_bs.check_signal()
 }
 
 pub fn check_ref_and_indices(gem_bs: &mut GemBS) -> Result<(), String> {

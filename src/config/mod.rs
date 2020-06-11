@@ -9,15 +9,14 @@ use std::env;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Serialize, Deserialize};
-use rusqlite::Connection;
 use std::path::Path;
 use std::rc::Rc;
 
-use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP};
+use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 use crate::common::assets::{Asset, AssetList, AssetType, GetAsset};
 use crate::common::tasks::TaskList;
+use crate::common::utils::FileLock;
 
-mod database;
 pub mod check_ref;
 pub mod contig;
 pub mod check_map;
@@ -31,31 +30,25 @@ enum GemBSHash {
 	Contig(HashMap<ContigInfo, HashMap<Rc<String>, ContigData>>),
 }
 
-enum SQLiteDB {
-	File(Connection),
-	Mem(Connection),
-	None,
-}
-
 struct GemBSFiles {
 	config_dir: PathBuf,
 	json_file: PathBuf,
 	gem_bs_root: PathBuf,		
-	db_path: PathBuf,
 }
 
 pub struct GemBS {
 	var: Vec<GemBSHash>,
 	fs: Option<GemBSFiles>,
-	db: SQLiteDB,
 	assets: AssetList,
 	tasks: TaskList,
+	contig_pool_digest: Option<String>,
+	asset_digest: Option<String>,
 	signal: Arc<AtomicUsize>,
 }
 
 impl GemBS {
 	pub fn new() -> Self {
-		let mut gem_bs = GemBS{var: Vec::new(), fs: None, db: SQLiteDB::None,
+		let mut gem_bs = GemBS{var: Vec::new(), fs: None, contig_pool_digest: None, asset_digest: None,
 		assets: AssetList::new(), tasks: TaskList::new(), signal: Arc::new(AtomicUsize::new(0))};
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGTERM, Arc::clone(&gem_bs.signal), SIGTERM);		
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGINT, Arc::clone(&gem_bs.signal), SIGINT);		
@@ -66,8 +59,14 @@ impl GemBS {
 		gem_bs.var.push(GemBSHash::Contig(HashMap::new()));
 		gem_bs
 	}
-	pub fn get_signal(& self) -> usize {
+	pub fn get_signal(&self) -> usize {
 		self.signal.load(Ordering::Relaxed)
+	}
+	pub fn check_signal(&self) -> Result<(), String> {
+		match self.get_signal() {
+			0 => Ok(()),
+			s => Err(format!("Received {} signal.  Closing down", signal_msg(s))),
+		}
 	}
 	pub fn set_config(&mut self, section: Section, name: &str, val: DataValue) {
 		if let GemBSHash::Config(href) = &mut self.var[0] {
@@ -139,24 +138,29 @@ impl GemBS {
 		self.tasks.get_idx(parent).add_child(child);
 	}
 	pub fn list_tasks(&self) { self.tasks.list_tasks();	}
+	
 	// This will panic if called before fs is set, which is fine
 	pub fn write_json_config(&self) -> Result<(), String> {
+		self.check_signal()?;
 		let json_file = &self.fs.as_ref().unwrap().json_file;
-		if let Ok(wr) = compress::get_writer(json_file.to_str(), None) {
-			if serde_json::to_writer_pretty(wr, &self.var).is_ok() { trace!("JSON config file written out to {:?}", json_file); }
-			else { return Err(format!("Error: Failed to write JSON config file {:?}", json_file)); } 
-		} else { return Err(format!("Error: Failed to create JSON config file {:?}", json_file)); } 
+		let lock = FileLock::new(json_file).map_err(|e| format!("Error: Could not obtain lock on JSON config file: {}", e))?;
+		let writer = lock.writer().map_err(|e| format!("Error: Could not open JSON config file {} for writing: {}", json_file.to_string_lossy(), e))?;
+		serde_json::to_writer_pretty(writer, &self.var).map_err(|e| format!("Error: failed to write JSON config file {}: {}", json_file.to_string_lossy(), e))?;
+		trace!("JSON config file written out to {:?}", json_file);
 		Ok(())
 	}
-	pub fn create_db_tables(&self) -> Result<(), String> {
-		let c = match &self.db {
-			SQLiteDB::File(c) => c,
-			SQLiteDB::Mem(c) => c,
-			SQLiteDB::None => return Err("create_db_tables(): database not yet opened".to_string()),
-		};
-		database::create_tables(&c)
+	pub fn read_json_config(&mut self) -> Result<(), String> {
+		self.check_signal()?;
+		let json_file = &self.fs.as_ref().unwrap().json_file;
+		let lock = FileLock::new(json_file).map_err(|e| format!("Error: Could not obtain lock on JSON config file: {}", e))?;
+		let reader = lock.reader().map_err(|e| format!("Error: Could not open JSON config file {} for reading: {}", json_file.to_string_lossy(), e))?;
+		self.var = serde_json::from_reader(reader).map_err(|e| format!("Error: failed to read JSON config file {}: {}", json_file.to_string_lossy(), e))?;
+		trace!("JSON config file read from {:?}", json_file);
+		Ok(())
 	}
+
 	pub fn setup_fs(&mut self, initial: bool) -> Result<(), String> {
+		self.check_signal()?;
 		let cdir = ".gemBS";
 		let json_file = if let Some(DataValue::String(x)) = self.get_config(Section::Default, "json_file") { PathBuf::from(x) } else { 
 			[cdir, "gemBS.json"].iter().collect()
@@ -185,14 +189,12 @@ impl GemBS {
 			if !json_file.exists() { return Err(format!("Config JSON file {:?} does not exist (or is not accessible)", json_file)); }
 			if !no_db && !db_path.exists() { return Err(format!("Database file {:?} does not exist (or is not accessible)", db_path)); }
 		}
-		let db_conn = database::open_db_connection(&db_path, no_db, initial)?;
-		self.db = if no_db { SQLiteDB::Mem(db_conn) } else { SQLiteDB::File(db_conn) };
-		self.create_db_tables()?;
-		self.fs = Some(GemBSFiles{config_dir: config_dir.to_path_buf(), json_file, gem_bs_root, db_path});	
+		self.fs = Some(GemBSFiles{config_dir: config_dir.to_path_buf(), json_file, gem_bs_root});	
 		Ok(())
 	}
 	
 	pub fn get_reference(&self) -> Result<&str, String> {
+		self.check_signal()?;
 		match self.get_config(Section::Index, "reference") {
 			Some(DataValue::String(x)) => Ok(x),
 			_ => Err("No reference file supplied in config file.   Use key: reference to indicate a valid reference file".to_string()),
@@ -217,24 +219,34 @@ impl GemBS {
 	} 
 
 	pub fn get_samples(&self) -> Vec<(String, Option<String>)> {
-	let mut bc_set = HashMap::new();
-	let href = self.get_sample_data_ref();	
-	for (dataset, href1) in href.iter() {
-		let name = href1.get(&Metadata::SampleName).and_then(|x| {
-			if let DataValue::String(s) = x {Some(s) } else { None }
-		});
-		if let Some(DataValue::String(bcode)) = href1.get(&Metadata::SampleBarcode) {
-			bc_set.insert(bcode, name);
-		} else { panic!("No barcode associated with dataset {}", dataset); }
-	}	
-	let mut sample = Vec::new();
-	for (bc, name) in bc_set.iter() {
-		let n = if let Some(x) = name {Some((*x).to_owned())} else {None};
-		sample.push(((*bc).clone(), n));
+		let mut bc_set = HashMap::new();
+		let href = self.get_sample_data_ref();	
+		for (dataset, href1) in href.iter() {
+			let name = href1.get(&Metadata::SampleName).and_then(|x| {
+				if let DataValue::String(s) = x {Some(s) } else { None }
+			});
+			if let Some(DataValue::String(bcode)) = href1.get(&Metadata::SampleBarcode) {
+				bc_set.insert(bcode, name);
+			} else { panic!("No barcode associated with dataset {}", dataset); }
+		}	
+		let mut sample = Vec::new();
+		for (bc, name) in bc_set.iter() {
+			let n = if let Some(x) = name {Some((*x).to_owned())} else {None};
+			sample.push(((*bc).clone(), n));
+		}
+		sample
 	}
-	sample
-}
-
+	pub fn setup_assets_and_tasks(&mut self) -> Result<(), String> {
+		self.check_signal()?;
+		check_ref::check_ref_and_indices(self)?;
+		self.contig_pool_digest = Some(contig::setup_contigs(self)?);
+		check_map::check_map(self)?;
+		check_call::check_call(self)?;
+		check_extract::check_extract(self)?;
+		self.asset_digest = Some(self.assets.get_digest());
+		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());
+		Ok(())		
+	}
 }
 
 impl GetAsset<usize> for GemBS {
@@ -291,3 +303,5 @@ fn check_root(path: &PathBuf) -> bool {
 		}
 	} else { false }
 }
+
+

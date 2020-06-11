@@ -1,6 +1,7 @@
 use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use crate::config::contig;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Section {
 	Default, Index, Mapping, Calling, Extract, Report,
@@ -145,4 +146,14 @@ pub const SIGINT: usize = signal_hook::SIGINT as usize;
 pub const SIGQUIT: usize = signal_hook::SIGQUIT as usize;		
 pub const SIGHUP: usize = signal_hook::SIGHUP as usize;
 
+pub const CONTIG_POOL_SIZE: usize = 25_000_000;
 
+pub fn signal_msg(sig: usize) -> &'static str {
+	match sig {
+		SIGTERM => "SIGTERM",
+		SIGINT => "SIGINT",
+		SIGHUP => "SIGHUP",
+		SIGQUIT => "SIGQUIT",
+		_ => "UNKNOWN",
+	}
+}	

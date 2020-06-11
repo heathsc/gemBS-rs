@@ -1,10 +1,14 @@
 use std::fs;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{symlink, MetadataExt};
 use std::process::{Command, Stdio, Child, ChildStdout};
-use std::path::Path;
-use std::ffi::OsStr;
-use std::io::{BufReader, BufRead};
+use std::process;
+use std::path::{Path, PathBuf};
+use std::ffi::{OsString, OsStr};
+use std::io::prelude::*;
+use std::io::{BufReader, BufRead, BufWriter, ErrorKind};
+use std::env;
 use std::{thread, time};
+use blake2::{Blake2b, Digest};
 
 use compress::ReadType;
 use crate::common::defs::{SIGTERM, SIGINT, SIGQUIT, SIGHUP};
@@ -198,4 +202,102 @@ fn wait_sub_proc(gem_bs: &GemBS, cinfo: &mut Vec<(Child, &Path)>) -> Option<Stri
 	err_com
 }
 		
+pub fn calc_digest<'a>(x: impl Iterator<Item=&'a [u8]>) -> String {
+    x.fold(Blake2b::new(), |h, a| h.chain(a))	
+		.result().iter().fold(String::new(), |mut s, x| { s.push_str(format!("{:02x}", x).as_str()); s})
+}
+
+pub fn get_user_host_string() -> String {
+	let pid = process::id();
+	let hname = hostname::get().unwrap_or_else(|_| OsString::from("localhost"));
+	let user = env::var("USER").unwrap_or_else(|_| {
+		let uid = unsafe { libc::getuid() };
+		format!("{}", uid)
+	});
+	format!("{}@{}.{}", user, hname.to_string_lossy(), pid)
+}
+
+fn get_lock_path(path: &Path) -> Result<PathBuf, String> {
+	let lstring = get_user_host_string();
+	let tfile = path.file_name().ok_or(format!("Invalid file {:?} for LockedWriter::new()", path))?.to_string_lossy().to_string();
+	let file = if tfile.starts_with('.') {	format!("{}#gemBS_lock", tfile) } else { format!(".{}#gemBS_lock", tfile) };
+	let lock_path = match path.parent() {
+		Some(parent) => { [parent, Path::new(&file)].iter().collect() },
+		None => PathBuf::from(file)
+	};
+	if let Err(e) = symlink(Path::new(&lstring), &lock_path) {
+		return match e.kind() {
+			ErrorKind::AlreadyExists => { 
+				if let Ok(x) = fs::read_link(&lock_path) { Err(format!("File locked by {}", x.to_string_lossy())) }
+				else { Err("File locked".to_string()) }
+			},
+			_ => Err(format!("{}", e))
+		}
+	}
+	Ok(lock_path)		
+}
+
+pub struct FileLock<'a> {
+	lock_path: PathBuf,
+	path: &'a Path,
+}
+
+impl<'a> FileLock<'a> {
+	pub fn new(path: &'a Path) -> Result<Self, String> {
+		let lock_path = get_lock_path(path)?;
+		Ok(FileLock{lock_path, path})
+	}
+	pub fn writer(&self) -> Result<Box<dyn Write>, String> {
+		let ofile = match fs::File::create(self.path) {
+			Err(e) => return Err(format!("Couldn't open {}: {}", self.path.to_string_lossy(), e)),
+			Ok(f) => f,
+		};
+		let writer = Box::new(BufWriter::new(ofile));
+		Ok(writer)
+	}
+	pub fn reader(&self) -> Result<Box<dyn BufRead>, String> {
+		let file = match fs::File::open(self.path) {
+			Err(e) => return Err(format!("Couldn't open {}: {}", self.path.to_string_lossy(), e)),
+			Ok(f) => f,
+		};
+		let reader = Box::new(BufReader::new(file));
+		Ok(reader)
+	}
+}
+
+
+impl<'a> Drop for FileLock<'a> {
+    fn drop(&mut self) {
+        trace!("In FileLock Drop for {}", self.path.to_string_lossy());
+		let _ = fs::remove_file(&self.lock_path);
+    }
+}
+
+/*
+pub struct LockedReader {
+	lock_path: PathBuf,
+	reader: Box<dyn BufRead>,	
+}
+
+impl LockedReader {
+	pub fn new(path: &Path) -> Result<Self, String> {
+		let lock_path = get_lock(path)?;
+		let file = match fs::File::open(path) {
+			Err(e) => return Err(format!("Couldn't open {}: {}", path.to_string_lossy(), e)),
+			Ok(f) => f,
+		};
+		let reader = Box::new(BufReader::new(file));
+		Ok(LockedReader{lock_path, reader})
+	}
+	pub fn reader(&mut self) -> &mut dyn BufRead { &mut self.reader }
+}
+
+
+impl Drop for LockedReader {
+    fn drop(&mut self) {
+        trace!("In Drop for LockedReader");
+		let _ = fs::remove_file(&self.lock_path);
+    }
+}
+*/
 
