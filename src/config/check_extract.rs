@@ -56,18 +56,16 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 		if !mextr_suff.is_empty() {
 			let mut out_vec = Vec::new();
 			for suff in mextr_suff.iter() { out_vec.push(handle_file(gem_bs, format!("{}_{}", bc, suff), extract_path))}
-			let v = out_vec.clone();
 			let task = gem_bs.add_task(format!("mextr_{}", bc).as_str(), format!("Extract methylation values for barcode {}", bc).as_str(),
-					Command::Map, format!("{} --barcode {}", mextr_comm, bc).as_str(), vec!(bcf), out_vec);
-			v.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task));
+					Command::Extract, format!("{} --barcode {}", mextr_comm, bc).as_str(), &[bcf], &out_vec);
+			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
 		if !snpxtr_suff.is_empty() {
 			let mut out_vec = Vec::new();
 			for suff in snpxtr_suff.iter() { out_vec.push(handle_file(gem_bs, format!("{}_{}", bc, suff), extract_path))}
-			let v = out_vec.clone();
 			let task = gem_bs.add_task(format!("snpxtr_{}", bc).as_str(), format!("Extract SNPs for barcode {}", bc).as_str(),
-					Command::Map, format!("--snps --barcode {}", bc).as_str(), vec!(bcf), out_vec);
-			v.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task));
+					Command::Extract, format!("--snps --barcode {}", bc).as_str(), &[bcf], &out_vec);
+			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
 	}
 	Ok(())

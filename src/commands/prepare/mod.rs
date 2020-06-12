@@ -24,11 +24,7 @@ pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String>
 		metadata::process_json::process_json_metadata_file(f, gem_bs)?;
 	}
 	gem_bs.setup_assets_and_tasks()?;
-//	gem_bs.list_tasks();
-	// Dump JSON config file to disk
-	gem_bs.write_json_config()?;
 	
-	gem_bs.read_json_config()?;
-
-	Ok(())
+	// Dump JSON config file to disk
+	gem_bs.write_json_config()
 }

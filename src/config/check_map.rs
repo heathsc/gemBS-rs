@@ -111,22 +111,22 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 				let out1 = handle_file(gem_bs, dat, format!("{}.bam", dat).as_str(), ".bam", &bpath, AssetType::Temp); 
 				let out2 = handle_file(gem_bs, dat, format!("{}.json", dat).as_str(), ".json", &bpath, AssetType::Derived);
 				let task = gem_bs.add_task(format!("map_{}", dat).as_str(), format!("Map dataset {} for barcode {}", dat, sample.barcode).as_str(),
-					Command::Map, format!("--dataset {}", dat).as_str(), in_vec, vec!(out1, out2));
-				[out1, out2].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task));
+					Command::Map, format!("--dataset {}", dat).as_str(), &in_vec, &[out1, out2]);
+				[out1, out2].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &in_vec));
 				bams.push(out1);
 			} else {
 				let out1 = handle_file(gem_bs, &sample.barcode, format!("{}{}", sample.barcode, suffix).as_str(), suffix, &bpath, AssetType::Derived);
 				let out2 = handle_file(gem_bs, &sample.barcode, format!("{}.json", sample.barcode).as_str(), ".json", &bpath, AssetType::Derived);
 				let task = gem_bs.add_task(format!("map_{}", sample.barcode).as_str(), format!("Map dataset {} for barcode {}", dat, sample.barcode).as_str(),
-					Command::Map, format!("--barcode {}", sample.barcode).as_str(), in_vec, vec!(out1, out2));
-				[out1, out2].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task));
+					Command::Map, format!("--barcode {}", sample.barcode).as_str(), &in_vec, &[out1, out2]);
+				[out1, out2].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &in_vec));
 			};
 		}
 		if !bams.is_empty() {
 			let out = handle_file(gem_bs, &sample.barcode, format!("{}{}", sample.barcode, suffix).as_str(), suffix, &bpath, AssetType::Temp);
 				let task = gem_bs.add_task(format!("merge-bam_{}", sample.barcode).as_str(), format!("Merge datasets for barcode {}", sample.barcode).as_str(),
-					Command::MergeBams, format!("--barcode {}", sample.barcode).as_str(), bams, vec!(out));
-				gem_bs.get_asset_mut(out).unwrap().set_creator(task);
+					Command::MergeBams, format!("--barcode {}", sample.barcode).as_str(), &bams, &[out]);
+				gem_bs.get_asset_mut(out).unwrap().set_creator(task, &bams);
 		}
 	}
 	Ok(())

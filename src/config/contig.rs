@@ -117,7 +117,6 @@ pub fn setup_contigs(gem_bs: &mut GemBS) -> Result<String, String> {
 		itertools::sorted(p.contigs.iter().collect::<Vec<_>>()).for_each(|x| hasher.input(x.as_bytes()));
 	}
 	let digest = hasher.result().iter().fold(String::new(), |mut s, x| { s.push_str(format!("{:02x}", x).as_str()); s});
-	println!("contig pool digest = {}", digest);
 	debug!("Contig pool digest = {}", digest);
 	debug!("Storing contig and contig pools definitions");
 	for ctg in contigs.drain(..) { gem_bs.set_contig_def(ctg); }

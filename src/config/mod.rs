@@ -13,9 +13,10 @@ use std::path::Path;
 use std::rc::Rc;
 
 use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
-use crate::common::assets::{Asset, AssetList, AssetType, GetAsset};
-use crate::common::tasks::TaskList;
+use crate::common::assets::{Asset, AssetList, AssetType, AssetStatus, GetAsset};
+use crate::common::tasks::{Task, TaskList, TaskStatus};
 use crate::common::utils::FileLock;
+use std::slice;
 
 pub mod check_ref;
 pub mod contig;
@@ -124,21 +125,21 @@ impl GemBS {
 		debug!("Inserting Asset({}): {} {} {:?}", ix, id, path.to_string_lossy(), asset_type);
 		ix
 	}
-	pub fn add_task(&mut self, id: &str, desc: &str, command: Command, args: &str, inputs: Vec<usize>, outputs: Vec<usize>) -> usize {
+	pub fn add_task(&mut self, id: &str, desc: &str, command: Command, args: &str, inputs: &[usize], outputs: &[usize]) -> usize {
 		debug!("Adding task: {} {} {:?} {} in: {:?} out: {:?}", id, desc, command, args, inputs, outputs);
-		let v = inputs.clone();
 		let task = self.tasks.add_task(id, desc, command, args, inputs, outputs);
-		for inp in v.iter() {
+		for inp in inputs.iter() {
 			if let Some(x) = self.assets.get_asset(*inp).unwrap().creator() { self.add_parent_child(task, x); }
 		}
 		task
 	}
+	pub fn get_tasks_iter(&self) -> slice::Iter<'_, Task> { self.tasks.iter() }
+	pub fn get_tasks(&self) -> &TaskList { &self.tasks }
+	pub fn get_assets(&self) -> &AssetList { &self.assets }
 	pub fn add_parent_child(&mut self, child: usize, parent: usize) {
 		self.tasks.get_idx(child).add_parent(parent);
 		self.tasks.get_idx(parent).add_child(child);
-	}
-	pub fn list_tasks(&self) { self.tasks.list_tasks();	}
-	
+	}	
 	// This will panic if called before fs is set, which is fine
 	pub fn write_json_config(&self) -> Result<(), String> {
 		self.check_signal()?;
@@ -175,9 +176,7 @@ impl GemBS {
 		if !check_root(&gem_bs_root) {
 			return Err(format!("Could not find (installation) root directory for gemBS at {:?}.  Use root-dir option or set GEMBS_ROOT environment variable", gem_bs_root));
 		}
-		let db_path: PathBuf = [cdir, "gemBS.db"].iter().collect();	
 		let config_dir = Path::new(cdir);	
-		let no_db = if let Some(DataValue::Bool(x)) = self.get_config(Section::Default, "no_db") { *x } else { false }; 
 		if initial {
 			if config_dir.exists() {
 				if !config_dir.is_dir() {
@@ -187,7 +186,6 @@ impl GemBS {
 		} else {
 			if !config_dir.is_dir() { return Err(format!("Config directory {:?} does not exist (or is not accessible)", config_dir)); }
 			if !json_file.exists() { return Err(format!("Config JSON file {:?} does not exist (or is not accessible)", json_file)); }
-			if !no_db && !db_path.exists() { return Err(format!("Database file {:?} does not exist (or is not accessible)", db_path)); }
 		}
 		self.fs = Some(GemBSFiles{config_dir: config_dir.to_path_buf(), json_file, gem_bs_root});	
 		Ok(())
@@ -236,6 +234,7 @@ impl GemBS {
 		}
 		sample
 	}
+	
 	pub fn setup_assets_and_tasks(&mut self) -> Result<(), String> {
 		self.check_signal()?;
 		check_ref::check_ref_and_indices(self)?;
@@ -245,7 +244,52 @@ impl GemBS {
 		check_extract::check_extract(self)?;
 		self.asset_digest = Some(self.assets.get_digest());
 		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());
+		self.assets.calc_mod_time_ances();
 		Ok(())		
+	}
+	
+	pub fn task_status(&self, task: &Task) -> TaskStatus {
+		let mut inputs_ready = true;
+		let mut latest_input_mod = None;
+		for asset in task.inputs().map(|x| self.assets.get_asset(*x).unwrap()) {
+			if asset.status() != AssetStatus::Present { inputs_ready = false; }
+			latest_input_mod = match (latest_input_mod, asset.mod_time_ances()) {
+				(None, None) => None,
+				(Some(m), None) => Some(m),
+				(None, Some(m)) => Some(m),
+				(Some(m), Some(n)) => if n > m { Some(n) } else { Some(m) }
+			}
+		}
+		let mut outputs_ready = true;
+		let mut first_output_mod = None;
+		for asset in task.outputs().map(|x| self.assets.get_asset(*x).unwrap()) {
+			if asset.status() != AssetStatus::Present {
+				outputs_ready = false;
+				break;
+			}
+			first_output_mod = match (first_output_mod, asset.mod_time()) {
+				(None, None) => None,
+				(Some(m), None) => Some(m),
+				(None, Some(m)) => Some(m),
+				(Some(m), Some(n)) => if n < m { Some(n) } else { Some(m) }
+			}
+		}
+		match (inputs_ready, outputs_ready) {
+			(true, true) => {
+				match (latest_input_mod, first_output_mod) {
+					(Some(m), Some(n)) => if m > n { TaskStatus::Ready } else { TaskStatus::Complete },
+					(_, _) => TaskStatus::Complete,
+				}
+			},
+			(false, true) => {
+				match (latest_input_mod, first_output_mod) {
+					(Some(m), Some(n)) => if m > n { TaskStatus::Waiting } else { TaskStatus::Complete },
+					(_, _) => TaskStatus::Complete,
+				}				
+			},
+			(true, false) => TaskStatus::Ready,
+			(false, false) => TaskStatus::Waiting,
+		}
 	}
 }
 

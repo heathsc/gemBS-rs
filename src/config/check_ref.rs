@@ -153,8 +153,8 @@ fn make_dbsnp_tasks(gem_bs: &mut GemBS, dbsnp_files: Vec<PathBuf>) {
 	for (ix, f) in dbsnp_files.iter().enumerate() { in_vec.push(gem_bs.insert_asset(format!("dbsnp_file_{}", ix + 1).as_str(), &f, AssetType::Supplied)); }
 	let index = gem_bs.insert_asset("dbsnp_index", &dbsnp_index, AssetType::Derived);
 	let (id, desc, command, args) = ("dbsnp_index", "Generate dbSNP index", Command::Index, "--dbsnp-index");
-	let index_task = gem_bs.add_task(id, desc, command, args, in_vec, vec!(index));
-	gem_bs.get_asset_mut(index).unwrap().set_creator(index_task);	
+	let index_task = gem_bs.add_task(id, desc, command, args, &in_vec, &[index]);
+	gem_bs.get_asset_mut(index).unwrap().set_creator(index_task, &in_vec);	
 }
 
 fn check_dbsnp_ref(gem_bs: &mut GemBS) -> Result<(), String> {	
@@ -229,8 +229,8 @@ fn add_make_index_task(gem_bs: &mut GemBS, idx_name: &str, desc: &str, command: 
 	let gref = if let Some(x) = gem_bs.get_asset("gembs_reference") { x.idx() } else { panic!("gembs_reference not found")};
 	let index = if let Some(x) = gem_bs.get_asset(idx_name) { x.idx() } else { panic!("{} not found", idx_name)};
 	let (id, desc, command, args) = (idx_name.to_string(), desc.to_string(), Command::Index, command.to_string());
-	let index_task = gem_bs.add_task(&id, &desc, command, &args, vec!(gref), vec!(index));
-	gem_bs.get_asset_mut(index).unwrap().set_creator(index_task);
+	let index_task = gem_bs.add_task(&id, &desc, command, &args, &[gref], &[index]);
+	gem_bs.get_asset_mut(index).unwrap().set_creator(index_task, &[gref]);
 }
 
 fn make_index_tasks(gem_bs: &mut GemBS) -> Result<(), String> {

@@ -136,7 +136,7 @@ pub enum VarType {
 	String, StringVec, Bool, Int, Float, FloatVec, ReadEnd, FileType,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Command {
 	Index, Map, MergeBams, Call, MergeBcfs, Extract, MapReport, CallReport,	
 }

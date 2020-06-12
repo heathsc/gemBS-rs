@@ -1,7 +1,11 @@
 use std::path::{Path, PathBuf};
+use std::slice;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::time::SystemTime;
+
 use super::utils::calc_digest;
+use super::tasks::{Task, TaskList};
 
 #[derive(Debug, Clone, Copy)]
 pub enum AssetType { Supplied, Derived, Temp }
@@ -15,26 +19,37 @@ pub struct Asset {
 	path: PathBuf,
 	idx: usize,
 	creator: Option<usize>,
+	parents: Vec<usize>,
 	asset_type: AssetType,
 	status: AssetStatus,
+	mod_time: Option<SystemTime>,
+	mod_time_ances: Option<SystemTime>,
 }
 
 impl Asset {
 	fn new(id_str: &str, path: &Path, idx: usize, asset_type: AssetType) -> Self {
-		let status = if path.exists() { AssetStatus::Present } else { 
-			if let AssetType::Supplied = asset_type { 
-				warn!("Warning: datafile {} required for analysis is not present or not accessible", path.to_string_lossy());
-			}
-			AssetStatus::Absent 
+		let (status, mod_time) = match path.metadata() {
+			Ok(md) => {
+				(AssetStatus::Present, md.modified().ok())
+			},
+			Err(e) => {
+				if let AssetType::Supplied = asset_type {warn!("Warning: required datafile {} not accessible: {}", path.to_string_lossy(), e)}
+				(AssetStatus::Absent, None)
+			},
 		};
 		let id = Rc::new(id_str.to_owned());		
-		Asset{id, path: path.to_owned(), idx, creator: None, asset_type, status}
+		Asset{id, path: path.to_owned(), idx, creator: None, parents: Vec::new(), asset_type, status, mod_time, mod_time_ances: mod_time}
 	}	
 	pub fn path(&self) -> &Path { &self.path }
 	pub fn status(&self) -> AssetStatus { self.status }
 	pub fn idx(&self) -> usize { self.idx }
 	pub fn creator(&self) -> Option<usize> { self.creator }
-	pub fn set_creator(&mut self, idx: usize) { self.creator = Some(idx); }
+	pub fn set_creator(&mut self, idx: usize, pvec: &[usize]) { 
+		self.creator = Some(idx);
+		pvec.iter().for_each(|x| self.parents.push(*x)); 
+	}
+	pub fn mod_time(&self) -> Option<SystemTime> { self.mod_time }
+	pub fn mod_time_ances(&self) -> Option<SystemTime> { self.mod_time_ances }
 }
 
 pub struct AssetList {
@@ -87,11 +102,43 @@ impl AssetList {
 			idx
 		}
 	}
-	
+		
 	// Make a digest from all of the Asset names.  We sort them as the standard HashMap helpfully randomizes
 	// the order.
 	pub fn get_digest(&self) -> String {
 		calc_digest(itertools::sorted(self.assets.iter().map(|x| x.id.as_bytes()).collect::<Vec<_>>()))
+	}
+	
+	fn calc_mta(&self, idx: usize, visited: &mut Vec<bool>, mtime: &mut Vec<Option<SystemTime>>) {
+		if !visited[idx] {
+			let asset = &self.assets[idx];
+			trace!("Getting mod_time_ances of {:?}", asset);
+			if let AssetType::Supplied = asset.asset_type {	mtime[idx] = asset.mod_time; }
+			else {
+				let cmp_time = |x: Option<SystemTime>, y: Option<SystemTime>| match (x, y) {
+					(None, None) => None,
+					(Some(m), None) => Some(m),
+					(None, Some(m)) => Some(m),
+					(Some(m), Some(n)) => if n > m { Some(n) } else { Some(m) }									
+				};
+				let mut latest_time = None;
+				for j in &asset.parents {
+					self.calc_mta(*j, visited, mtime);
+					latest_time = cmp_time(latest_time, mtime[*j]);
+				}
+				mtime[idx] = cmp_time(latest_time, asset.mod_time);
+			}
+			visited[idx] = true;
+		} 
+	}
+	
+	pub fn calc_mod_time_ances(&mut self) {
+		let len = self.assets.len();
+		let mut visited = vec!(false; len);
+		let mut mtime: Vec<Option<SystemTime>> = vec!(None; len);
+		// recurse through tree, checking supplied assets before derived ones
+		for ix in 0..len { self.calc_mta(ix, &mut visited, &mut mtime); }
+		for (ix, asset) in self.assets.iter_mut().enumerate() { asset.mod_time_ances = mtime[ix]; }
 	}
 }
 

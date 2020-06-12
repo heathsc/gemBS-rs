@@ -273,31 +273,4 @@ impl<'a> Drop for FileLock<'a> {
     }
 }
 
-/*
-pub struct LockedReader {
-	lock_path: PathBuf,
-	reader: Box<dyn BufRead>,	
-}
-
-impl LockedReader {
-	pub fn new(path: &Path) -> Result<Self, String> {
-		let lock_path = get_lock(path)?;
-		let file = match fs::File::open(path) {
-			Err(e) => return Err(format!("Couldn't open {}: {}", path.to_string_lossy(), e)),
-			Ok(f) => f,
-		};
-		let reader = Box::new(BufReader::new(file));
-		Ok(LockedReader{lock_path, reader})
-	}
-	pub fn reader(&mut self) -> &mut dyn BufRead { &mut self.reader }
-}
-
-
-impl Drop for LockedReader {
-    fn drop(&mut self) {
-        trace!("In Drop for LockedReader");
-		let _ = fs::remove_file(&self.lock_path);
-    }
-}
-*/
 
