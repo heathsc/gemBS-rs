@@ -43,6 +43,7 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 
 	if let Some(s) = m.value_of("json") { gem_bs.set_config(Section::Default, "json_file", DataValue::String(s.to_string())); }
 	if let Some(s) = m.value_of("gembs_root") { gem_bs.set_config(Section::Default, "gembs_root", DataValue::String(s.to_string())); }
+	if m.is_present("ignore_times") { gem_bs.set_ignore_times(true); }
 	
 	// Now handle subcommands
 	
@@ -53,8 +54,15 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 		},
 		("index", Some(m_sum)) => {
 			debug!("User entered 'index' command");
-			// gem_bs.setup_fs(json_dir, root_dir, false)?;
 			commands::index::index_command(m_sum, gem_bs)
+		},
+		("map", Some(m_sum)) => {
+			debug!("User entered 'map' command");
+			commands::map::map_command(m_sum, gem_bs)
+		},
+		("merge-bams", Some(m_sum)) => {
+			debug!("User entered 'merge-bams' command");
+			commands::map::merge_bams_command(m_sum, gem_bs)
 		},
 		_ => {
 			Err("Unknown subcommand".to_string())

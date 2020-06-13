@@ -28,6 +28,7 @@ impl Task {
 	pub fn command(&self) -> Command { self.command }
 	pub fn add_parent(&mut self, ix: usize) { self.parents.push(ix) }
 	pub fn add_child(&mut self, ix: usize) { self.children.push(ix) }
+	pub fn parents(&self) -> &[usize] { &self.parents }
 	pub fn inputs(&self) -> std::slice::Iter<'_, usize> { self.inputs.iter() }
 	pub fn outputs(&self) -> std::slice::Iter<'_, usize> { self.outputs.iter() }
 }

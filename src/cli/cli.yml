@@ -12,6 +12,7 @@ args:
     - json: {short: j, long: json-file, takes_value: true, value_name: JSON, help: Location of gemBS JSON file}
     - dir: {short: d, long: dir, takes_value: true, value_name: DIR, help: set working directory}
     - gembs_root: {short :r, long: gembs-root, takes_value: true, value_name: DIR, help: set root of gemBS installation}
+    - ignore_times: {short: i, long: ignore-times, help: Ignore file modification times when evaluating the status of tasks}
 subcommands:
     - prepare:
         setting: DeriveDisplayOrder
@@ -55,11 +56,12 @@ subcommands:
           - underconv_seq: {short: u, long: underconversion-sequence, value_name: SEQUENCE_NAME, takes_value: true, help: Name of underconversion sequencing control}
           - overconv_seq: {short: v, long: overconversion-sequence, value_name: SEQUENCE_NAME, takes_value: true, help: Name of overconversion sequencing control}
           - non_bs: {long: non-bs, help: Map as regular (non-bisulfite) data}
+          - bs: {long: bs, help: Map as bisulfite data}
           - no_merge: {long: no-merge, help: Do not automatically merge BAMs}
           - dry_run: {long: dry-run, help: Output pending mapping commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
           - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
-          - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}
+          - benchmark_mode: {long: benchmark-mode, help: Omit dates etc. from output to make comparison simpler}
         groups:
            - sample_desc:
               args: [dataset, sample, barcode] 
@@ -67,7 +69,7 @@ subcommands:
         setting: DeriveDisplayOrder
         about: Merge BAM files for each sample (if required)
         args:
-          - contigs: {short: l, long:contig-list, value_name: CONTIG, takes_value: true, multiple: true, help: List of contigs for methylation calling}
+          - contigs: {short: l, long: contig-list, value_name: CONTIG, takes_value: true, multiple: true, help: List of contigs for methylation calling}
           - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
           - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}

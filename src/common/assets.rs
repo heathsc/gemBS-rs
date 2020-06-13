@@ -7,11 +7,11 @@ use std::time::SystemTime;
 use super::utils::calc_digest;
 use super::tasks::{Task, TaskList};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AssetType { Supplied, Derived, Temp }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AssetStatus { Present, Absent, Incomplete }
+pub enum AssetStatus { Present, Outdated, Absent, Incomplete }
 
 #[derive(Debug, Clone)]
 pub struct Asset {
@@ -50,6 +50,8 @@ impl Asset {
 	}
 	pub fn mod_time(&self) -> Option<SystemTime> { self.mod_time }
 	pub fn mod_time_ances(&self) -> Option<SystemTime> { self.mod_time_ances }
+	pub fn parents(&self) -> &[usize] { &self.parents }
+	pub fn asset_type(&self) -> AssetType { self.asset_type }
 }
 
 pub struct AssetList {
@@ -138,7 +140,14 @@ impl AssetList {
 		let mut mtime: Vec<Option<SystemTime>> = vec!(None; len);
 		// recurse through tree, checking supplied assets before derived ones
 		for ix in 0..len { self.calc_mta(ix, &mut visited, &mut mtime); }
-		for (ix, asset) in self.assets.iter_mut().enumerate() { asset.mod_time_ances = mtime[ix]; }
+		for (ix, asset) in self.assets.iter_mut().enumerate() { 
+			asset.mod_time_ances = mtime[ix];
+			if let AssetStatus::Present = asset.status {
+				if let (Some(m), Some(n)) = (asset.mod_time, asset.mod_time_ances) {
+					if n > m { asset.status = AssetStatus::Outdated; }
+				}
+			} 
+		}
 	}
 }
 

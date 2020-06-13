@@ -3,7 +3,7 @@
 // Holds all of the information from the config files, JSON files, sqlite db etc.
 //
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::env;
 use std::sync::Arc;
@@ -45,11 +45,12 @@ pub struct GemBS {
 	contig_pool_digest: Option<String>,
 	asset_digest: Option<String>,
 	signal: Arc<AtomicUsize>,
+	ignore_times: bool,
 }
 
 impl GemBS {
 	pub fn new() -> Self {
-		let mut gem_bs = GemBS{var: Vec::new(), fs: None, contig_pool_digest: None, asset_digest: None,
+		let mut gem_bs = GemBS{var: Vec::new(), fs: None, contig_pool_digest: None, asset_digest: None, ignore_times: false,
 		assets: AssetList::new(), tasks: TaskList::new(), signal: Arc::new(AtomicUsize::new(0))};
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGTERM, Arc::clone(&gem_bs.signal), SIGTERM);		
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGINT, Arc::clone(&gem_bs.signal), SIGINT);		
@@ -249,47 +250,76 @@ impl GemBS {
 	}
 	
 	pub fn task_status(&self, task: &Task) -> TaskStatus {
+		let ignore_times = self.ignore_times();
 		let mut inputs_ready = true;
 		let mut latest_input_mod = None;
-		for asset in task.inputs().map(|x| self.assets.get_asset(*x).unwrap()) {
-			if asset.status() != AssetStatus::Present { inputs_ready = false; }
-			latest_input_mod = match (latest_input_mod, asset.mod_time_ances()) {
-				(None, None) => None,
-				(Some(m), None) => Some(m),
-				(None, Some(m)) => Some(m),
-				(Some(m), Some(n)) => if n > m { Some(n) } else { Some(m) }
-			}
-		}
 		let mut outputs_ready = true;
 		let mut first_output_mod = None;
-		for asset in task.outputs().map(|x| self.assets.get_asset(*x).unwrap()) {
-			if asset.status() != AssetStatus::Present {
-				outputs_ready = false;
-				break;
+		if ignore_times {
+			let check = |x| match x {
+				AssetStatus::Present | AssetStatus::Outdated => false,
+				_ => true,
+			};
+			for asset in task.inputs().map(|x| self.assets.get_asset(*x).unwrap()) {
+				if check(asset.status()) { inputs_ready = false; break; }
 			}
-			first_output_mod = match (first_output_mod, asset.mod_time()) {
-				(None, None) => None,
-				(Some(m), None) => Some(m),
-				(None, Some(m)) => Some(m),
-				(Some(m), Some(n)) => if n < m { Some(n) } else { Some(m) }
+			for asset in task.outputs().map(|x| self.assets.get_asset(*x).unwrap()) {
+				if check(asset.status()) { outputs_ready = false; break; }
+			}
+		} else {
+			for asset in task.inputs().map(|x| self.assets.get_asset(*x).unwrap()) {
+				if asset.status() != AssetStatus::Present { inputs_ready = false; }
+				latest_input_mod = match (latest_input_mod, asset.mod_time_ances()) {
+					(None, None) => None,
+					(Some(m), None) => Some(m),
+					(None, Some(m)) => Some(m),
+					(Some(m), Some(n)) => if n > m { Some(n) } else { Some(m) }
+				}
+			}
+			for asset in task.outputs().map(|x| self.assets.get_asset(*x).unwrap()) {
+				if asset.status() != AssetStatus::Present {
+					outputs_ready = false;
+					break;
+				}
+				first_output_mod = match (first_output_mod, asset.mod_time()) {
+					(None, None) => None,
+					(Some(m), None) => Some(m),
+					(None, Some(m)) => Some(m),
+					(Some(m), Some(n)) => if n < m { Some(n) } else { Some(m) }
+				}
 			}
 		}
+		let tst = |a,b,x| { match (a,b) {
+			(Some(m), Some(n)) => if m > n { x } else { TaskStatus::Complete },
+			(_, _) => TaskStatus::Complete,			
+		}};
 		match (inputs_ready, outputs_ready) {
-			(true, true) => {
-				match (latest_input_mod, first_output_mod) {
-					(Some(m), Some(n)) => if m > n { TaskStatus::Ready } else { TaskStatus::Complete },
-					(_, _) => TaskStatus::Complete,
-				}
-			},
-			(false, true) => {
-				match (latest_input_mod, first_output_mod) {
-					(Some(m), Some(n)) => if m > n { TaskStatus::Waiting } else { TaskStatus::Complete },
-					(_, _) => TaskStatus::Complete,
-				}				
-			},
+			(true, true) => tst(latest_input_mod, first_output_mod, TaskStatus::Ready),
+			(false, true) => tst(latest_input_mod, first_output_mod, TaskStatus::Waiting),
 			(true, false) => TaskStatus::Ready,
 			(false, false) => TaskStatus::Waiting,
 		}
+	}
+	pub fn set_ignore_times(&mut self, x: bool) { self.ignore_times = x; }
+	pub fn ignore_times(&self) -> bool { self.ignore_times }
+	pub fn get_required_tasks_from_asset_list(&self, assets: &[usize]) -> Vec<usize> {
+		fn check_reqd(i: usize, reqd: &mut HashSet<usize>, tlist: &mut Vec<usize>, rf: &TaskList) {
+			if ! reqd.contains(&i) {
+				for j in rf[i].parents() { check_reqd(*j, reqd, tlist, rf) }
+				reqd.insert(i);
+				tlist.push(i);
+			}
+		}
+		let mut reqd = HashSet::new();
+		let mut tlist = Vec::new();
+		let asset_ref = &self.assets;
+		let tasks = self.get_tasks();
+		for i in assets { 
+			if let Some(j) = asset_ref.get_asset(*i).unwrap().creator() {
+				check_reqd(j, &mut reqd, &mut tlist, tasks); 
+			}
+		}
+		tlist
 	}
 }
 

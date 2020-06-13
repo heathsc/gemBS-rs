@@ -12,7 +12,7 @@ pub fn index_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	if let Some(x) = utils::from_arg_matches(m, "sampling") { gem_bs.set_config(Section::Index, "sampling_rate", DataValue::Int(x)); }
 
 	gem_bs.setup_assets_and_tasks()?;
-	for task in gem_bs.get_tasks_iter().filter(|t| t.command() == Command::Extract) {
+	for task in gem_bs.get_tasks_iter().filter(|t| t.command() == Command::Index) {
 		println!("{:?} {:?}", task, gem_bs.task_status(task));
 	}
 	Ok(())
