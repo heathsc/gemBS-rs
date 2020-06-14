@@ -341,8 +341,6 @@ impl GetAsset<&str> for GemBS {
 	}
 }
 
-
-
 fn check_root(path: &PathBuf) -> bool {
 	let apps = ["md5_fasta", "mextr", "readNameClean", "snpxtr", "bs_call", "dbSNP_idx",
 		"gem-indexer", "gem-mapper", "samtools", "bcftools", "bgzip"];

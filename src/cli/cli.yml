@@ -102,10 +102,10 @@ subcommands:
           - species: {short: e, long: species, value_name: SPECIES, takes_value: true, help: Species name}
           - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
           - haploid: {short: '1', long: haploid, help: Force genotype calls to be haploid}
-          - conversion: {short: C, long: conversion, value_name: "UNDER,OVER", takes_value: true, help: "set conversion rates (under,over)"}          
+          - conversion: {short: C, long: conversion, value_name: "UNDER OVER", takes_value: true, multiple: true, number_of_values: 2, help: "set conversion rates (under over)"}          
           - ref_bias: {short: R, long: reference_bias, value_name: BIAS, takes_value: true, help: set bias to reference homozygote}          
-          - concat_only: {short: x, long: concat-only, help: Only perform BCF file merging}
-          - pool: {long: pool, value_name: POOL, takes_value: true, help: Contig pool for methylation calling}          
+          - merge: {short: x, long: merge, help: Only perform BCF file merging}
+          - pool: {long: pool, value_name: POOL, takes_value: true, multiple: true, help: Contig pool for methylation calling}          
           - list_pools: {long: list-pools, value_name: LEVEL, takes_value: true, help: List contig pool - level 1 print names; level >1 list pool composition}          
           - no_merge: {long: no-merge, help: Do not automatically merge BAMs}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
@@ -115,7 +115,9 @@ subcommands:
           - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}        
         groups:
            - sample_desc:
-              args: [sample, barcode] 
+              args: [sample, barcode]
+           - call_spec:
+              args: [pool, merge]
     - merge-bcfs:
         setting: DeriveDisplayOrder
         about: Merge BCF files for each sample (if required)

@@ -64,6 +64,10 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 			debug!("User entered 'merge-bams' command");
 			commands::map::merge_bams_command(m_sum, gem_bs)
 		},
+		("call", Some(m_sum)) => {
+			debug!("User entered 'call' command");
+			commands::call::call_command(m_sum, gem_bs)
+		},
 		_ => {
 			Err("Unknown subcommand".to_string())
 		},

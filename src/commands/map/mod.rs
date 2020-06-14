@@ -6,18 +6,17 @@ use crate::common::defs::{Section, Command, DataValue, Metadata};
 use crate::common::assets::GetAsset;
 
 fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>) -> Result<Vec<usize>, String> {
-
-	let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");
+	let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");		
 	let suffix = if make_cram { "cram" } else { "bam" };
 	let mut asset_ids = Vec::new();
 	if let Some(DataValue::String(dataset)) = options.get("dataset") {
-		if let Some(asset) = gem_bs.get_asset(format!("{}.bam", dataset).as_str()).or_else(|| {
-			if let Some(DataValue::String(bc)) = gem_bs.get_sample_data_ref().get(dataset).and_then(|rf| rf.get(&Metadata::SampleBarcode)) {
-				gem_bs.get_asset(format!("{}.{}", bc, suffix).as_str())
-			} else { None }
-		}) { asset_ids.push(asset.idx()) } else { return Err(format!("Unknown dataset {}", dataset)) }	
+	if let Some(asset) = gem_bs.get_asset(format!("{}.bam", dataset).as_str()).or_else(|| {
+		if let Some(DataValue::String(bc)) = gem_bs.get_sample_data_ref().get(dataset).and_then(|rf| rf.get(&Metadata::SampleBarcode)) {
+			gem_bs.get_asset(format!("{}.{}", bc, suffix).as_str())
+		} else { None }
+	}) { asset_ids.push(asset.idx()) } else { return Err(format!("Unknown dataset {}", dataset)) }	
 	} else if let Some(DataValue::String(barcode)) = options.get("barcode") {
-		if let Some(asset) = gem_bs.get_asset(format!("{}.{}", barcode, suffix).as_str()) { asset_ids.push(asset.idx()) }
+		if let Some(asset) = gem_bs.get_asset(format!("{}.{}", barcode, suffix).as_str()) { asset_ids.push(asset.idx()) }	
 		else { return Err(format!("Unknown barcode {}", barcode)) }	
 	} else if let Some(DataValue::String(sample)) = options.get("sample") {
 		let mut asset = None;

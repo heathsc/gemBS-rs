@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::common::defs::{Section, DataValue, CONTIG_POOL_SIZE};
+use crate::common::defs::{Section, DataValue, CONTIG_POOL_SIZE, ContigInfo};
 use crate::common::assets::{AssetStatus, GetAsset};
 use crate::config::GemBS;
 use std::collections::HashSet;
@@ -123,3 +123,13 @@ pub fn setup_contigs(gem_bs: &mut GemBS) -> Result<String, String> {
 	for pool in contig_pools.drain(..) { gem_bs.set_contig_pool_def(pool); }
 	Ok(digest)
 }
+
+pub fn get_contig_pools(gem_bs: &GemBS) -> Vec<Rc<String>> {
+	let mut pools = Vec::new();
+	if let Some(hr) = gem_bs.get_contig_hash().get(&ContigInfo::ContigPools) {
+		hr.iter().for_each(|(key, _)| pools.push(key.clone()));
+	}
+	pools
+}
+
+

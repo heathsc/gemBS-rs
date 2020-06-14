@@ -27,6 +27,15 @@ pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
 		VarType::Float => m.value_of(opt).and_then(|x| <f64>::from_str(x).ok().map(DataValue::Float)),
 		VarType::String => m.value_of(opt).map(|x| DataValue::String(x.to_owned())),
 		VarType::FileType => m.value_of(opt).and_then(|x| <FileType>::from_str(x).ok().map(DataValue::FileType)),
+		VarType::FloatVec => m.values_of(opt).and_then(|v| {
+			let vec:Vec<_> = v.map(|x| <f64>::from_str(x).ok().unwrap()).collect();
+			Some(DataValue::FloatVec(vec))
+		}),
+		VarType::StringVec => m.values_of(opt).and_then(|v| {
+			let args: Vec<String> = v.map(|x| x.to_owned()).collect();
+			Some(DataValue::StringVec(args))
+		}),
+
 		_ => None,
 	}
 }
@@ -70,6 +79,7 @@ lazy_static! {
         m.push(("non_bs", OptionType::Local(VarType::Bool)));
         m.push(("bs", OptionType::Local(VarType::Bool)));
       	m.push(("no_merge", OptionType::Local(VarType::Bool)));
+      	m.push(("merge", OptionType::Local(VarType::Bool)));
       	m.push(("dry_run", OptionType::Local(VarType::Bool)));
       	m.push(("json", OptionType::Local(VarType::Bool)));
       	m.push(("remove", OptionType::Local(VarType::Bool)));
@@ -78,6 +88,18 @@ lazy_static! {
 		m.push(("sample", OptionType::Local(VarType::String)));
 		m.push(("barcode", OptionType::Local(VarType::String)));
 		m.push(("dataset", OptionType::Local(VarType::String)));
+      	m.push(("list_pools", OptionType::Local(VarType::Int)));
+      	m.push(("pool", OptionType::Local(VarType::StringVec)));
+      	m.push(("haploid", OptionType::Global("haploid", VarType::Bool)));
+      	m.push(("keep_duplicates", OptionType::Global("keep_duplicates", VarType::Bool)));
+      	m.push(("ignore_duplicate_flag", OptionType::Global("ignore_duplicate_flag", VarType::Bool)));
+     	m.push(("keep_unmatched", OptionType::Global("keep_improper_pairs", VarType::Bool)));
+      	m.push(("mapq_threshold", OptionType::Global("mapq_threshold", VarType::Int)));
+      	m.push(("qual_threshold", OptionType::Global("qual_threshold", VarType::Int)));
+      	m.push(("left_trim", OptionType::Global("left_trim", VarType::Int)));
+      	m.push(("right_trim", OptionType::Global("right_trim", VarType::Int)));
+      	m.push(("conversion", OptionType::Global("conversion", VarType::FloatVec)));
+    	m.push(("ref_bias", OptionType::Global("reference_bias", VarType::Float)));
         m
     };
 }

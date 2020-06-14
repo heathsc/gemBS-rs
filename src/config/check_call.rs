@@ -1,18 +1,10 @@
 // Check requirements and presence of source and derived files for calling
 // Make asset list for BAMs, BCFs etc. associated with calling
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
-use crate::common::defs::{Section, DataValue, Command, ContigInfo};
+use crate::common::defs::{Section, DataValue, Command};
 use crate::common::assets::{AssetType, GetAsset};
 use super::GemBS;
-
-fn get_contig_pools(gem_bs: &GemBS) -> Vec<Rc<String>> {
-	let mut pools = Vec::new();
-	if let Some(hr) = gem_bs.get_contig_hash().get(&ContigInfo::ContigPools) {
-		hr.iter().for_each(|(key, _)| pools.push(key.clone()));
-	}
-	pools
-}
+use super::contig;
 
 pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Mapping, name ) { x } else { "." } };
@@ -20,7 +12,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 	let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");
 	let ext = if make_cram { "cram" } else {"bam" };
 	let samples = gem_bs.get_samples();
-	let pools = get_contig_pools(gem_bs);
+	let pools = contig::get_contig_pools(gem_bs);
 	let mut common_inputs = Vec::new();
 	for f in &["gembs_reference", "gembs_reference_fai", "gembs_reference_gzi"] {
 		if let Some(x) = gem_bs.get_asset(*f) { common_inputs.push(x.idx()) } else { panic!("{} not found", f) };

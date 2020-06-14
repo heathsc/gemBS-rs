@@ -91,6 +91,7 @@ fn make_known_var_list() -> KnownVarList {
 	kv_list.add_known_var("right_trim", VarType::Int, vec!(Section::Calling));
 	kv_list.add_known_var("species", VarType::String, vec!(Section::Calling));
 	kv_list.add_known_var("keep_duplicates", VarType::Bool, vec!(Section::Calling));
+	kv_list.add_known_var("ignore_duplicate_flag", VarType::Bool, vec!(Section::Calling));
 	kv_list.add_known_var("keep_improper_pairs", VarType::Bool, vec!(Section::Calling));
 	kv_list.add_known_var("call_threads", VarType::Int, vec!(Section::Calling));
 	kv_list.add_known_var("remove_individual_bcfs", VarType::Bool, vec!(Section::Calling));
