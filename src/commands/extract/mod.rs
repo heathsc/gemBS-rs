@@ -29,6 +29,7 @@ pub fn extract_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String>
 	let task_list = if gem_bs.all() { gem_bs.get_required_tasks_from_asset_list(&asset_ids, &[Command::Index, Command::Map, Command::MergeBams, Command::Call, Command::MergeBcfs, Command::Extract]) }
 		else { gem_bs.get_required_tasks_from_asset_list(&asset_ids, &[Command::Extract]) };
 	if options.contains_key("_dry_run") { dry_run::handle_dry_run(gem_bs, &options, &task_list) }
+	if let Some(DataValue::String(json_file)) = options.get("_json") { dry_run::handle_json_tasks(gem_bs, &options, &task_list, json_file)?; }
 //	for ix in task_list.iter() {
 //		let t = &gem_bs.get_tasks()[*ix];
 //		println!("{:?}", t);
