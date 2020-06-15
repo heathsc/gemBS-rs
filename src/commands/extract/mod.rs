@@ -4,6 +4,7 @@ use crate::cli::utils::handle_options;
 use crate::config::GemBS;
 use crate::common::defs::{Section, Command, DataValue};
 use crate::common::assets::GetAsset;
+use crate::common::dry_run;
 use super::call;
 
 fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>) -> Result<Vec<usize>, String> {	
@@ -27,9 +28,10 @@ pub fn extract_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String>
 	let asset_ids = get_required_asset_list(gem_bs, &options)?;
 	let task_list = if gem_bs.all() { gem_bs.get_required_tasks_from_asset_list(&asset_ids, &[Command::Index, Command::Map, Command::MergeBams, Command::Call, Command::MergeBcfs, Command::Extract]) }
 		else { gem_bs.get_required_tasks_from_asset_list(&asset_ids, &[Command::Extract]) };
-	for ix in task_list.iter() {
-		let t = &gem_bs.get_tasks()[*ix];
-		println!("{:?}", t);
-	}
+	if options.contains_key("_dry_run") { dry_run::handle_dry_run(gem_bs, &options, &task_list) }
+//	for ix in task_list.iter() {
+//		let t = &gem_bs.get_tasks()[*ix];
+//		println!("{:?}", t);
+//	}
 	Ok(())
 }

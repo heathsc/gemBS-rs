@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::fmt;
 use serde::{Deserialize, Serialize};
 use crate::config::contig;
 
@@ -81,6 +82,18 @@ impl FromStr for FileType {
     }
 }
 
+impl fmt::Display for FileType {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			FileType::Paired => write!(f, "paired"),
+			FileType::Interleaved => write!(f, "paired"),
+			FileType::Single => write!(f, "single"),
+			FileType::BAM => write!(f, "bam"),
+			FileType::Stream => write!(f, "stream"),
+		}
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ReadEnd { End1, End2 }
 
@@ -139,6 +152,21 @@ pub enum VarType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Command {
 	Index, Map, MergeBams, Call, MergeBcfs, Extract, MapReport, CallReport,	
+}
+
+impl fmt::Display for Command {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			Command::Index => write!(f, "index"),
+			Command::Map => write!(f, "map"),
+			Command::MergeBams => write!(f, "merge-bams"),
+			Command::Call => write!(f, "call"),
+			Command::MergeBcfs => write!(f, "merge-bcfs"),
+			Command::Extract => write!(f, "extract"),
+			Command::MapReport => write!(f, "map-report"),
+			Command::CallReport => write!(f, "call-report"),
+		}
+	}
 }
 
 pub const SIGTERM: usize = signal_hook::SIGTERM as usize;

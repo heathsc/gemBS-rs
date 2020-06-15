@@ -2,7 +2,8 @@ use clap::ArgMatches;
 use std::collections::HashSet;
 use crate::cli::utils::handle_options;
 use crate::config::GemBS;
-use crate::common::defs::{Section, Command};
+use crate::common::defs::{Section, Command, DataValue};
+use crate::common::dry_run;
 
 pub fn index_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.setup_fs(false)?;
@@ -19,10 +20,8 @@ pub fn index_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	for task in gem_bs.get_tasks_iter().filter(|t| t.command() == Command::Index) {
 		if task_set.is_empty() || task_set.contains(task.id()) { task_list.push(task.idx()); }
 	}
-	for ix in task_list.iter() {
-		let t = &gem_bs.get_tasks()[*ix];
-		println!("{:?}", t);
-	}
+	if options.contains_key("_dry_run") { dry_run::handle_dry_run(gem_bs, &options, &task_list) }
+	if let Some(DataValue::String(json_file)) = options.get("_json") { dry_run::handle_json_tasks(gem_bs, &options, &task_list, json_file)?; }
 	
 	Ok(())
 }

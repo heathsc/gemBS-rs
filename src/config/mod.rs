@@ -142,7 +142,6 @@ impl GemBS {
 	pub fn get_assets(&self) -> &AssetList { &self.assets }
 	pub fn add_parent_child(&mut self, child: usize, parent: usize) {
 		self.tasks.get_idx(child).add_parent(parent);
-		self.tasks.get_idx(parent).add_child(child);
 	}	
 	// This will panic if called before fs is set, which is fine
 	pub fn write_json_config(&self) -> Result<(), String> {

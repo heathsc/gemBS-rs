@@ -12,7 +12,6 @@ pub struct Task {
 	inputs: Vec<usize>,
 	outputs: Vec<usize>,
 	parents: Vec<usize>,
-	children: Vec<usize>,
 	idx: usize,
 	status: Option<TaskStatus>,
 	command: Command,
@@ -22,7 +21,7 @@ pub struct Task {
 impl Task {
 	fn new(id: &str, desc: &str, idx: usize, command: Command, args: &str, inputs: Vec<usize>, outputs: Vec<usize>) -> Self {
 		Task{id: id.to_owned(), desc: desc.to_owned(), idx,
-		inputs, outputs, parents: Vec::new(), children: Vec::new(),
+		inputs, outputs, parents: Vec::new(),
 		status: None, command, args: args.to_owned()}
 	}
 	pub fn idx(&self) -> usize { self.idx }
@@ -31,10 +30,10 @@ impl Task {
 	pub fn status(&self) -> Option<TaskStatus> { self.status }
 	pub fn set_status(&mut self, status: TaskStatus) { self.status = Some(status); }
 	pub fn add_parent(&mut self, ix: usize) { self.parents.push(ix) }
-	pub fn add_child(&mut self, ix: usize) { self.children.push(ix) }
 	pub fn parents(&self) -> &[usize] { &self.parents }
 	pub fn inputs(&self) -> std::slice::Iter<'_, usize> { self.inputs.iter() }
 	pub fn outputs(&self) -> std::slice::Iter<'_, usize> { self.outputs.iter() }
+	pub fn args(&self) -> &str { &self.args }
 }
 
 #[derive(Debug)]

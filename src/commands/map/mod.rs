@@ -4,21 +4,22 @@ use crate::cli::utils::handle_options;
 use crate::config::GemBS;
 use crate::common::defs::{Section, Command, DataValue, Metadata};
 use crate::common::assets::GetAsset;
+use crate::common::dry_run;
 
 fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>) -> Result<Vec<usize>, String> {
 	let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");		
 	let suffix = if make_cram { "cram" } else { "bam" };
 	let mut asset_ids = Vec::new();
-	if let Some(DataValue::String(dataset)) = options.get("dataset") {
+	if let Some(DataValue::String(dataset)) = options.get("_dataset") {
 	if let Some(asset) = gem_bs.get_asset(format!("{}.bam", dataset).as_str()).or_else(|| {
 		if let Some(DataValue::String(bc)) = gem_bs.get_sample_data_ref().get(dataset).and_then(|rf| rf.get(&Metadata::SampleBarcode)) {
 			gem_bs.get_asset(format!("{}.{}", bc, suffix).as_str())
 		} else { None }
 	}) { asset_ids.push(asset.idx()) } else { return Err(format!("Unknown dataset {}", dataset)) }	
-	} else if let Some(DataValue::String(barcode)) = options.get("barcode") {
+	} else if let Some(DataValue::String(barcode)) = options.get("_barcode") {
 		if let Some(asset) = gem_bs.get_asset(format!("{}.{}", barcode, suffix).as_str()) { asset_ids.push(asset.idx()) }	
 		else { return Err(format!("Unknown barcode {}", barcode)) }	
-	} else if let Some(DataValue::String(sample)) = options.get("sample") {
+	} else if let Some(DataValue::String(sample)) = options.get("_sample") {
 		let mut asset = None;
 		for hr in gem_bs.get_sample_data_ref().values() {
 			if let Some(DataValue::String(x)) = hr.get(&Metadata::SampleName) {
@@ -49,14 +50,11 @@ fn gen_map_command(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue
 	let asset_ids = get_required_asset_list(gem_bs, &options)?;
 	let mut com_set = Vec::new();
 	if gem_bs.all() { [Command::Index, Command::Map].iter().for_each(|x| com_set.push(*x)) }
-	else if !options.contains_key("merge") { com_set.push(Command::Map); }
+	else if !options.contains_key("_merge") { com_set.push(Command::Map); }
 	if !options.contains_key("no_merge") { com_set.push(Command::MergeBams); }
-
 	let task_list = gem_bs.get_required_tasks_from_asset_list(&asset_ids, &com_set);
-	for ix in task_list.iter() {
-		let t = &gem_bs.get_tasks()[*ix];
-		println!("{:?}", t);
-	}
+	if options.contains_key("_dry_run") { dry_run::handle_dry_run(gem_bs, &options, &task_list) }
+	if let Some(DataValue::String(json_file)) = options.get("_json") { dry_run::handle_json_tasks(gem_bs, &options, &task_list, json_file)?; }
 	Ok(())
 }
 
@@ -73,6 +71,6 @@ pub fn merge_bams_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), Stri
 	gem_bs.read_json_config()?;
 	
 	let mut options = handle_options(m, gem_bs, Section::Mapping);
-	options.insert("merge", DataValue::Bool(true));
+	options.insert("_merge", DataValue::Bool(true));
 	gen_map_command(gem_bs, &options)
 }

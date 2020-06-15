@@ -45,12 +45,21 @@ pub	fn handle_options(m: &ArgMatches, gem_bs: &mut GemBS, section: Section) -> H
 	for (opt, val) in OPT_ASSOC.iter() {
 		match val {
 			OptionType::Global(s, vt) => {
-				if let Some(x) = get_option(m, opt, *vt) { gem_bs.set_config(section, s, x); }
+				if let Some(x) = get_option(m, opt, *vt) { 
+					options.insert(*opt, x.clone()); 
+					gem_bs.set_config(section, s, x); 
+				}
 			},
 			OptionType::Local(vt) => {
 				if let Some(x) = get_option(m, opt, *vt) { 
 					debug!("Setting local option {} to {:?}", opt, x);
 					options.insert(*opt, x); 
+				}
+			},
+			OptionType::Special(s, vt) => {
+				if let Some(x) = get_option(m, opt, *vt) { 
+					debug!("Setting special option {} to {:?}", opt, x);
+					options.insert(s, x); 
 				}
 			},
 		}		
@@ -62,6 +71,7 @@ pub	fn handle_options(m: &ArgMatches, gem_bs: &mut GemBS, section: Section) -> H
 pub enum OptionType {
 	Global(&'static str, VarType),
 	Local(VarType),
+	Special(&'static str, VarType),
 }
 
 lazy_static! {
@@ -82,16 +92,14 @@ lazy_static! {
         m.push(("bs", OptionType::Local(VarType::Bool)));
       	m.push(("no_merge", OptionType::Local(VarType::Bool)));
       	m.push(("merge", OptionType::Local(VarType::Bool)));
-      	m.push(("dry_run", OptionType::Local(VarType::Bool)));
-      	m.push(("json", OptionType::Local(VarType::Bool)));
       	m.push(("remove", OptionType::Local(VarType::Bool)));
       	m.push(("paired", OptionType::Local(VarType::Bool)));
      	m.push(("file_type", OptionType::Local(VarType::FileType)));
-		m.push(("sample", OptionType::Local(VarType::String)));
-		m.push(("barcode", OptionType::Local(VarType::String)));
-		m.push(("dataset", OptionType::Local(VarType::String)));
-      	m.push(("list_pools", OptionType::Local(VarType::Int)));
-      	m.push(("pool", OptionType::Local(VarType::StringVec)));
+		m.push(("sample", OptionType::Special("_sample", VarType::String)));
+		m.push(("barcode", OptionType::Special("_barcode", VarType::String)));
+		m.push(("dataset", OptionType::Special("_dataset", VarType::String)));
+      	m.push(("list_pools", OptionType::Special("_list_pools", VarType::Int)));
+      	m.push(("pool", OptionType::Special("_pool", VarType::StringVec)));
       	m.push(("haploid", OptionType::Global("haploid", VarType::Bool)));
       	m.push(("keep_duplicates", OptionType::Global("keep_duplicates", VarType::Bool)));
       	m.push(("ignore_duplicate_flag", OptionType::Global("ignore_duplicate_flag", VarType::Bool)));
@@ -118,6 +126,8 @@ lazy_static! {
 	  	m.push(("make_bs_index", OptionType::Local(VarType::Bool)));
 	  	m.push(("make_dbsnp_index", OptionType::Local(VarType::Bool)));
 	  	m.push(("make_nonbs_index", OptionType::Local(VarType::Bool)));
+      	m.push(("dry_run", OptionType::Special("_dry_run", VarType::Bool)));
+      	m.push(("json", OptionType::Special("_json", VarType::String)));
         m
     };
 }

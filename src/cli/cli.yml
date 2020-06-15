@@ -62,7 +62,6 @@ subcommands:
           - no_merge: {long: no-merge, help: Do not automatically merge BAMs}
           - dry_run: {long: dry-run, help: Output pending mapping commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
-          - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
           - benchmark_mode: {long: benchmark-mode, help: Omit dates etc. from output to make comparison simpler}
         groups:
            - sample_desc:
@@ -78,7 +77,6 @@ subcommands:
           - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
           - dry_run: {long: dry-run, help: Output pending mapping commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
-          - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
           - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}
         groups:
            - sample_desc:
@@ -106,20 +104,15 @@ subcommands:
           - haploid: {short: '1', long: haploid, help: Force genotype calls to be haploid}
           - conversion: {short: C, long: conversion, value_name: "UNDER OVER", takes_value: true, multiple: true, number_of_values: 2, help: "set conversion rates (under over)"}          
           - ref_bias: {short: R, long: reference_bias, value_name: BIAS, takes_value: true, help: set bias to reference homozygote}          
-          - merge: {short: x, long: merge, help: Only perform BCF file merging}
           - pool: {long: pool, value_name: POOL, takes_value: true, multiple: true, help: Contig pool for methylation calling}          
           - list_pools: {long: list-pools, value_name: LEVEL, takes_value: true, help: List contig pool - level 1 print names; level >1 list pool composition}          
           - no_merge: {long: no-merge, help: Do not automatically merge BAMs}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
-          - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
-          - ignore_dep: {long: ignore-dep, help: Ignore dependencies for dry-run and json options}
           - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}        
         groups:
            - sample_desc:
               args: [sample, barcode]
-           - call_spec:
-              args: [pool, merge]
     - merge-bcfs:
         setting: DeriveDisplayOrder
         about: Merge BCF files for each sample (if required)
@@ -132,8 +125,6 @@ subcommands:
           - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
-          - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
-          - ignore_dep: {long: ignore-dep, help: Ignore dependencies for dry-run and json options}
           - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}        
         groups:
            - sample_desc:
@@ -161,8 +152,6 @@ subcommands:
           - snp_db: {long: snp-db, value_name: SNP_DB, takes_value: true, help: Path to dbSNP_idx processed SNP database file}          
           - dry_run: {long: dry-run, help: Output pending commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
-          - ignore_db: {long: ignore-db, help: Ignore database for dry-run and json options}
-          - ignore_dep: {long: ignore-dep, help: Ignore dependencies for dry-run and json options}
         groups:
           - sample_desc:
              args: [sample, barcode] 
