@@ -7,7 +7,7 @@ use crate::common::defs::{Section, Command, DataValue, Metadata};
 use crate::common::assets::GetAsset;
 
 
-fn get_barcode_list<'a>(gem_bs: &'a GemBS, options: &'a HashMap<&'static str, DataValue>) -> Result<Vec<&'a String>, String> {
+pub fn get_barcode_list<'a>(gem_bs: &'a GemBS, options: &'a HashMap<&'static str, DataValue>) -> Result<Vec<&'a String>, String> {
 	let mut barcodes = Vec::new();
 	if let Some(DataValue::String(barcode)) = options.get("barcode") { barcodes.push(barcode); }
 	else if let Some(DataValue::String(sample)) = options.get("sample") {
@@ -63,16 +63,14 @@ fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataV
 fn gen_call_command(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue>) -> Result<(), String> {
 	gem_bs.setup_assets_and_tasks()?;
 	let asset_ids = get_required_asset_list(gem_bs, &options)?;
-	let task_list = gem_bs.get_required_tasks_from_asset_list(&asset_ids);
-	let mut com_set = HashSet::new();
-	if !options.contains_key("merge") { com_set.insert(Command::Call); }
-	if !options.contains_key("no_merge") { com_set.insert(Command::MergeBcfs); }
-			
+	let mut com_set = Vec::new();
+	if gem_bs.all() { [Command::Index, Command::Map, Command::MergeBams, Command::Call].iter().for_each(|x| com_set.push(*x)) }
+	else if !options.contains_key("merge") { com_set.push(Command::Call); }
+	if !options.contains_key("no_merge") { com_set.push(Command::MergeBcfs); }
+	let task_list = gem_bs.get_required_tasks_from_asset_list(&asset_ids, &com_set);
 	for ix in task_list.iter() {
 		let t = &gem_bs.get_tasks()[*ix];
-		if com_set.contains(&t.command()) {
-			println!("{:?} {:?}", t, gem_bs.task_status(t));
-		}
+		println!("{:?}", t);
 	}
 	Ok(())
 }
@@ -81,8 +79,16 @@ pub fn call_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.setup_fs(false)?;
 	gem_bs.read_json_config()?;
 	
-	let mut options: HashMap<&'static str, DataValue> = HashMap::new();
-	handle_options(m, gem_bs, Section::Calling, &mut options);
+	let mut options = handle_options(m, gem_bs, Section::Calling);
 	if options.contains_key("pool") { options.insert("no_merge", DataValue::Bool(true)); }
+	gen_call_command(gem_bs, &options)
+}
+
+pub fn merge_bcfs_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
+	gem_bs.setup_fs(false)?;
+	gem_bs.read_json_config()?;
+	
+	let mut options = handle_options(m, gem_bs, Section::Calling);
+	options.insert("merge", DataValue::Bool(true));	
 	gen_call_command(gem_bs, &options)
 }

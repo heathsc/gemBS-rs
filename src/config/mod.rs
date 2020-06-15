@@ -46,12 +46,15 @@ pub struct GemBS {
 	asset_digest: Option<String>,
 	signal: Arc<AtomicUsize>,
 	ignore_times: bool,
+	ignore_status: bool,
+	all: bool,
 }
 
 impl GemBS {
 	pub fn new() -> Self {
-		let mut gem_bs = GemBS{var: Vec::new(), fs: None, contig_pool_digest: None, asset_digest: None, ignore_times: false,
-		assets: AssetList::new(), tasks: TaskList::new(), signal: Arc::new(AtomicUsize::new(0))};
+		let mut gem_bs = GemBS{var: Vec::new(), fs: None, contig_pool_digest: None, asset_digest: None, 
+			ignore_times: false, ignore_status: false, all: false,
+			assets: AssetList::new(), tasks: TaskList::new(), signal: Arc::new(AtomicUsize::new(0))};
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGTERM, Arc::clone(&gem_bs.signal), SIGTERM);		
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGINT, Arc::clone(&gem_bs.signal), SIGINT);		
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGQUIT, Arc::clone(&gem_bs.signal), SIGQUIT);		
@@ -246,10 +249,15 @@ impl GemBS {
 		self.asset_digest = Some(self.assets.get_digest());
 		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());
 		self.assets.calc_mod_time_ances();
+		self.calc_task_statuses();
 		Ok(())		
 	}
-	
+	pub fn calc_task_statuses(&mut self) {
+		let svec: Vec<(usize, TaskStatus)> = self.tasks.iter().map(|x| (x.idx(), self.task_status(x))).collect();
+		svec.iter().for_each(|(ix, s)| self.tasks[*ix].set_status(*s));
+	}
 	pub fn task_status(&self, task: &Task) -> TaskStatus {
+		if let Some(s) = task.status() { return s; }
 		let ignore_times = self.ignore_times();
 		let mut inputs_ready = true;
 		let mut latest_input_mod = None;
@@ -302,21 +310,29 @@ impl GemBS {
 	}
 	pub fn set_ignore_times(&mut self, x: bool) { self.ignore_times = x; }
 	pub fn ignore_times(&self) -> bool { self.ignore_times }
-	pub fn get_required_tasks_from_asset_list(&self, assets: &[usize]) -> Vec<usize> {
-		fn check_reqd(i: usize, reqd: &mut HashSet<usize>, tlist: &mut Vec<usize>, rf: &TaskList) {
+	pub fn set_ignore_status(&mut self, x: bool) { self.ignore_status = x; }
+	pub fn ignore_status(&self) -> bool { self.ignore_status }
+	pub fn set_all(&mut self, x: bool) { self.all = x; }
+	pub fn all(&self) -> bool { self.all }
+	pub fn get_required_tasks_from_asset_list(&self, assets: &[usize], com_list: &[Command]) -> Vec<usize> {
+		let com_set = com_list.iter().fold(HashSet::new(), |mut hs, x| { hs.insert(*x); hs });
+		fn check_reqd(i: usize, reqd: &mut HashSet<usize>, tlist: &mut Vec<usize>, rf: &TaskList, com_set: &HashSet<Command>, ignore: bool) {
 			if ! reqd.contains(&i) {
-				for j in rf[i].parents() { check_reqd(*j, reqd, tlist, rf) }
+				for j in rf[i].parents() { check_reqd(*j, reqd, tlist, rf, com_set, ignore) }
 				reqd.insert(i);
-				tlist.push(i);
+				let st = rf[i].status().unwrap();
+				if (ignore || st == TaskStatus::Ready || st == TaskStatus::Waiting) && 
+					com_set.contains(&rf[i].command()) { tlist.push(i); }
 			}
 		}
 		let mut reqd = HashSet::new();
 		let mut tlist = Vec::new();
 		let asset_ref = &self.assets;
 		let tasks = self.get_tasks();
+		let ignore = self.ignore_status();
 		for i in assets { 
 			if let Some(j) = asset_ref.get_asset(*i).unwrap().creator() {
-				check_reqd(j, &mut reqd, &mut tlist, tasks); 
+				check_reqd(j, &mut reqd, &mut tlist, tasks, &com_set, ignore); 
 			}
 		}
 		tlist

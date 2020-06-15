@@ -40,7 +40,8 @@ pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
 	}
 }
 
-pub	fn handle_options(m: &ArgMatches, gem_bs: &mut GemBS, section: Section, options: &mut HashMap<&'static str, DataValue>) {
+pub	fn handle_options(m: &ArgMatches, gem_bs: &mut GemBS, section: Section) -> HashMap<&'static str, DataValue> {
+	let mut options = HashMap::new();
 	for (opt, val) in OPT_ASSOC.iter() {
 		match val {
 			OptionType::Global(s, vt) => {
@@ -49,11 +50,12 @@ pub	fn handle_options(m: &ArgMatches, gem_bs: &mut GemBS, section: Section, opti
 			OptionType::Local(vt) => {
 				if let Some(x) = get_option(m, opt, *vt) { 
 					debug!("Setting local option {} to {:?}", opt, x);
-					options.insert(opt, x); 
+					options.insert(*opt, x); 
 				}
 			},
 		}		
 	}
+	options
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -100,6 +102,22 @@ lazy_static! {
       	m.push(("right_trim", OptionType::Global("right_trim", VarType::Int)));
       	m.push(("conversion", OptionType::Global("conversion", VarType::FloatVec)));
     	m.push(("ref_bias", OptionType::Global("reference_bias", VarType::Float)));
+      	m.push(("strand_specific", OptionType::Global("strand_specific", VarType::Bool)));
+      	m.push(("bigwig_strand_specific", OptionType::Global("bigwig_strand_specific", VarType::Bool)));
+      	m.push(("min_inform", OptionType::Global("min_inform", VarType::Int)));
+      	m.push(("min_nc", OptionType::Global("min_nc", VarType::Int)));
+      	m.push(("allow_het", OptionType::Global("allow_het", VarType::Bool)));
+      	m.push(("ref_bias", OptionType::Global("reference_bias", VarType::Float)));
+     	m.push(("cpg", OptionType::Global("make_cpg", VarType::Bool)));
+     	m.push(("non_cpg", OptionType::Global("make_non_cpg", VarType::Bool)));
+     	m.push(("bed_methyl", OptionType::Global("make_bedmethyl", VarType::Bool)));
+     	m.push(("snps", OptionType::Global("make_snps", VarType::Bool)));
+    	m.push(("snp_list", OptionType::Global("snp_list", VarType::String)));
+    	m.push(("snps_db", OptionType::Global("snps_db", VarType::String)));
+ 	  	m.push(("sampling", OptionType::Global("sampling_rate", VarType::Int)));
+	  	m.push(("make_bs_index", OptionType::Local(VarType::Bool)));
+	  	m.push(("make_dbsnp_index", OptionType::Local(VarType::Bool)));
+	  	m.push(("make_nonbs_index", OptionType::Local(VarType::Bool)));
         m
     };
 }

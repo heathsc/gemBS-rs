@@ -47,16 +47,15 @@ fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataV
 fn gen_map_command(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue>) -> Result<(), String> {
 	gem_bs.setup_assets_and_tasks()?;
 	let asset_ids = get_required_asset_list(gem_bs, &options)?;
-	let task_list = gem_bs.get_required_tasks_from_asset_list(&asset_ids);
-	let mut com_set = HashSet::new();
-	if !options.contains_key("merge") { com_set.insert(Command::Map); }
-	if !options.contains_key("no_merge") { com_set.insert(Command::MergeBams); }
-			
+	let mut com_set = Vec::new();
+	if gem_bs.all() { [Command::Index, Command::Map].iter().for_each(|x| com_set.push(*x)) }
+	else if !options.contains_key("merge") { com_set.push(Command::Map); }
+	if !options.contains_key("no_merge") { com_set.push(Command::MergeBams); }
+
+	let task_list = gem_bs.get_required_tasks_from_asset_list(&asset_ids, &com_set);
 	for ix in task_list.iter() {
 		let t = &gem_bs.get_tasks()[*ix];
-		if com_set.contains(&t.command()) {
-			println!("{:?} {:?}", t, gem_bs.task_status(t));
-		}
+		println!("{:?}", t);
 	}
 	Ok(())
 }
@@ -65,8 +64,7 @@ pub fn map_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.setup_fs(false)?;
 	gem_bs.read_json_config()?;
 	
-	let mut options: HashMap<&'static str, DataValue> = HashMap::new();
-	handle_options(m, gem_bs, Section::Mapping, &mut options);
+	let options = handle_options(m, gem_bs, Section::Mapping);
 	gen_map_command(gem_bs, &options)
 }
 
@@ -74,8 +72,7 @@ pub fn merge_bams_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), Stri
 	gem_bs.setup_fs(false)?;
 	gem_bs.read_json_config()?;
 	
-	let mut options: HashMap<&'static str, DataValue> = HashMap::new();
-	handle_options(m, gem_bs, Section::Mapping, &mut options);
+	let mut options = handle_options(m, gem_bs, Section::Mapping);
 	options.insert("merge", DataValue::Bool(true));
 	gen_map_command(gem_bs, &options)
 }

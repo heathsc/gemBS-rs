@@ -13,6 +13,8 @@ args:
     - dir: {short: d, long: dir, takes_value: true, value_name: DIR, help: set working directory}
     - gembs_root: {short :r, long: gembs-root, takes_value: true, value_name: DIR, help: set root of gemBS installation}
     - ignore_times: {short: i, long: ignore-times, help: Ignore file modification times when evaluating the status of tasks}
+    - all: {short: a, long: all, help: Consider all tasks required for the requested command}
+    - ignore_status: {short: I, long: ignore-status, help: Ignore status of tasks when compiling task list}
 subcommands:
     - prepare:
         setting: DeriveDisplayOrder
@@ -32,9 +34,9 @@ subcommands:
         args:
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads (default - all available cores)}
           - sampling: {short: s, long: sampling-rate, value_name: SAMPLING_RATE, takes_value: true, help: Text sampling rate - increasing will decrease index size but also performance}
-          - bs_index: {short: b, long: bs-index, help: Generate bisulfite index}
-          - nonbs_index: {short: n, long: nonbs-index, help: Generate non-bisulfite (regular) index}
-          - dbsnp_index: {short: D, long: dbsnp-index, help: Generate dbSNP index}
+          - make_bs_index: {short: b, long: bs-index, help: Generate bisulfite index}
+          - make_nonbs_index: {short: n, long: nonbs-index, help: Generate non-bisulfite (regular) index}
+          - make_dbsnp_index: {short: D, long: dbsnp-index, help: Generate dbSNP index}
           - dbsnp_files: {short: d, long: list-dbsnp-files, value_name: DBSNP_FILES, multiple: true, takes_value: true, help: List of input files from dbSNP}
     - map:
         setting: DeriveDisplayOrder

@@ -44,6 +44,8 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 	if let Some(s) = m.value_of("json") { gem_bs.set_config(Section::Default, "json_file", DataValue::String(s.to_string())); }
 	if let Some(s) = m.value_of("gembs_root") { gem_bs.set_config(Section::Default, "gembs_root", DataValue::String(s.to_string())); }
 	if m.is_present("ignore_times") { gem_bs.set_ignore_times(true); }
+	if m.is_present("ignore_status") { gem_bs.set_ignore_status(true); }
+	if m.is_present("all") { gem_bs.set_all(true); }
 	
 	// Now handle subcommands
 	
@@ -67,6 +69,14 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 		("call", Some(m_sum)) => {
 			debug!("User entered 'call' command");
 			commands::call::call_command(m_sum, gem_bs)
+		},
+		("merge-bcfs", Some(m_sum)) => {
+			debug!("User entered 'merge-bcf' command");
+			commands::call::merge_bcfs_command(m_sum, gem_bs)
+		},
+		("extract", Some(m_sum)) => {
+			debug!("User entered 'extract' command");
+			commands::extract::extract_command(m_sum, gem_bs)
 		},
 		_ => {
 			Err("Unknown subcommand".to_string())
