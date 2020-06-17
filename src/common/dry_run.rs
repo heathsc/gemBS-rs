@@ -1,22 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::BufWriter;
-use serde::Serialize;
 use crate::config::GemBS;
-use crate::common::tasks::Task;
+use crate::common::tasks::{Task, JsonTask};
 use crate::common::defs::DataValue;
 use crate::common::assets::GetAsset;
 use std::path::Path;
-
-#[derive(Serialize)]
-struct JsonTask<'a> {
-	id: &'a str,
-	command: String,
-	args: String,
-	inputs: Vec<&'a Path>,
-	outputs: Vec<&'a Path>,
-	depend: Vec<&'a str>,
-}
 
 fn get_arg_string(task: &Task, options: &HashMap<&'static str, DataValue>) -> String {
 	let mut arg_string = task.args().to_owned();
@@ -57,7 +46,7 @@ pub fn handle_json_tasks(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 		let inputs: Vec<&Path> = task.inputs().map(|x| gem_bs.get_asset(*x).unwrap().path()).collect();
 		let outputs: Vec<&Path> = task.outputs().map(|x| gem_bs.get_asset(*x).unwrap().path()).collect();
 		let depend: Vec<&str> = task.parents().iter().filter(|x| task_set.contains(x)).map(|x| gem_bs.get_tasks()[*x].id()).collect();
-		json_task_list.push(JsonTask{id, command, args, inputs, outputs, depend});
+		json_task_list.push(JsonTask::new(id, command, args, inputs, outputs, depend, task.status().unwrap()));
 	}
 	let ofile = match fs::File::create(Path::new(json_file)) {
 		Err(e) => return Err(format!("Couldn't open {}: {}", json_file, e)),

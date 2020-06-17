@@ -132,4 +132,3 @@ pub fn get_contig_pools(gem_bs: &GemBS) -> Vec<Rc<String>> {
 	pools
 }
 
-

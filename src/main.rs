@@ -7,6 +7,7 @@ mod cli;
 mod config;
 mod commands;
 mod common;
+mod scheduler;
 
 fn main() -> Result<(), String> {
 	let mut gem_bs = config::GemBS::new();

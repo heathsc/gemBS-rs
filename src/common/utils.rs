@@ -7,11 +7,13 @@ use std::ffi::{OsString, OsStr};
 use std::io::prelude::*;
 use std::io::{BufReader, BufRead, BufWriter, ErrorKind};
 use std::env;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::{thread, time};
 use blake2::{Blake2b, Digest};
 
 use compress::ReadType;
-use crate::common::defs::{SIGTERM, SIGINT, SIGQUIT, SIGHUP};
+use crate::common::defs::{SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 use crate::config::GemBS;
 
 pub fn get_inode(name: &str) -> Option<u64> {
@@ -220,7 +222,7 @@ pub fn get_user_host_string() -> String {
 fn get_lock_path(path: &Path) -> Result<PathBuf, String> {
 	let lstring = get_user_host_string();
 	let tfile = path.file_name().ok_or(format!("Invalid file {:?} for LockedWriter::new()", path))?.to_string_lossy().to_string();
-	let file = if tfile.starts_with('.') {	format!("{}#gemBS_lock", tfile) } else { format!(".{}#gemBS_lock", tfile) };
+	let file = if tfile.starts_with('.') {	format!("{}#gemBS_lock", tfile) } else { format!(".{}#GemBS_lock", tfile) };
 	let lock_path = match path.parent() {
 		Some(parent) => { [parent, Path::new(&file)].iter().collect() },
 		None => PathBuf::from(file)
@@ -247,6 +249,7 @@ impl<'a> FileLock<'a> {
 		let lock_path = get_lock_path(path)?;
 		Ok(FileLock{lock_path, path})
 	}
+	pub fn path(&self) -> &'a Path { self.path }
 	pub fn writer(&self) -> Result<Box<dyn Write>, String> {
 		let ofile = match fs::File::create(self.path) {
 			Err(e) => return Err(format!("Couldn't open {}: {}", self.path.to_string_lossy(), e)),
@@ -265,6 +268,61 @@ impl<'a> FileLock<'a> {
 	}
 }
 
+pub fn wait_for_lock<'a>(gem_bs: &mut GemBS, path: &'a Path) -> Result<FileLock<'a>, String> {
+	let delay = time::Duration::from_millis(250);
+	let mut message = false;
+	loop {
+		gem_bs.check_signal()?;
+		match FileLock::new(path) {
+			Ok(f) => return Ok(f),
+			Err(e) => {
+				if e.starts_with("File locked") {
+					if !message {
+						warn!("Waiting for lock: {}\nType Ctrl-C to quit", e);
+						message = true;
+					}
+				} else {
+					return Err(e);
+				}
+			},
+		}
+		thread::sleep(delay);
+	}	
+}
+
+pub fn timed_wait_for_lock<'a>(sig: Arc<AtomicUsize>, path: &'a Path) -> Result<FileLock<'a>, String> {
+	let delay = time::Duration::from_millis(250);
+	let now = time::SystemTime::now();
+	let mut signal = sig.swap(0, Ordering::Relaxed);
+	let mut message = false;
+	loop {
+		match FileLock::new(path) {
+			Ok(f) => return Ok(f),
+			Err(e) => {
+				if e.starts_with("File locked") {
+					if !message {
+						if signal == 0 { warn!("Waiting for lock to allow clean shutdown: {}\nType Ctrl-C twice to quit", e); }
+						else { warn!("Waiting for lock to allow clean shutdown: {}\nType Ctrl-C again to quit", e); }
+						message = true;
+					}
+				} else {
+					return Err(e);
+				}
+			},
+		}
+		let s = sig.load(Ordering::Relaxed);
+		if s != 0 {
+			if signal == 0 { 
+				signal = sig.swap(0, Ordering::Relaxed);
+				message = false;
+			} else { return Err(format!("Received {} signal.  Closing down", signal_msg(s))); }
+		}
+ 		if let Ok(t) = now.elapsed() {
+			if t.as_secs() >= 10 { return Err("Timed out without obtaining lock".to_string()); }
+		}
+		thread::sleep(delay);
+	}	
+}
 
 impl<'a> Drop for FileLock<'a> {
     fn drop(&mut self) {

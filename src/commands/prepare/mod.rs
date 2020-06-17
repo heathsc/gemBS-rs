@@ -1,7 +1,7 @@
 use clap::ArgMatches;
 use crate::config::GemBS;
 use crate::common::defs::{Section, DataValue};
-
+use crate::common::utils;
 mod config_file;
 pub mod metadata;
 
@@ -23,7 +23,9 @@ pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String>
 	} else if let Some(f) = m.value_of("json_metadata") {
 		metadata::process_json::process_json_metadata_file(f, gem_bs)?;
 	}
-	gem_bs.setup_assets_and_tasks()?;
+	let task_path = gem_bs.get_task_file_path();
+	let flock = utils::wait_for_lock(gem_bs, &task_path)?;
+	gem_bs.setup_assets_and_tasks(&flock)?;
 	
 	// Dump JSON config file to disk
 	gem_bs.write_json_config()

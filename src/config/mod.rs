@@ -14,7 +14,7 @@ use std::rc::Rc;
 
 use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 use crate::common::assets::{Asset, AssetList, AssetType, AssetStatus, GetAsset};
-use crate::common::tasks::{Task, TaskList, TaskStatus};
+use crate::common::tasks::{Task, TaskList, TaskStatus, RunningTask};
 use crate::common::utils::FileLock;
 use std::slice;
 
@@ -64,8 +64,12 @@ impl GemBS {
 		gem_bs.var.push(GemBSHash::Contig(HashMap::new()));
 		gem_bs
 	}
+	pub fn get_signal_clone(&self) -> Arc<AtomicUsize> { Arc::clone(&self.signal) }
 	pub fn get_signal(&self) -> usize {
 		self.signal.load(Ordering::Relaxed)
+	}
+	pub fn set_signal(&self, s: usize) -> usize {
+		self.signal.swap(s, Ordering::Relaxed)
 	}
 	pub fn check_signal(&self) -> Result<(), String> {
 		match self.get_signal() {
@@ -78,10 +82,6 @@ impl GemBS {
 			debug!("Setting {:?}:{} to {:?}", section, name, val);
 			href.entry(section).or_insert_with(HashMap::new).insert(name.to_string(), val);
 		} else { panic!("Internal error!"); }
-	}
-	pub fn set_config_path(&mut self, section: Section, name: &str, path: &Path) {
-		let tstr = path.to_string_lossy().to_string();
-		self.set_config(section, name, DataValue::String(tstr));
 	}
 	pub fn set_sample_data(&mut self, dataset: &str, mt: Metadata, val: DataValue) {
 		if let GemBSHash::SampleData(href) = &mut self.var[1] {
@@ -115,10 +115,6 @@ impl GemBS {
 	}
 	pub fn get_config_bool(&self, section: Section, name: &str) -> bool {
 		if let Some(DataValue::Bool(x)) = self.get_config(section, name) { *x } else { false }
-	}
-	pub fn get_config_ref(&self) ->  &HashMap<Section, HashMap<String, DataValue>> {
-		if let GemBSHash::Config(href) = &self.var[0] { &href }
-		else { panic!("Internal error!"); }
 	}	
 	pub fn get_sample_data_ref(&self) ->  &HashMap<String, HashMap<Metadata, DataValue>> {
 		if let GemBSHash::SampleData(href) = &self.var[1] { &href }
@@ -139,7 +135,6 @@ impl GemBS {
 	}
 	pub fn get_tasks_iter(&self) -> slice::Iter<'_, Task> { self.tasks.iter() }
 	pub fn get_tasks(&self) -> &TaskList { &self.tasks }
-	pub fn get_assets(&self) -> &AssetList { &self.assets }
 	pub fn add_parent_child(&mut self, child: usize, parent: usize) {
 		self.tasks.get_idx(child).add_parent(parent);
 	}	
@@ -213,7 +208,9 @@ impl GemBS {
 		let root = &self.fs.as_ref().unwrap().gem_bs_root;
 		[root, Path::new("bin"), Path::new(name)].iter().collect()
 	}
-	
+	pub fn get_task_file_path(&self) -> PathBuf {
+		[&self.fs.as_ref().unwrap().config_dir, Path::new("gemBS_tasks.json")].iter().collect()
+	}
 	pub fn get_config_script_path(&self) -> PathBuf {
 		let root = &self.fs.as_ref().unwrap().gem_bs_root;
 		[root, Path::new("etc"), Path::new("config_scripts")].iter().collect()
@@ -238,7 +235,7 @@ impl GemBS {
 		sample
 	}
 	
-	pub fn setup_assets_and_tasks(&mut self) -> Result<(), String> {
+	pub fn setup_assets_and_tasks(&mut self, lock: &FileLock) -> Result<(), String> {
 		self.check_signal()?;
 		check_ref::check_ref_and_indices(self)?;
 		self.contig_pool_digest = Some(contig::setup_contigs(self)?);
@@ -248,11 +245,33 @@ impl GemBS {
 		self.asset_digest = Some(self.assets.get_digest());
 		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());
 		self.assets.calc_mod_time_ances();
-		self.calc_task_statuses();
+		self.handle_status(lock)?;
 		Ok(())		
 	}
-	pub fn calc_task_statuses(&mut self) {
-		let svec: Vec<(usize, TaskStatus)> = self.tasks.iter().map(|x| (x.idx(), self.task_status(x))).collect();
+	pub fn rescan_assets_and_tasks(&mut self, lock: &FileLock) -> Result<(), String> {
+		self.assets.calc_mod_time_ances();
+		self.handle_status(lock)?;
+		Ok(())				
+	}
+	fn handle_status(&mut self, lock: &FileLock) -> Result<(), String> {
+		self.tasks.iter_mut().for_each(|x| x.clear_status());
+		let running: Vec<RunningTask> = if lock.path().exists() {		
+			let reader = lock.reader().map_err(|e| format!("Error: Could not open JSON config file {} for reading: {}", lock.path().to_string_lossy(), e))?;
+			serde_json::from_reader(reader).map_err(|e| format!("Error: failed to read JSON config file {}: {}", lock.path().to_string_lossy(), e))?
+		} else { Vec::new() };
+		self.calc_task_statuses(&running);	
+		Ok(())	
+	}
+	fn calc_task_statuses(&mut self, running: &[RunningTask]) {
+		let hset: HashSet<&str> = running.iter().fold(HashSet::new(),|mut hr, x| {hr.insert(x.id()); hr});
+		let svec: Vec<(usize, TaskStatus)> = self.tasks.iter().map(|x| {
+			let mut s = self.task_status(x);
+			if hset.contains(x.id()) {
+				if s != TaskStatus::Ready { warn!("Task {} in running queue not in Ready state", x.id()) }
+				s = TaskStatus::Running;
+			}
+			(x.idx(), s)
+		}).collect();
 		svec.iter().for_each(|(ix, s)| self.tasks[*ix].set_status(*s));
 	}
 	pub fn task_status(&self, task: &Task) -> TaskStatus {

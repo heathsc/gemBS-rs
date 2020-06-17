@@ -38,6 +38,8 @@ subcommands:
           - make_nonbs_index: {short: n, long: nonbs-index, help: Generate non-bisulfite (regular) index}
           - make_dbsnp_index: {short: D, long: dbsnp-index, help: Generate dbSNP index}
           - dbsnp_files: {short: d, long: list-dbsnp-files, value_name: DBSNP_FILES, multiple: true, takes_value: true, help: List of input files from dbSNP}
+          - dry_run: {long: dry-run, help: Output pending mapping commands without execution}
+          - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
     - map:
         setting: DeriveDisplayOrder
         about: Read mapping
@@ -104,8 +106,7 @@ subcommands:
           - haploid: {short: '1', long: haploid, help: Force genotype calls to be haploid}
           - conversion: {short: C, long: conversion, value_name: "UNDER OVER", takes_value: true, multiple: true, number_of_values: 2, help: "set conversion rates (under over)"}          
           - ref_bias: {short: R, long: reference_bias, value_name: BIAS, takes_value: true, help: set bias to reference homozygote}          
-          - pool: {long: pool, value_name: POOL, takes_value: true, multiple: true, help: Contig pool for methylation calling}          
-          - list_pools: {long: list-pools, value_name: LEVEL, takes_value: true, help: List contig pool - level 1 print names; level >1 list pool composition}          
+          - pool: {long: pool, value_name: POOL, takes_value: true, multiple: true, help: Contig pool for methylation calling}                   
           - no_merge: {long: no-merge, help: Do not automatically merge BAMs}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
