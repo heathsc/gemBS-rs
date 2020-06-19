@@ -1,17 +1,15 @@
 use std::path::{Path, PathBuf};
-use std::slice;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::SystemTime;
 
 use super::utils::calc_digest;
-use super::tasks::{Task, TaskList};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AssetType { Supplied, Derived, Temp }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AssetStatus { Present, Outdated, Absent, Incomplete }
+pub enum AssetStatus { Present, Outdated, Absent }
 
 #[derive(Debug, Clone)]
 pub struct Asset {
@@ -43,6 +41,7 @@ impl Asset {
 	pub fn path(&self) -> &Path { &self.path }
 	pub fn status(&self) -> AssetStatus { self.status }
 	pub fn idx(&self) -> usize { self.idx }
+	pub fn id(&self) -> &str { &self.id }
 	pub fn creator(&self) -> Option<usize> { self.creator }
 	pub fn set_creator(&mut self, idx: usize, pvec: &[usize]) { 
 		self.creator = Some(idx);

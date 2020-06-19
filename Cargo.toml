@@ -22,4 +22,5 @@ blake2 = "0.8"
 itertools = "0.9"
 hostname = "^0.3"
 custom_error = "1.7.1"
+regex = "1"
 compress = { path = "../rust/compress" }

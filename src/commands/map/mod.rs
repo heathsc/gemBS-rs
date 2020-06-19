@@ -48,7 +48,7 @@ fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataV
 
 fn gen_map_command(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue>) -> Result<(), String> {
 	let task_path = gem_bs.get_task_file_path();
-	let flock = utils::wait_for_lock(gem_bs, &task_path)?; 
+	let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?; 
 	gem_bs.setup_assets_and_tasks(&flock)?;
 	let asset_ids = get_required_asset_list(gem_bs, &options)?;
 	let mut com_set = Vec::new();

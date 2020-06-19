@@ -205,7 +205,7 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 		pipeline.add_stage(&md5_path, Some(md5_args.iter()))
 			    .add_stage(&bgzip_path, Some(bgzip_args.iter()))
 				.out_file(&gref).add_output(&ctg_md5);
-		pipeline.run(gem_bs)?;
+		pipeline.run(gem_bs.get_signal_clone())?;
 	}
 	// Create faidx index if required		
 	if !(gref_fai.exists() && gref_gzi.exists()) {
@@ -216,7 +216,7 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 		let mut pipeline = Pipeline::new();
 		pipeline.add_stage(&samtools_path, Some(faidx_args.iter()))
 				.add_output(&gref_fai).add_output(&gref_gzi);
-		pipeline.run(gem_bs)?;
+		pipeline.run(gem_bs.get_signal_clone())?;
 	}
 	gem_bs.insert_asset("gembs_reference", &gref, AssetType::Derived);			
 	gem_bs.insert_asset("gembs_reference_fai", &gref_fai, AssetType::Derived);			

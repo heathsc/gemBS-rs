@@ -104,8 +104,9 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 					_ => (),
 				}
 			}
-			common_inputs.iter().for_each(|x| in_vec.push(*x));
+			if in_vec.is_empty() { return Err(format!("No datafiles for dataset {}", dat)); }
 			if bisulfite { in_vec.push(index_id.unwrap()); } else { in_vec.push(nonbs_index_id.unwrap()); }
+			common_inputs.iter().for_each(|x| in_vec.push(*x));
 			
 			if sample.datasets.len() > 1 {
 				let out1 = handle_file(gem_bs, dat, format!("{}.bam", dat).as_str(), ".bam", &bpath, AssetType::Temp); 

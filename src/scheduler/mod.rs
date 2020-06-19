@@ -1,19 +1,23 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::rc::Rc;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::fs;
+use std::thread;
+use std::ffi::OsStr;
 use custom_error::custom_error;
+
 use crate::config::GemBS;
 use crate::common::defs::{DataValue, Command, Section};
 use crate::common::tasks::{TaskStatus, RunningTask};
-use crate::common::utils::FileLock;
+use crate::common::utils::{Pipeline, FileLock};
 use crate::common::utils;
+
+mod map;
 
 #[derive(Debug)]
 struct RunJob {
-	id: Rc<String>,
+	id: String,
 	task_idx: usize,
 	path: PathBuf,	
 	signal: Arc<AtomicUsize>,
@@ -124,7 +128,7 @@ impl<'a> Scheduler<'a> {
 		if let Some(x) = task_idx { 
 			self.add_task(gem_bs, x)?;
 			let task = &gem_bs.get_tasks()[x];			
-			let rj = RunJob{id: task.id_clone(), task_idx: x, path: self.lock.as_ref().unwrap().path().to_owned(), signal: gem_bs.get_signal_clone() };
+			let rj = RunJob{id: task.id().to_string(), task_idx: x, path: self.lock.as_ref().unwrap().path().to_owned(), signal: gem_bs.get_signal_clone() };
 			self.drop_lock();
 			Ok(rj) 
 		} else if avail_tasks { Err(SchedulerError::NoSlots)}
@@ -132,12 +136,45 @@ impl<'a> Scheduler<'a> {
 	}
 }
 
+#[derive(Debug)]
+pub struct QPipe {
+	stages: Vec<(PathBuf, String)>,
+	output: Option<PathBuf>,
+} 
+
+impl QPipe {
+	pub fn new() -> Self { QPipe{ stages: Vec::new(), output: None} }
+	pub fn add_stage(&mut self, path: &Path, args: &str) -> &mut Self {
+		self.stages.push((path.to_owned(), args.to_owned()));
+		self
+	}
+}
+
+fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: usize) -> Result<(), String> {
+	println!("Aha! {:?}", job);
+	let task = &gem_bs.get_tasks()[job];
+	println!("Oho! {:?}", task);
+	
+	let pipeline = match task.command() {
+		Command::Map => Some(map::make_map_pipeline(gem_bs, options, job)),
+		_ => None, 
+	};
+	println!("{:?}", pipeline);
+	Ok(())
+}
+
 pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize], flock: FileLock) -> Result<(), String> {
 	gem_bs.check_signal()?;
 	let task_path = gem_bs.get_task_file_path();
 	let mut sched = Scheduler::new(task_list);
 	sched.set_lock(flock);
-	let idx = sched.get_task(gem_bs);
+	match sched.get_task(gem_bs) {
+		Ok(job) => handle_job(gem_bs, options, job.task_idx)?,
+		Err(e) => return Err(format!("{}", e)),
+	}
+	
+
+/*
 	println!("Aha! {:?}", idx);
 	let flock = utils::wait_for_lock(gem_bs, &task_path)?;
 	gem_bs.rescan_assets_and_tasks(&flock)?;
@@ -149,7 +186,7 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 	sched.set_lock(flock);
 	let idx2 = sched.get_task(gem_bs);
 	println!("Aha! {:?}", idx2);
-	println!("Aha! {:?} {:?} {:?}", idx, idx1, idx2);
+*/
 	Ok(())
 }
 

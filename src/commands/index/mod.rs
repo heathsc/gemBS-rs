@@ -13,7 +13,7 @@ pub fn index_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	
 	let options = handle_options(m, gem_bs, Section::Index);
 	let task_path = gem_bs.get_task_file_path();
-	let flock = utils::wait_for_lock(gem_bs, &task_path)?; 
+	let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?; 
 	gem_bs.setup_assets_and_tasks(&flock)?;
 	let mut task_set = HashSet::new();
 	if options.contains_key("make_bs_index") { task_set.insert("index"); }

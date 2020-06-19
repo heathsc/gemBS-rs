@@ -116,6 +116,12 @@ impl GemBS {
 	pub fn get_config_bool(&self, section: Section, name: &str) -> bool {
 		if let Some(DataValue::Bool(x)) = self.get_config(section, name) { *x } else { false }
 	}	
+	pub fn get_config_int(&self, section: Section, name: &str) -> Option<isize> {
+		if let Some(DataValue::Int(x)) = self.get_config(section, name) { Some(*x) } else { None }
+	}	
+	pub fn get_config_str(&self, section: Section, name: &str) -> Option<&str> {
+		if let Some(DataValue::String(x)) = self.get_config(section, name) { Some(x) } else { None }
+	}	
 	pub fn get_sample_data_ref(&self) ->  &HashMap<String, HashMap<Metadata, DataValue>> {
 		if let GemBSHash::SampleData(href) = &self.var[1] { &href }
 		else { panic!("Internal error!"); }

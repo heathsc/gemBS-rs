@@ -14,7 +14,6 @@ use blake2::{Blake2b, Digest};
 
 use compress::ReadType;
 use crate::common::defs::{SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
-use crate::config::GemBS;
 
 pub fn get_inode(name: &str) -> Option<u64> {
    	match fs::metadata(name) {
@@ -84,8 +83,8 @@ where
 		self
 	}
 	// Execute the pipeline
-	pub fn run(&mut self, gem_bs: &GemBS) -> Result<Option<Box<dyn BufRead>>, String> {
-		self.do_run(gem_bs).map_err(|e| {
+	pub fn run(&mut self, sig: Arc<AtomicUsize>) -> Result<Option<Box<dyn BufRead>>, String> {
+		self.do_run(sig).map_err(|e| {
 			for file in self.expected_outputs.iter() { 
 				if file.exists() {
 					warn!("Removing output file {}", file.to_string_lossy());
@@ -95,7 +94,7 @@ where
 			e
 		})
 	}
-	fn do_run(&mut self, gem_bs: &GemBS) -> Result<Option<Box<dyn BufRead>>, String> {
+	fn do_run(&mut self, sig: Arc<AtomicUsize>) -> Result<Option<Box<dyn BufRead>>, String> {
 		if self.stage.is_empty() { return Err("Error - Empty pipeline".to_string()); }	
 		let mut len = self.stage.len();
 		let mut cinfo: Vec<(Child, &'a Path)> = Vec::new();
@@ -155,9 +154,9 @@ where
 			cinfo.push((child, com));
 		}
 		info!("{}", desc);
-		match wait_sub_proc(gem_bs, &mut cinfo) {
+		match wait_sub_proc(sig.clone(), &mut cinfo) {
 			Some(com) => {
-				match gem_bs.get_signal() {
+				match get_signal(sig) {
 					SIGTERM => Err("Pipeline terminated with a SIGTERM signal".to_string()),
 					SIGINT => Err("Pipeline terminated with a SIGINT signal".to_string()),
 					SIGHUP => Err("Pipeline terminated with a SIGHUP signal".to_string()),
@@ -173,7 +172,7 @@ where
 	}
 }
 
-fn wait_sub_proc(gem_bs: &GemBS, cinfo: &mut Vec<(Child, &Path)>) -> Option<String> {
+fn wait_sub_proc(sig: Arc<AtomicUsize>, cinfo: &mut Vec<(Child, &Path)>) -> Option<String> {
 	let mut err_com = None;
 	let delay = time::Duration::from_millis(250);
 	for (child, com) in cinfo.iter_mut().rev() {
@@ -189,7 +188,7 @@ fn wait_sub_proc(gem_bs: &GemBS, cinfo: &mut Vec<(Child, &Path)>) -> Option<Stri
 						true
 					},
 					Ok(None) => {
-						if gem_bs.get_signal() != 0 { let _ = child.kill(); } 
+						if get_signal(sig.clone()) != 0 { let _ = child.kill(); } 
 						false
 					},
 					Err(e) => {
@@ -222,7 +221,7 @@ pub fn get_user_host_string() -> String {
 fn get_lock_path(path: &Path) -> Result<PathBuf, String> {
 	let lstring = get_user_host_string();
 	let tfile = path.file_name().ok_or(format!("Invalid file {:?} for LockedWriter::new()", path))?.to_string_lossy().to_string();
-	let file = if tfile.starts_with('.') {	format!("{}#gemBS_lock", tfile) } else { format!(".{}#GemBS_lock", tfile) };
+	let file = if tfile.starts_with('.') {	format!("{}#gemBS_lock", tfile) } else { format!(".{}#gemBS_lock", tfile) };
 	let lock_path = match path.parent() {
 		Some(parent) => { [parent, Path::new(&file)].iter().collect() },
 		None => PathBuf::from(file)
@@ -268,11 +267,23 @@ impl<'a> FileLock<'a> {
 	}
 }
 
-pub fn wait_for_lock<'a>(gem_bs: &mut GemBS, path: &'a Path) -> Result<FileLock<'a>, String> {
+pub fn get_signal(sig: Arc<AtomicUsize>) -> usize {
+	sig.load(Ordering::Relaxed)
+}
+pub fn set_signal(sig: Arc<AtomicUsize>, s: usize) -> usize {
+	sig.swap(s, Ordering::Relaxed)
+}
+pub fn check_signal(sig: Arc<AtomicUsize>) -> Result<(), String> {
+	match get_signal(sig) {
+		0 => Ok(()),
+		s => Err(format!("Received {} signal.  Closing down", signal_msg(s))),
+	}
+}
+pub fn wait_for_lock<'a>(sig: Arc<AtomicUsize>, path: &'a Path) -> Result<FileLock<'a>, String> {
 	let delay = time::Duration::from_millis(250);
 	let mut message = false;
 	loop {
-		gem_bs.check_signal()?;
+		check_signal(sig.clone())?;
 		match FileLock::new(path) {
 			Ok(f) => return Ok(f),
 			Err(e) => {
@@ -310,7 +321,7 @@ pub fn timed_wait_for_lock<'a>(sig: Arc<AtomicUsize>, path: &'a Path) -> Result<
 				}
 			},
 		}
-		let s = sig.load(Ordering::Relaxed);
+		let s = get_signal(sig.clone());
 		if s != 0 {
 			if signal == 0 { 
 				signal = sig.swap(0, Ordering::Relaxed);

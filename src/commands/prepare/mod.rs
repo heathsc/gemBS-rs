@@ -24,7 +24,7 @@ pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String>
 		metadata::process_json::process_json_metadata_file(f, gem_bs)?;
 	}
 	let task_path = gem_bs.get_task_file_path();
-	let flock = utils::wait_for_lock(gem_bs, &task_path)?;
+	let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?;
 	gem_bs.setup_assets_and_tasks(&flock)?;
 	
 	// Dump JSON config file to disk
