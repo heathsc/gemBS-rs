@@ -51,6 +51,7 @@ subcommands:
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for mapping pipeline}
           - map_threads: {long: map-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for GEM3 mapper}
           - sort_threads: {long: sort-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for sorting}
+          - sort_memory: {long: sort-memory, value_name: MEMORY, takes_value: true, help: Amount of memory per sort thread}
           - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for merging}
           - file_type: {short: T, long: type, value_name: FILE_TYPE, takes_value: true, possible_values: [PAIRED, SINGLE, INTERLEAVED, STREAM, BAM], help: Type of data file}
           - paired: {short: p, long: paired-end, help: Input data is paired end}

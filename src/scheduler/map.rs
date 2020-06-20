@@ -1,5 +1,7 @@
 use std::collections::HashMap;
-use regex::{Regex, RegexSet};
+use std::path::Path;
+
+use regex::Regex;
 use lazy_static::lazy_static;
 
 use crate::config::GemBS;
@@ -41,21 +43,32 @@ fn check_inputs<'a>(gem_bs: &'a GemBS, task: &'a Task) -> (Vec<&'a Asset>, &'a s
 	(vfile, dataset)	
 }
 
-fn check_outputs<'a>(gem_bs: &'a GemBS, task: &'a Task) -> [Option<&'a Asset>; 3] {
+fn check_outputs<'a>(gem_bs: &'a GemBS, task: &'a Task) -> ([Option<&'a Asset>; 3], &'a str) {
 	lazy_static! {
-        static ref RE: RegexSet = RegexSet::new(&[r"^.*\.bam$", r"^.*\.cram$", r"^.*\.json$"]).unwrap();
+       static ref REBAM: Regex = Regex::new(r"^(.*)\.(bam|cram)$").unwrap();
+       static ref REJSON: Regex = Regex::new(r"^.*\.json$").unwrap();
 	}
 	let mut ofiles = [None, None, None];
+	let mut base = None;
 	for ix in task.outputs() {
 		let asset = gem_bs.get_asset(*ix).expect("Missing asset");
-		RE.matches(asset.id()).into_iter().for_each(|x| ofiles[x] = Some(asset));
+		if let Some(cap) = REBAM.captures(asset.id()) {
+			let x = match cap.get(2) {
+				Some(i) => { if i.as_str() == "bam" { 0 } else { 1 }},
+				None => panic!("Unexpected match"),
+			};
+			ofiles[x] = Some(asset);
+			if let Some(dat) = cap.get(1) { base = Some(dat.as_str()); }
+		} else if REJSON.is_match(asset.id()) {
+			ofiles[2] = Some(asset);
+		}
 	}
-	if ofiles[2].is_none() || (ofiles[0].is_none() && ofiles[1].is_none()) { panic!("Missing output files!"); }
-	ofiles
+	if ofiles[2].is_none() || base.is_none() || (ofiles[0].is_none() && ofiles[1].is_none()) { panic!("Missing output files!"); }
+	(ofiles, base.unwrap())
 }
 
 
-fn get_read_groups(gem_bs: &GemBS, dataset: &str, href: &HashMap<Metadata, DataValue>) -> String {
+fn get_read_groups(dataset: &str, href: &HashMap<Metadata, DataValue>) -> String {
 	let sample = if let Some(DataValue::String(x)) = href.get(&Metadata::SampleName) { x } else { "" };
 	let barcode = if let Some(DataValue::String(x)) = href.get(&Metadata::SampleBarcode) { x } else { "" };
 	let mut read_groups = format!("@RG\\tID:{}\\tSM:{}\\tBC:{}\\tPU:{}", dataset, sample, barcode, dataset);
@@ -68,6 +81,7 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 {
 	let threads = gem_bs.get_config_int(Section::Mapping, "threads");
 	let mapping_threads = gem_bs.get_config_int(Section::Mapping, "mapping_threads").or(threads);
+	let sort_threads = gem_bs.get_config_int(Section::Mapping, "sort_threads").or(mapping_threads);
 	let mut pipeline = QPipe::new();
 	let mapper_path = gem_bs.get_exec_path("gem-mapper");
 	let mut mapper_args = if let Some(t) = mapping_threads { format!("--threads {} ", t) } else { String::new() };
@@ -78,12 +92,19 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	let index = vfile.pop().expect("No index found!");
 	
 	// Check outputs
-	let outs = check_outputs(gem_bs, task);
-	
+	let (outs, base) = check_outputs(gem_bs, task);
+	let (outfile, cram) = if let Some(x) = outs[0] { (x, false) } else if let Some(x) = outs[1] { (x, false) } else { panic!("No mapping outfile set!") };
+	let merged_bam = base == dataset;
+	let tmp_dir = match gem_bs.get_config_str(Section::Mapping, "tmp_dir") {
+		Some(x) => Some(Path::new(x)),
+		None => outfile.path().parent(),
+	};
+		
 	let href = gem_bs.get_sample_data_ref().get(dataset).unwrap_or_else(|| panic!("No sample data for dataset {}", dataset));
 	// Set read_groups
-	let read_groups = get_read_groups(gem_bs, dataset, href);
+	let read_groups = get_read_groups(dataset, href);
 
+	// Setup rest of arguments for mapper
 	let ftype = if let Some(DataValue::FileType(t)) = href.get(&Metadata::FileType) { Some(*t) } else { None };
 	let paired = if let Some(DataValue::Bool(x)) = options.get("paired") { *x } else {
 		match ftype {
@@ -113,6 +134,27 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	}
 	mapper_args.push_str(format!("--report-file {} ", outs[2].unwrap().path().to_string_lossy()).as_str());
 	mapper_args.push_str(format!("--sam-read-group-header {}", read_groups).as_str());
-	pipeline.add_stage(&mapper_path, &mapper_args);
+	
+	// Setup readNameClean stage
+	let read_name_clean = gem_bs.get_exec_path("readNameClean");
+	let contig_md5 = gem_bs.get_asset("contig_md5").expect("Couldn't find contig md5 asset");
+	let read_name_clean_args = format!("{}", contig_md5.path().to_string_lossy());
+	
+	// Setup samtools stage
+	let samtools = gem_bs.get_exec_path("samtools");
+	let mut samtools_args = format!("sort -o {} ", outfile.path().to_string_lossy());
+	if let Some(x) = tmp_dir { samtools_args.push_str(format!("-T {} ", x.to_string_lossy()).as_str())}
+	if let Some(x) = gem_bs.get_config_str(Section::Mapping, "sort_memory") { samtools_args.push_str(format!("-m {} ", x).as_str())}
+	if let Some(x) = sort_threads { samtools_args.push_str(format!("--threads {} ", x).as_str())}
+	if !merged_bam { samtools_args.push_str("--write-index ") }
+	if cram { samtools_args.push_str("-O CRAM ") }
+	if gem_bs.get_config_bool(Section::Mapping, "benchmark_mode") { samtools_args.push_str("--no-PG ") } else if cram {
+		let gembs_ref = gem_bs.get_asset("gembs_reference").expect("Couldn't find gemBS reference asset");
+		samtools_args.push_str(format!("--reference {} ", gembs_ref.path().to_string_lossy()).as_str());
+	}
+	samtools_args.push('-');
+	pipeline.add_stage(&mapper_path, &mapper_args)
+			.add_stage(&read_name_clean, &read_name_clean_args)
+			.add_stage(&samtools, &samtools_args);
 	pipeline
 }
