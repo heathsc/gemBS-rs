@@ -6,7 +6,7 @@ use std::time::SystemTime;
 use super::utils::calc_digest;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AssetType { Supplied, Derived, Temp }
+pub enum AssetType { Supplied, Derived, Temp, Log }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AssetStatus { Present, Outdated, Absent }
@@ -24,19 +24,27 @@ pub struct Asset {
 	mod_time_ances: Option<SystemTime>,
 }
 
+fn get_status_time(path: &Path, asset_type: AssetType) -> (AssetStatus, Option<SystemTime>) {
+	match path.metadata() {
+		Ok(md) => {
+			(AssetStatus::Present, md.modified().ok())
+		},
+		Err(e) => {
+			if let AssetType::Supplied = asset_type {warn!("Warning: required datafile {} not accessible: {}", path.to_string_lossy(), e)}
+			(AssetStatus::Absent, None)
+		},
+	}
+}
 impl Asset {
 	fn new(id_str: &str, path: &Path, idx: usize, asset_type: AssetType) -> Self {
-		let (status, mod_time) = match path.metadata() {
-			Ok(md) => {
-				(AssetStatus::Present, md.modified().ok())
-			},
-			Err(e) => {
-				if let AssetType::Supplied = asset_type {warn!("Warning: required datafile {} not accessible: {}", path.to_string_lossy(), e)}
-				(AssetStatus::Absent, None)
-			},
-		};
+		let (status, mod_time) = get_status_time(path, asset_type);
 		let id = Rc::new(id_str.to_owned());		
 		Asset{id, path: path.to_owned(), idx, creator: None, parents: Vec::new(), asset_type, status, mod_time, mod_time_ances: mod_time}
+	}
+	pub fn recheck_status(&mut self) {
+		let (status, mod_time) = get_status_time(&self.path, self.asset_type);
+		self.status = status;
+		self.mod_time = mod_time;
 	}	
 	pub fn path(&self) -> &Path { &self.path }
 	pub fn status(&self) -> AssetStatus { self.status }
@@ -51,6 +59,21 @@ impl Asset {
 	pub fn mod_time_ances(&self) -> Option<SystemTime> { self.mod_time_ances }
 	pub fn parents(&self) -> &[usize] { &self.parents }
 	pub fn asset_type(&self) -> AssetType { self.asset_type }
+}
+
+pub fn make_log_asset(id: &str, par: &Path) -> (String, PathBuf) {
+	let lname = format!("{}.log", id);
+	let lpath: PathBuf = [par, Path::new(&lname)].iter().collect();
+	(lname, lpath) 
+}
+
+pub fn derive_log_asset(id: &str, file: &Path) -> (String, PathBuf) {
+	let mut v = Vec::new();
+	if let Some(par) = file.parent() { v.push(par) }
+	let lname = format!("{}.log", id);
+	v.push(Path::new(lname.as_str()));
+	let lpath: PathBuf = v.iter().collect();
+	(lname, lpath) 
 }
 
 pub struct AssetList {
@@ -131,6 +154,10 @@ impl AssetList {
 			}
 			visited[idx] = true;
 		} 
+	}
+	
+	pub fn recheck_status(&mut self) {
+		for asset in self.assets.iter_mut() { asset.recheck_status() }
 	}
 	
 	pub fn calc_mod_time_ances(&mut self) {

@@ -131,9 +131,9 @@ impl GemBS {
 		debug!("Inserting Asset({}): {} {} {:?}", ix, id, path.to_string_lossy(), asset_type);
 		ix
 	}
-	pub fn add_task(&mut self, id: &str, desc: &str, command: Command, args: &str, inputs: &[usize], outputs: &[usize]) -> usize {
+	pub fn add_task(&mut self, id: &str, desc: &str, command: Command, args: &str, inputs: &[usize], outputs: &[usize], log: Option<usize>) -> usize {
 		debug!("Adding task: {} {} {:?} {} in: {:?} out: {:?}", id, desc, command, args, inputs, outputs);
-		let task = self.tasks.add_task(id, desc, command, args, inputs, outputs);
+		let task = self.tasks.add_task(id, desc, command, args, inputs, outputs, log);
 		for inp in inputs.iter() {
 			if let Some(x) = self.assets.get_asset(*inp).unwrap().creator() { self.add_parent_child(task, x); }
 		}
@@ -255,6 +255,7 @@ impl GemBS {
 		Ok(())		
 	}
 	pub fn rescan_assets_and_tasks(&mut self, lock: &FileLock) -> Result<(), String> {
+		self.assets.recheck_status();
 		self.assets.calc_mod_time_ances();
 		self.handle_status(lock)?;
 		Ok(())				

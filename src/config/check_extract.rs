@@ -2,9 +2,9 @@
 // Make asset list for BCFs, BED, BigWig etc. associated with traction
 
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
-use crate::common::defs::{Section, DataValue, Command, ContigInfo};
+use crate::common::defs::{Section, DataValue, Command};
 use crate::common::assets::{AssetType, GetAsset};
+use crate::common::assets;
 use super::GemBS;
 
 pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
@@ -56,15 +56,21 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 		if !mextr_suff.is_empty() {
 			let mut out_vec = Vec::new();
 			for suff in mextr_suff.iter() { out_vec.push(handle_file(gem_bs, format!("{}_{}", bc, suff), extract_path))}
-			let task = gem_bs.add_task(format!("mextr_{}", bc).as_str(), format!("Extract methylation values for barcode {}", bc).as_str(),
-					Command::Extract, format!("{} --barcode {}", mextr_comm, bc).as_str(), &[bcf], &out_vec);
+			let id = format!("mextr_{}", bc);
+			let (lname, lpath) = assets::make_log_asset(&id, extract_path);
+			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
+			let task = gem_bs.add_task(&id, format!("Extract methylation values for barcode {}", bc).as_str(),
+					Command::Extract, format!("{} --barcode {}", mextr_comm, bc).as_str(), &[bcf], &out_vec, Some(log_index));
 			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
 		if !snpxtr_suff.is_empty() {
 			let mut out_vec = Vec::new();
 			for suff in snpxtr_suff.iter() { out_vec.push(handle_file(gem_bs, format!("{}_{}", bc, suff), extract_path))}
-			let task = gem_bs.add_task(format!("snpxtr_{}", bc).as_str(), format!("Extract SNPs for barcode {}", bc).as_str(),
-					Command::Extract, format!("--snps --barcode {}", bc).as_str(), &[bcf], &out_vec);
+			let id = format!("snpxtr_{}", bc);
+			let (lname, lpath) = assets::make_log_asset(&id, extract_path);
+			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
+			let task = gem_bs.add_task(&id, format!("Extract SNPs for barcode {}", bc).as_str(),
+					Command::Extract, format!("--snps --barcode {}", bc).as_str(), &[bcf], &out_vec, Some(log_index));
 			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
 	}

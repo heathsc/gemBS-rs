@@ -45,6 +45,7 @@ where
 	stage: Vec<(&'a Path, Option<I>)>,
 	output: PipelineOutput<'a>,
 	input: PipelineInput<'a>,
+	log: Option<PathBuf>,
 	expected_outputs: Vec<&'a Path>,
 }
 
@@ -54,7 +55,7 @@ where
     S: AsRef<OsStr>,
 {
 	pub fn new() -> Self {
-		Pipeline{stage: Vec::new(), output: PipelineOutput::None, input: PipelineInput::None, expected_outputs: Vec::new() }
+		Pipeline{stage: Vec::new(), output: PipelineOutput::None, input: PipelineInput::None, log: None, expected_outputs: Vec::new() }
 	}
 	// Add pipeline stage (command + optional vector of arguments)
 	pub fn add_stage(&mut self, command: &'a Path, args: Option<I>) -> &mut Pipeline<'a, I, S> {
@@ -65,6 +66,11 @@ where
 	pub fn out_file(&mut self, file: &'a Path) -> &mut Pipeline<'a, I, S> {
 		self.output = PipelineOutput::File(file);
 		self.add_output(file)
+	}
+	// Send stderr of pipeline stages to file
+	pub fn log_file(&mut self, file: PathBuf) -> &mut Pipeline<'a, I, S> {
+		self.log = Some(file);
+		self
 	}
 	// Get output of pipeline to file
 	pub fn in_file(&mut self, file: &'a Path) -> &mut Pipeline<'a, I, S> {
@@ -84,7 +90,11 @@ where
 	}
 	// Execute the pipeline
 	pub fn run(&mut self, sig: Arc<AtomicUsize>) -> Result<Option<Box<dyn BufRead>>, String> {
-		self.do_run(sig).map_err(|e| {
+		let log_file = if let Some(file) = &self.log {
+			let f = fs::File::create(file).map_err(|e| format!("Couldn't open output file {}: {}", file.to_string_lossy(), e))?;
+			Some(f)
+		} else { None };
+		self.do_run(sig, log_file).map_err(|e| {
 			for file in self.expected_outputs.iter() { 
 				if file.exists() {
 					warn!("Removing output file {}", file.to_string_lossy());
@@ -94,7 +104,7 @@ where
 			e
 		})
 	}
-	fn do_run(&mut self, sig: Arc<AtomicUsize>) -> Result<Option<Box<dyn BufRead>>, String> {
+	fn do_run(&mut self, sig: Arc<AtomicUsize>, log: Option<fs::File>) -> Result<Option<Box<dyn BufRead>>, String> {
 		if self.stage.is_empty() { return Err("Error - Empty pipeline".to_string()); }	
 		let mut len = self.stage.len();
 		let mut cinfo: Vec<(Child, &'a Path)> = Vec::new();
@@ -102,9 +112,9 @@ where
 		let mut opipe: Option<ChildStdout> = None;
 		for (com, args) in self.stage.drain(..) {
 			let mut cc = Command::new(com);
-			let mut cc = if let Some(c) = cinfo.last_mut() { 
+			let mut cc = if let Some((child, _)) = cinfo.last_mut() { 
 				desc.push_str(format!(" | {}", com.to_string_lossy()).as_str());
-				cc.stdin(c.0.stdout.take().unwrap()) 
+				cc.stdin(child.stdout.take().unwrap()) 
 			} else {
 				match self.input {
 					PipelineInput::File(file) => {
@@ -121,6 +131,9 @@ where
 					}, 
 				}
 			};
+			if let Some(lfile) = log.as_ref() { 
+				if let Ok(f) = lfile.try_clone() { cc = cc.stderr(f) }
+			} 
 			let mut arg_vec = Vec::new();
 			if let Some(a) = args { 
 				for arg in a { 
@@ -238,6 +251,7 @@ fn get_lock_path(path: &Path) -> Result<PathBuf, String> {
 	Ok(lock_path)		
 }
 
+#[derive(Debug)]
 pub struct FileLock<'a> {
 	lock_path: PathBuf,
 	path: &'a Path,

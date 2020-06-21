@@ -126,7 +126,7 @@ lazy_static! {
  	  	m.push(("sampling", OptionType::Global("sampling_rate", VarType::Int)));
 	  	m.push(("make_bs_index", OptionType::Local(VarType::Bool)));
 	  	m.push(("make_dbsnp_index", OptionType::Local(VarType::Bool)));
-	  	m.push(("make_nonbs_index", OptionType::Local(VarType::Bool)));
+	  	m.push(("dbsnp_files", OptionType::Global("dbsnp_files", VarType::StringVec)));
       	m.push(("dry_run", OptionType::Special("_dry_run", VarType::Bool)));
       	m.push(("json", OptionType::Special("_json", VarType::String)));
         m

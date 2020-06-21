@@ -17,6 +17,7 @@ pub struct Task {
 	inputs: Vec<usize>,
 	outputs: Vec<usize>,
 	parents: Vec<usize>,
+	log: Option<usize>,
 	idx: usize,
 	status: Option<TaskStatus>,
 	command: Command,
@@ -24,9 +25,9 @@ pub struct Task {
 }
 
 impl Task {
-	fn new(id: Rc<String>, desc: &str, idx: usize, command: Command, args: &str, inputs: Vec<usize>, outputs: Vec<usize>) -> Self {
+	fn new(id: Rc<String>, desc: &str, idx: usize, command: Command, args: &str, inputs: Vec<usize>, outputs: Vec<usize>, log: Option<usize>) -> Self {
 		Task{id, desc: desc.to_owned(), idx,
-		inputs, outputs, parents: Vec::new(),
+		inputs, outputs, parents: Vec::new(), log,
 		status: None, command, args: args.to_owned()}
 	}
 	pub fn idx(&self) -> usize { self.idx }
@@ -38,6 +39,7 @@ impl Task {
 	pub fn clear_status(&mut self) { self.status = None; }
 	pub fn add_parent(&mut self, ix: usize) { self.parents.push(ix) }
 	pub fn parents(&self) -> &[usize] { &self.parents }
+	pub fn log(&self) -> Option<usize> { self.log }
 	pub fn inputs(&self) -> std::slice::Iter<'_, usize> { self.inputs.iter() }
 	pub fn outputs(&self) -> std::slice::Iter<'_, usize> { self.outputs.iter() }
 	pub fn args(&self) -> &str { &self.args }
@@ -53,11 +55,11 @@ impl TaskList {
 	pub fn new() -> Self {
 		TaskList{tasks: Vec::new(), thash: HashMap::new() }
 	}	
-	pub fn add_task(&mut self, id: &str, desc: &str, command: Command, args: &str, inputs: &[usize], outputs: &[usize]) -> usize {
+	pub fn add_task(&mut self, id: &str, desc: &str, command: Command, args: &str, inputs: &[usize], outputs: &[usize], log: Option<usize>) -> usize {
 		let idx = self.tasks.len();
 		let rid = Rc::new(id.to_owned());
 		if self.thash.insert(Rc::clone(&rid), idx).is_some() { panic!("Task {} added twice", rid); }
-		self.tasks.push(Task::new(rid, desc, idx, command, args, inputs.to_vec(), outputs.to_vec()));
+		self.tasks.push(Task::new(rid, desc, idx, command, args, inputs.to_vec(), outputs.to_vec(), log));
 		idx
 	}
 	pub fn get_idx(&mut self, idx: usize) -> &mut Task {

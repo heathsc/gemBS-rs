@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::path::Path;
+use std::fs;
 
-use regex::Regex;
+use regex::{Regex, RegexSet};
 use lazy_static::lazy_static;
 
 use crate::config::GemBS;
@@ -43,28 +44,29 @@ fn check_inputs<'a>(gem_bs: &'a GemBS, task: &'a Task) -> (Vec<&'a Asset>, &'a s
 	(vfile, dataset)	
 }
 
-fn check_outputs<'a>(gem_bs: &'a GemBS, task: &'a Task) -> ([Option<&'a Asset>; 3], &'a str) {
+fn check_outputs<'a>(gem_bs: &'a GemBS, task: &'a Task) -> [Option<&'a Asset>; 3] {
 	lazy_static! {
-       static ref REBAM: Regex = Regex::new(r"^(.*)\.(bam|cram)$").unwrap();
+       static ref REBAM: Regex = Regex::new(r"^.*\.(bam|cram)$").unwrap();
        static ref REJSON: Regex = Regex::new(r"^.*\.json$").unwrap();
 	}
 	let mut ofiles = [None, None, None];
-	let mut base = None;
 	for ix in task.outputs() {
 		let asset = gem_bs.get_asset(*ix).expect("Missing asset");
 		if let Some(cap) = REBAM.captures(asset.id()) {
-			let x = match cap.get(2) {
+			let x = match cap.get(1) {
 				Some(i) => { if i.as_str() == "bam" { 0 } else { 1 }},
 				None => panic!("Unexpected match"),
 			};
 			ofiles[x] = Some(asset);
-			if let Some(dat) = cap.get(1) { base = Some(dat.as_str()); }
 		} else if REJSON.is_match(asset.id()) {
 			ofiles[2] = Some(asset);
 		}
+		if let Some(path) = asset.path().parent() {
+			fs::create_dir_all(path).expect("Could not create required output directories for map command");
+		}
 	}
-	if ofiles[2].is_none() || base.is_none() || (ofiles[0].is_none() && ofiles[1].is_none()) { panic!("Missing output files!"); }
-	(ofiles, base.unwrap())
+	if ofiles[2].is_none() || (ofiles[0].is_none() && ofiles[1].is_none()) { panic!("Missing output files!"); }
+	ofiles
 }
 
 
@@ -82,19 +84,21 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	let threads = gem_bs.get_config_int(Section::Mapping, "threads");
 	let mapping_threads = gem_bs.get_config_int(Section::Mapping, "mapping_threads").or(threads);
 	let sort_threads = gem_bs.get_config_int(Section::Mapping, "sort_threads").or(mapping_threads);
-	let mut pipeline = QPipe::new();
+	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
 	let mapper_path = gem_bs.get_exec_path("gem-mapper");
 	let mut mapper_args = if let Some(t) = mapping_threads { format!("--threads {} ", t) } else { String::new() };
 	let task = &gem_bs.get_tasks()[job];
-	
+	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
+	// Check type of mapping
+	let single_bam = task.id().starts_with("single_bam");
+		
 	// Check inputs
 	let (mut vfile, dataset) = check_inputs(gem_bs, task);
 	let index = vfile.pop().expect("No index found!");
 	
 	// Check outputs
-	let (outs, base) = check_outputs(gem_bs, task);
+	let outs = check_outputs(gem_bs, task);
 	let (outfile, cram) = if let Some(x) = outs[0] { (x, false) } else if let Some(x) = outs[1] { (x, false) } else { panic!("No mapping outfile set!") };
-	let merged_bam = base == dataset;
 	let tmp_dir = match gem_bs.get_config_str(Section::Mapping, "tmp_dir") {
 		Some(x) => Some(Path::new(x)),
 		None => outfile.path().parent(),
@@ -146,7 +150,7 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	if let Some(x) = tmp_dir { samtools_args.push_str(format!("-T {} ", x.to_string_lossy()).as_str())}
 	if let Some(x) = gem_bs.get_config_str(Section::Mapping, "sort_memory") { samtools_args.push_str(format!("-m {} ", x).as_str())}
 	if let Some(x) = sort_threads { samtools_args.push_str(format!("--threads {} ", x).as_str())}
-	if !merged_bam { samtools_args.push_str("--write-index ") }
+	if single_bam { samtools_args.push_str("--write-index ") }
 	if cram { samtools_args.push_str("-O CRAM ") }
 	if gem_bs.get_config_bool(Section::Mapping, "benchmark_mode") { samtools_args.push_str("--no-PG ") } else if cram {
 		let gembs_ref = gem_bs.get_asset("gembs_reference").expect("Couldn't find gemBS reference asset");

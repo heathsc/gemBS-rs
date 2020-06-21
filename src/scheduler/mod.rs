@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
-use std::fs;
-use std::thread;
+use std::sync::{Arc, mpsc};
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::{fs, thread, time};
 use std::ffi::OsStr;
 use custom_error::custom_error;
 
@@ -12,14 +13,17 @@ use crate::common::defs::{DataValue, Command, Section};
 use crate::common::tasks::{TaskStatus, RunningTask};
 use crate::common::utils::{Pipeline, FileLock};
 use crate::common::utils;
+use crate::common::assets::{GetAsset};
 
 mod map;
+mod index;
 
 #[derive(Debug)]
 struct RunJob {
 	id: String,
 	task_idx: usize,
 	path: PathBuf,	
+	runlist: Rc<RefCell<Vec<usize>>>,
 	signal: Arc<AtomicUsize>,
 }
 
@@ -42,15 +46,16 @@ impl Drop for RunJob {
 						if let Ok(writer) = lock.writer() {	let _ = serde_json::to_writer_pretty(writer, &nrun); }
 					} else { let _ = fs::remove_file(&self.path); }
 				} else { warn!("Could not load run queue"); }
+				self.runlist.borrow_mut().retain(|i| *i != self.task_idx);
 			},
 			Err(e) => { warn!("Could not obtain lock for run queue: {}", e); }
 		} 
     }
 }
 
-
+#[derive(Debug)]
 pub struct Scheduler<'a> {
-	running: Vec<usize>, // Tasks running on this machine
+	running: Rc<RefCell<Vec<usize>>>, // Tasks running on this machine
 	lock: Option<FileLock<'a>>,
 	task_list: &'a[usize],
 }
@@ -58,6 +63,7 @@ pub struct Scheduler<'a> {
 custom_error!{pub SchedulerError
 	NoTasks = "No tasks",
 	NoTasksReady = "No tasks ready to run", 
+	WaitingForTasks = "Waiting for tasks on this machine", 
 	NoSlots = "No execution slots available",
 	NoLock = "No lock obtained",
 	TaskTaken = "Task already taken (internal error)",
@@ -67,14 +73,16 @@ custom_error!{pub SchedulerError
 
 impl<'a> Scheduler<'a> {
 	fn new(task_list: &'a[usize]) -> Self { 
-		Scheduler{running: Vec::new(), lock: None, task_list }
+		Scheduler{running: Rc::new(RefCell::new(Vec::new())), lock: None, task_list }
 	}
+	fn is_empty(&self) -> bool { self.running.borrow().is_empty() }
 	fn set_lock(&mut self, lock: FileLock<'a>) { self.lock = Some(lock); }
 	fn drop_lock(&mut self) { self.lock = None; }
 	fn get_avail_slots(&mut self, gem_bs: &mut GemBS) -> usize {
 		let ncpus = num_cpus::get() as isize;
 		let mut avail = ncpus;
-		for ix in self.running.iter() {
+		let rf = self.running.borrow();
+		for ix in rf.iter() {
 			let n = match gem_bs.get_tasks()[*ix].command() {
 				Command::Index | Command::Map => 0,
 				Command::Call => {
@@ -89,6 +97,7 @@ impl<'a> Scheduler<'a> {
 		}
 		if avail < 0 { 0 } else { avail as usize }
 	}
+	
 	fn add_task(&mut self, gem_bs: &mut GemBS, ix: usize) -> Result<(), SchedulerError> {
 		let lock = self.lock.as_ref().unwrap();
 		let mut running: Vec<RunningTask> = if lock.path().exists() {
@@ -102,8 +111,10 @@ impl<'a> Scheduler<'a> {
 		running.push(RunningTask::from_task(task));
 		let writer = lock.writer().map_err(|e| SchedulerError::IoErr{desc: format!("Error: Could not open JSON config file {} for writing: {}", lock.path().to_string_lossy(), e)})?;
 		serde_json::to_writer_pretty(writer, &running).map_err(|e| SchedulerError::IoErr{desc: format!("Error: failed to write JSON config file {}: {}", lock.path().to_string_lossy(), e)})?;		
+		self.running.borrow_mut().push(ix);
 		Ok(())
 	}
+	
 	fn get_task(&mut self, gem_bs: &mut GemBS) -> Result<RunJob, SchedulerError> {
 		if self.task_list.is_empty() {return Err(SchedulerError::NoTasks)}
 		if self.lock.is_none() {return Err(SchedulerError::NoLock)}
@@ -118,7 +129,7 @@ impl<'a> Scheduler<'a> {
 				if let Some(TaskStatus::Ready) = task.status() {
 					avail_tasks = true;
 					match gem_bs.get_tasks()[*ix].command() {
-						Command::Index | Command::Map => if self.running.is_empty() { task_idx = Some(*ix); },
+						Command::Index | Command::Map => if self.running.borrow().is_empty() { task_idx = Some(*ix); },
 						_ => { task_idx = Some(*ix); },
 					}
 					if task_idx.is_some() { break; }
@@ -127,12 +138,17 @@ impl<'a> Scheduler<'a> {
 		}
 		if let Some(x) = task_idx { 
 			self.add_task(gem_bs, x)?;
-			let task = &gem_bs.get_tasks()[x];			
-			let rj = RunJob{id: task.id().to_string(), task_idx: x, path: self.lock.as_ref().unwrap().path().to_owned(), signal: gem_bs.get_signal_clone() };
+			let task = &gem_bs.get_tasks()[x];
+			let runlist = Rc::clone(&self.running);			
+			let rj = RunJob{id: task.id().to_string(), task_idx: x, path: self.lock.as_ref().unwrap().path().to_owned(), runlist, signal: gem_bs.get_signal_clone() };
 			self.drop_lock();
 			Ok(rj) 
-		} else if avail_tasks { Err(SchedulerError::NoSlots)}
-		else { Err(SchedulerError::NoTasksReady)}
+		} else {
+			self.drop_lock();	
+			if avail_tasks { Err(SchedulerError::NoSlots)}
+			else if self.running.borrow().is_empty() { Err(SchedulerError::NoTasksReady) }
+			else { Err(SchedulerError::WaitingForTasks)}
+		}
 	}
 }
 
@@ -140,53 +156,155 @@ impl<'a> Scheduler<'a> {
 pub struct QPipe {
 	stages: Vec<(PathBuf, String)>,
 	output: Option<PathBuf>,
+	log: Option<PathBuf>,
+	sig: Arc<AtomicUsize>,
 } 
 
 impl QPipe {
-	pub fn new() -> Self { QPipe{ stages: Vec::new(), output: None} }
+	pub fn new(sig: Arc<AtomicUsize>) -> Self { QPipe{ stages: Vec::new(), output: None, log: None, sig} }
 	pub fn add_stage(&mut self, path: &Path, args: &str) -> &mut Self {
 		self.stages.push((path.to_owned(), args.to_owned()));
 		self
 	}
 }
 
-fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: usize) -> Result<(), String> {
-	println!("Aha! {:?}", job);
+fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: usize) -> Option<QPipe> {
 	let task = &gem_bs.get_tasks()[job];
-	println!("Oho! {:?}", task);
-	
-	let pipeline = match task.command() {
+	match task.command() {
+		Command::Index => Some(index::make_index_pipeline(gem_bs, options, job)),
 		Command::Map => Some(map::make_map_pipeline(gem_bs, options, job)),
 		_ => None, 
-	};
-	println!("{:?}", pipeline);
+	}
+}
+
+fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx: isize) -> Result<(), String> {
+	loop {
+		match rx.recv() {
+			Ok(Some(qpipe)) => {
+				println!("Worker thread {} received job: {:?}", idx, qpipe);
+				let mut pipeline = Pipeline::new();
+				for (path, s) in qpipe.stages.iter() { pipeline.add_stage(path, Some(s.split_ascii_whitespace())); }
+				if let Some(file) = qpipe.log { pipeline.log_file(file.clone()); }
+				match if let Some(path) = qpipe.output { 
+					pipeline.out_file(&path); 
+					pipeline.run(qpipe.sig)
+				} else {
+					pipeline.run(qpipe.sig)
+				} {
+					Ok(_) => tx.send(idx).expect("Error sending message to parent"),
+					Err(e) => {
+						tx.send(-(idx + 1)).expect("Error sending message to parent");
+						return Err(e);
+					},
+				}			
+			},
+			Ok(None) => {
+				debug!("Worker thread {} received signal to shutdown", idx);
+				break;
+			}
+			Err(e) => {
+				error!("Worker thread {} received error: {}", idx, e);
+				break;
+			}
+		}
+	}
+	debug!("Worker thread {} shutting down", idx);
 	Ok(())
+}
+
+struct Worker {
+	handle: thread::JoinHandle<Result<(), String>>,
+	tx: mpsc::Sender<Option<QPipe>>,
 }
 
 pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize], flock: FileLock) -> Result<(), String> {
 	gem_bs.check_signal()?;
-	let task_path = gem_bs.get_task_file_path();
 	let mut sched = Scheduler::new(task_list);
+	let task_path = flock.path();
 	sched.set_lock(flock);
-	match sched.get_task(gem_bs) {
-		Ok(job) => handle_job(gem_bs, options, job.task_idx)?,
-		Err(e) => return Err(format!("{}", e)),
+	
+	// Set up workers
+	let (ctr_tx, ctr_rx) = mpsc::channel();
+	let mut avail = Vec::new();
+	let mut workers = Vec::new();
+	let mut jobs = Vec::new();
+	for ix in 0..8 {
+		let (tx, rx) = mpsc::channel();
+		let ctr = mpsc::Sender::clone(&ctr_tx);
+		let handle = thread::spawn(move || { worker_thread(ctr, rx, ix)});
+		workers.push(Worker{handle, tx});
+		avail.push(ix);
 	}
 	
+	loop {
+		gem_bs.check_signal()?;
+		let worker_ix = avail.pop();
+		if let Some(idx) = worker_ix {
+			match sched.get_task(gem_bs) {
+				Ok(job) => {
+					if let Some(qpipe) = handle_job(gem_bs, options, job.task_idx) {
+						jobs.push((job, idx));					
+						workers[idx as usize].tx.send(Some(qpipe)).expect("Error sending new command to worker thread");
+					}
+				},
+				Err(SchedulerError::NoSlots) | Err(SchedulerError::WaitingForTasks) => {
+					thread::sleep(time::Duration::from_millis(500));
+					avail.push(idx);
+				},
+				Err(SchedulerError::NoTasks) | Err(SchedulerError::NoTasksReady) => {
+					debug!("No tasks to do");
+					break;
+				},	
+				Err(e) => {
+					error!("Scheduler thread received error: {}", e);
+					break;					
+				},
+			}				
+		}
+		if !sched.is_empty() {
+			match ctr_rx.recv() {
+				Ok(x) if x >= 0 => {
+					debug!("Job completion by worker thread {}", x);
+					jobs.retain(|(_, ix)| *ix != x);
+					avail.push(x);
+				},
+				Ok(x) => {
+					error!("Error received from worker thread {}", -(x+1));
+					break;
+				},
+				Err(e) => {
+					error!("Scheduler thread received error: {}", e);
+					break;
+				}				
+			}
+		}
+		let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?;
+		gem_bs.rescan_assets_and_tasks(&flock)?;
+		sched.set_lock(flock);	
+	}
+	gem_bs.check_signal()?;
+	while !sched.is_empty() {
+		match ctr_rx.recv() {
+			Ok(x) if x >= 0 => {
+				debug!("Job completion by worker thread {}", x);
+				jobs.retain(|(_, ix)| *ix != x);
+			},
+			Ok(x) => {
+				error!("Error received from worker thread {}", -(x+1));
+				break;
+			},
+			Err(e) => {
+				error!("Scheduler thread received error: {}", e);
+				break;
+			}				
+		}
+	}	
 
-/*
-	println!("Aha! {:?}", idx);
-	let flock = utils::wait_for_lock(gem_bs, &task_path)?;
-	gem_bs.rescan_assets_and_tasks(&flock)?;
-	sched.set_lock(flock);
-	let idx1 = sched.get_task(gem_bs);
-	println!("Aha! {:?}", idx1);
-	let flock = utils::wait_for_lock(gem_bs, &task_path)?;
-	gem_bs.rescan_assets_and_tasks(&flock)?;
-	sched.set_lock(flock);
-	let idx2 = sched.get_task(gem_bs);
-	println!("Aha! {:?}", idx2);
-*/
+	for w in workers.drain(..) {
+		w.tx.send(None).expect("Error when shutting down thread");
+		w.handle.join().expect("Error received from worker at join")?;
+	}
+
 	Ok(())
 }
 
