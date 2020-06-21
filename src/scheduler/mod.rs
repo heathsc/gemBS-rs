@@ -5,7 +5,6 @@ use std::sync::{Arc, mpsc};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::{fs, thread, time};
-use std::ffi::OsStr;
 use custom_error::custom_error;
 
 use crate::config::GemBS;
@@ -78,6 +77,7 @@ impl<'a> Scheduler<'a> {
 	fn is_empty(&self) -> bool { self.running.borrow().is_empty() }
 	fn set_lock(&mut self, lock: FileLock<'a>) { self.lock = Some(lock); }
 	fn drop_lock(&mut self) { self.lock = None; }
+	fn check_lock(&self) -> bool {self.lock.is_some() }
 	fn get_avail_slots(&mut self, gem_bs: &mut GemBS) -> usize {
 		let ncpus = num_cpus::get() as isize;
 		let mut avail = ncpus;
@@ -120,6 +120,8 @@ impl<'a> Scheduler<'a> {
 		if self.lock.is_none() {return Err(SchedulerError::NoLock)}
 		let avail_slots = self.get_avail_slots(gem_bs);
 		trace!("Avail slots: {}", avail_slots);
+		println!("Avail slots: {}", avail_slots);
+		
 		let mut task_idx = None;
 		let mut avail_tasks = true;
 		if avail_slots > 0 {
@@ -170,9 +172,15 @@ impl QPipe {
 
 fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: usize) -> Option<QPipe> {
 	let task = &gem_bs.get_tasks()[job];
+	for p in task.outputs().map(|x| gem_bs.get_asset(*x).expect("Couldn't get output asset").path()) {
+		if let Some(par) = p.parent() {
+			fs::create_dir_all(par).expect("Could not create required output directories for map command");
+		}
+	}
 	match task.command() {
 		Command::Index => Some(index::make_index_pipeline(gem_bs, options, job)),
 		Command::Map => Some(map::make_map_pipeline(gem_bs, options, job)),
+		Command::MergeBams => Some(map::make_merge_bams_pipeline(gem_bs, options, job)),
 		_ => None, 
 	}
 }
@@ -235,11 +243,17 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 		workers.push(Worker{handle, tx});
 		avail.push(ix);
 	}
-	
+	let mut abort = false;
+	let mut no_slots = false;
 	loop {
 		gem_bs.check_signal()?;
-		let worker_ix = avail.pop();
-		if let Some(idx) = worker_ix {
+		let worker_ix = if no_slots { None } else { avail.pop() };
+		if let Some(idx) =  worker_ix {
+			if !sched.check_lock() {
+				let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?;
+				gem_bs.rescan_assets_and_tasks(&flock)?;
+				sched.set_lock(flock);
+			}	
 			match sched.get_task(gem_bs) {
 				Ok(job) => {
 					if let Some(qpipe) = handle_job(gem_bs, options, job.task_idx) {
@@ -247,8 +261,13 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 						workers[idx as usize].tx.send(Some(qpipe)).expect("Error sending new command to worker thread");
 					}
 				},
-				Err(SchedulerError::NoSlots) | Err(SchedulerError::WaitingForTasks) => {
-					thread::sleep(time::Duration::from_millis(500));
+				Err(SchedulerError::NoSlots) => {
+					thread::sleep(time::Duration::from_millis(1000));
+					avail.push(idx);
+					no_slots = true;
+				},
+				Err(SchedulerError::WaitingForTasks) => {
+					thread::sleep(time::Duration::from_millis(1000));
 					avail.push(idx);
 				},
 				Err(SchedulerError::NoTasks) | Err(SchedulerError::NoTasksReady) => {
@@ -259,10 +278,8 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 					error!("Scheduler thread received error: {}", e);
 					break;					
 				},
-			}				
-		}
-		if !sched.is_empty() {
-			match ctr_rx.recv() {
+			}
+			match ctr_rx.try_recv() {
 				Ok(x) if x >= 0 => {
 					debug!("Job completion by worker thread {}", x);
 					jobs.retain(|(_, ix)| *ix != x);
@@ -270,21 +287,42 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 				},
 				Ok(x) => {
 					error!("Error received from worker thread {}", -(x+1));
+					abort = true;
 					break;
 				},
+				Err(mpsc::TryRecvError::Empty) => {},
 				Err(e) => {
 					error!("Scheduler thread received error: {}", e);
+					abort = true;
+					break;
+				}				
+			}
+							
+		} else if !sched.is_empty() {
+			match ctr_rx.recv_timeout(time::Duration::from_millis(500)) {
+				Ok(x) if x >= 0 => {
+					debug!("Job completion by worker thread {}", x);
+					jobs.retain(|(_, ix)| *ix != x);
+					avail.push(x);
+					no_slots = false;
+				},
+				Ok(x) => {
+					error!("Error received from worker thread {}", -(x+1));
+					abort = true;
+					break;
+				},
+				Err(mpsc::RecvTimeoutError::Timeout) => {},
+				Err(e) => {
+					error!("Scheduler thread received error: {}", e);
+					abort = true;
 					break;
 				}				
 			}
 		}
-		let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?;
-		gem_bs.rescan_assets_and_tasks(&flock)?;
-		sched.set_lock(flock);	
 	}
-	gem_bs.check_signal()?;
-	while !sched.is_empty() {
-		match ctr_rx.recv() {
+	while !(abort || sched.is_empty()) {
+		gem_bs.check_signal()?;
+		match ctr_rx.recv_timeout(time::Duration::from_millis(500)) {
 			Ok(x) if x >= 0 => {
 				debug!("Job completion by worker thread {}", x);
 				jobs.retain(|(_, ix)| *ix != x);
@@ -293,18 +331,19 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 				error!("Error received from worker thread {}", -(x+1));
 				break;
 			},
+			Err(mpsc::RecvTimeoutError::Timeout) => {},
 			Err(e) => {
 				error!("Scheduler thread received error: {}", e);
 				break;
 			}				
 		}
 	}	
-
-	for w in workers.drain(..) {
-		w.tx.send(None).expect("Error when shutting down thread");
-		w.handle.join().expect("Error received from worker at join")?;
+	if !abort {
+		for w in workers.drain(..) {
+			w.tx.send(None).expect("Error when shutting down thread");
+			w.handle.join().expect("Error received from worker at join")?;
+		}
 	}
-
 	Ok(())
 }
 

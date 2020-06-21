@@ -274,7 +274,7 @@ impl GemBS {
 		let svec: Vec<(usize, TaskStatus)> = self.tasks.iter().map(|x| {
 			let mut s = self.task_status(x);
 			if hset.contains(x.id()) {
-				if s != TaskStatus::Ready { warn!("Task {} in running queue not in Ready state", x.id()) }
+				if s != TaskStatus::Ready && s != TaskStatus::Complete { warn!("Task {} in running queue in {:?} instead of Ready or Complete state", x.id(), s) }
 				s = TaskStatus::Running;
 			}
 			(x.idx(), s)

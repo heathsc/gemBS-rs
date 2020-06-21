@@ -61,9 +61,6 @@ fn check_outputs<'a>(gem_bs: &'a GemBS, task: &'a Task) -> [Option<&'a Asset>; 3
 		} else if REJSON.is_match(asset.id()) {
 			ofiles[2] = Some(asset);
 		}
-		if let Some(path) = asset.path().parent() {
-			fs::create_dir_all(path).expect("Could not create required output directories for map command");
-		}
 	}
 	if ofiles[2].is_none() || (ofiles[0].is_none() && ofiles[1].is_none()) { panic!("Missing output files!"); }
 	ofiles
@@ -160,5 +157,29 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	pipeline.add_stage(&mapper_path, &mapper_args)
 			.add_stage(&read_name_clean, &read_name_clean_args)
 			.add_stage(&samtools, &samtools_args);
+	pipeline
+}
+
+pub fn make_merge_bams_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: usize) -> QPipe
+{
+	let threads = gem_bs.get_config_int(Section::Mapping, "threads");
+	let merge_threads = gem_bs.get_config_int(Section::Mapping, "merge_threads").or(threads);
+	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
+	let samtools_path = gem_bs.get_exec_path("samtools");
+	let mut args = if let Some(t) = merge_threads { format!("merge --threads {} ", t) } else { String::from("merge") };
+	let task = &gem_bs.get_tasks()[job];
+	let output = gem_bs.get_asset(*task.outputs().next().expect("No output files for merge step")).expect("Couldn't get asset");
+	let cram = output.id().ends_with(".cram");
+	if cram { args.push_str("-O cram ") }
+	if gem_bs.get_config_bool(Section::Mapping, "benchmark_mode") { args.push_str("--no-PG ") } else if cram {
+		let gembs_ref = gem_bs.get_asset("gembs_reference").expect("Couldn't find gemBS reference asset");
+		args.push_str(format!("--reference {} ", gembs_ref.path().to_string_lossy()).as_str());
+	}
+	args.push_str(format!("-f {} ", output.path().to_string_lossy()).as_str());
+	for asset in task.inputs().map(|x| gem_bs.get_asset(*x).expect("Couldn't get asset")).filter(|x| x.id().ends_with(".bam")) {
+		args.push_str(format!("{} ", asset.path().to_string_lossy()).as_str());
+	}	
+	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
+	pipeline.add_stage(&samtools_path, &args);
 	pipeline
 }
