@@ -15,6 +15,7 @@ args:
     - ignore_times: {short: i, long: ignore-times, help: Ignore file modification times when evaluating the status of tasks}
     - all: {short: a, long: all, help: Consider all tasks required for the requested command}
     - ignore_status: {short: I, long: ignore-status, help: Ignore status of tasks when compiling task list}
+    - keep_logs: {short: k, long: keep-logs, help: Don't remove log files after successful completion of task}
 subcommands:
     - prepare:
         setting: DeriveDisplayOrder
@@ -124,7 +125,7 @@ subcommands:
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for merge step}
           - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
           - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
-          - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
+          - remove: {short: r, long: remove, help: Remove individual BCFs after merging}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
           - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}        

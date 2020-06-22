@@ -132,12 +132,12 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 		}
 		if !bams.is_empty() {
 			let out = handle_file(gem_bs, &sample.barcode, format!("{}{}", sample.barcode, suffix).as_str(), suffix, &bpath, AssetType::Temp);
-				let id = format!("merge-bam_{}", sample.barcode);
-				let (lname, lpath) = assets::make_log_asset(&id, &bpath);
-				let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
-				let task = gem_bs.add_task(&id, format!("Merge datasets for barcode {}", sample.barcode).as_str(),
-					Command::MergeBams, format!("--barcode {}", sample.barcode).as_str(), &bams, &[out], Some(log_index));
-				gem_bs.get_asset_mut(out).unwrap().set_creator(task, &bams);
+			let id = format!("merge-bam_{}", sample.barcode);
+			let (lname, lpath) = assets::make_log_asset(&id, &bpath);
+			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
+			let task = gem_bs.add_task(&id, format!("Merge datasets for barcode {}", sample.barcode).as_str(),
+				Command::MergeBams, format!("--barcode {}", sample.barcode).as_str(), &bams, &[out], Some(log_index));
+			gem_bs.get_asset_mut(out).unwrap().set_creator(task, &bams);
 		}
 	}
 	Ok(())

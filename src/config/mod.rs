@@ -141,6 +141,7 @@ impl GemBS {
 	}
 	pub fn get_tasks_iter(&self) -> slice::Iter<'_, Task> { self.tasks.iter() }
 	pub fn get_tasks(&self) -> &TaskList { &self.tasks }
+	pub fn get_tasks_mut(&mut self) -> &mut TaskList { &mut self.tasks }
 	pub fn add_parent_child(&mut self, child: usize, parent: usize) {
 		self.tasks.get_idx(child).add_parent(parent);
 	}	
@@ -343,9 +344,11 @@ impl GemBS {
 		let com_set = com_list.iter().fold(HashSet::new(), |mut hs, x| { hs.insert(*x); hs });
 		fn check_reqd(i: usize, reqd: &mut HashSet<usize>, tlist: &mut Vec<usize>, rf: &TaskList, com_set: &HashSet<Command>, ignore: bool) {
 			if ! reqd.contains(&i) {
-				for j in rf[i].parents() { check_reqd(*j, reqd, tlist, rf, com_set, ignore) }
 				reqd.insert(i);
-				let st = rf[i].status().unwrap();
+				let st = rf[i].status().expect("Status not set for task");
+				if ignore || st != TaskStatus::Complete {
+					for j in rf[i].parents() { check_reqd(*j, reqd, tlist, rf, com_set, ignore) }
+				}
 				if (ignore || st == TaskStatus::Ready || st == TaskStatus::Waiting) && 
 					com_set.contains(&rf[i].command()) { tlist.push(i); }
 			}

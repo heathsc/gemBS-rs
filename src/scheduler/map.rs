@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::fs;
 
-use regex::{Regex, RegexSet};
+use regex::Regex;
 use lazy_static::lazy_static;
 
 use crate::config::GemBS;
@@ -154,6 +153,7 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 		samtools_args.push_str(format!("--reference {} ", gembs_ref.path().to_string_lossy()).as_str());
 	}
 	samtools_args.push('-');
+	if gem_bs.get_config_bool(Section::Mapping, "keep_logs") { pipeline.set_remove_log(false) }
 	pipeline.add_stage(&mapper_path, &mapper_args)
 			.add_stage(&read_name_clean, &read_name_clean_args)
 			.add_stage(&samtools, &samtools_args);
@@ -176,10 +176,14 @@ pub fn make_merge_bams_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, 
 		args.push_str(format!("--reference {} ", gembs_ref.path().to_string_lossy()).as_str());
 	}
 	args.push_str(format!("-f {} ", output.path().to_string_lossy()).as_str());
+	let remove_bams = if let Some(DataValue::Bool(x)) = options.get("remove") { *x } else { 
+		gem_bs.get_config_bool(Section::Mapping, "remove_individual_bams") };	
 	for asset in task.inputs().map(|x| gem_bs.get_asset(*x).expect("Couldn't get asset")).filter(|x| x.id().ends_with(".bam")) {
 		args.push_str(format!("{} ", asset.path().to_string_lossy()).as_str());
+		if remove_bams { pipeline.add_remove_file(&asset.path()); }
 	}	
 	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
+	if gem_bs.get_config_bool(Section::Mapping, "keep_logs") { pipeline.set_remove_log(false) }
 	pipeline.add_stage(&samtools_path, &args);
 	pipeline
 }

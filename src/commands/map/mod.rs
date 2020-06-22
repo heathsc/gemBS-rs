@@ -12,11 +12,11 @@ fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataV
 	let suffix = if make_cram { "cram" } else { "bam" };
 	let mut asset_ids = Vec::new();
 	if let Some(DataValue::String(dataset)) = options.get("_dataset") {
-	if let Some(asset) = gem_bs.get_asset(format!("{}.bam", dataset).as_str()).or_else(|| {
-		if let Some(DataValue::String(bc)) = gem_bs.get_sample_data_ref().get(dataset).and_then(|rf| rf.get(&Metadata::SampleBarcode)) {
-			gem_bs.get_asset(format!("{}.{}", bc, suffix).as_str())
-		} else { None }
-	}) { asset_ids.push(asset.idx()) } else { return Err(format!("Unknown dataset {}", dataset)) }	
+		if let Some(asset) = gem_bs.get_asset(format!("{}.bam", dataset).as_str()).or_else(|| {
+			if let Some(DataValue::String(bc)) = gem_bs.get_sample_data_ref().get(dataset).and_then(|rf| rf.get(&Metadata::SampleBarcode)) {
+				gem_bs.get_asset(format!("{}.{}", bc, suffix).as_str())
+			} else { None }
+		}) { asset_ids.push(asset.idx()) } else { return Err(format!("Unknown dataset {}", dataset)) }	
 	} else if let Some(DataValue::String(barcode)) = options.get("_barcode") {
 		if let Some(asset) = gem_bs.get_asset(format!("{}.{}", barcode, suffix).as_str()) { asset_ids.push(asset.idx()) }	
 		else { return Err(format!("Unknown barcode {}", barcode)) }	
@@ -58,7 +58,7 @@ fn gen_map_command(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue
 	let task_list = gem_bs.get_required_tasks_from_asset_list(&asset_ids, &com_set);
 	if options.contains_key("_dry_run") { dry_run::handle_dry_run(gem_bs, &options, &task_list) }
 	if let Some(DataValue::String(json_file)) = options.get("_json") { dry_run::handle_json_tasks(gem_bs, &options, &task_list, json_file)?; }
-	if !(options.contains_key("_dry_run") || options.contains_key("_json")) { scheduler::schedule_jobs(gem_bs, &options, &task_list, flock)?; }	
+	if !(options.contains_key("_dry_run") || options.contains_key("_json")) { scheduler::schedule_jobs(gem_bs, &options, &task_list, &asset_ids, &com_set, flock)?; }	
 	Ok(())
 }
 

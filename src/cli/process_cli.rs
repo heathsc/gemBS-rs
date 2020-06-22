@@ -43,6 +43,7 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 
 	if let Some(s) = m.value_of("json") { gem_bs.set_config(Section::Default, "json_file", DataValue::String(s.to_string())); }
 	if let Some(s) = m.value_of("gembs_root") { gem_bs.set_config(Section::Default, "gembs_root", DataValue::String(s.to_string())); }
+	if m.is_present("keep_logs") { gem_bs.set_config(Section::Default, "keep_logs", DataValue::Bool(true)); }
 	if m.is_present("ignore_times") { gem_bs.set_ignore_times(true); }
 	if m.is_present("ignore_status") { gem_bs.set_ignore_status(true); }
 	if m.is_present("all") { gem_bs.set_all(true); }

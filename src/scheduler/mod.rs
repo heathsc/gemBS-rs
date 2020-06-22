@@ -56,7 +56,7 @@ impl Drop for RunJob {
 pub struct Scheduler<'a> {
 	running: Rc<RefCell<Vec<usize>>>, // Tasks running on this machine
 	lock: Option<FileLock<'a>>,
-	task_list: &'a[usize],
+	task_list: Vec<usize>,
 }
 
 custom_error!{pub SchedulerError
@@ -71,9 +71,10 @@ custom_error!{pub SchedulerError
 }
 
 impl<'a> Scheduler<'a> {
-	fn new(task_list: &'a[usize]) -> Self { 
+	fn new(task_list: Vec<usize>) -> Self { 
 		Scheduler{running: Rc::new(RefCell::new(Vec::new())), lock: None, task_list }
 	}
+	fn set_task_list(&mut self, task_list: Vec<usize>) { self.task_list = task_list; }
 	fn is_empty(&self) -> bool { self.running.borrow().is_empty() }
 	fn set_lock(&mut self, lock: FileLock<'a>) { self.lock = Some(lock); }
 	fn drop_lock(&mut self) { self.lock = None; }
@@ -84,18 +85,19 @@ impl<'a> Scheduler<'a> {
 		let rf = self.running.borrow();
 		for ix in rf.iter() {
 			let n = match gem_bs.get_tasks()[*ix].command() {
-				Command::Index | Command::Map => 0,
+				Command::Index | Command::Map => ncpus,
 				Command::Call => {
-					if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Calling, "jobs") { *x - 1 } else { ncpus - 1 }
+					if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Calling, "jobs") { *x } else { 1 }
 				},
 				Command::Extract => {
-					if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Extract, "jobs") { *x - 1 } else { ncpus - 1 }
+					if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Extract, "jobs") { *x } else { 1 }
 				},
-				_ => ncpus - 1,
-			};
-			if n < avail { avail = n }
+				_ => 1,
+			};			
+			if n < avail { avail -= n }
+			else { avail = 0 };
 		}
-		if avail < 0 { 0 } else { avail as usize }
+		avail as usize
 	}
 	
 	fn add_task(&mut self, gem_bs: &mut GemBS, ix: usize) -> Result<(), SchedulerError> {
@@ -116,25 +118,37 @@ impl<'a> Scheduler<'a> {
 	}
 	
 	fn get_task(&mut self, gem_bs: &mut GemBS) -> Result<RunJob, SchedulerError> {
-		if self.task_list.is_empty() {return Err(SchedulerError::NoTasks)}
+		if self.task_list.is_empty() { 
+			self.drop_lock();
+			return Err(SchedulerError::NoTasks)
+		}
 		if self.lock.is_none() {return Err(SchedulerError::NoLock)}
 		let avail_slots = self.get_avail_slots(gem_bs);
-		trace!("Avail slots: {}", avail_slots);
-		println!("Avail slots: {}", avail_slots);
-		
+		debug!("Avail slots: {}", avail_slots);
 		let mut task_idx = None;
 		let mut avail_tasks = true;
+		let ncpus = num_cpus::get();
+		let mut max = 0;
 		if avail_slots > 0 {
 			avail_tasks = false;
-			for ix in self.task_list {
+			for ix in self.task_list.iter() {
 				let task = &gem_bs.get_tasks()[*ix];
 				if let Some(TaskStatus::Ready) = task.status() {
 					avail_tasks = true;
-					match gem_bs.get_tasks()[*ix].command() {
-						Command::Index | Command::Map => if self.running.borrow().is_empty() { task_idx = Some(*ix); },
-						_ => { task_idx = Some(*ix); },
+					let n = match gem_bs.get_tasks()[*ix].command() {
+						Command::Index | Command::Map => ncpus,
+						Command::Call => {
+							if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Calling, "jobs") { *x as usize} else { 1 }
+						},
+						Command::Extract => {
+							if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Extract, "jobs") { *x as usize} else { 1 }
+						},
+						_ => 1,
+					};
+					if n <= avail_slots && n > max { 
+						max = n; 
+						task_idx = Some(*ix);
 					}
-					if task_idx.is_some() { break; }
 				}
 			}
 		}
@@ -157,17 +171,23 @@ impl<'a> Scheduler<'a> {
 #[derive(Debug)]
 pub struct QPipe {
 	stages: Vec<(PathBuf, String)>,
+	remove: Vec<PathBuf>,
 	output: Option<PathBuf>,
 	log: Option<PathBuf>,
+	remove_log: bool,
 	sig: Arc<AtomicUsize>,
 } 
 
 impl QPipe {
-	pub fn new(sig: Arc<AtomicUsize>) -> Self { QPipe{ stages: Vec::new(), output: None, log: None, sig} }
+	pub fn new(sig: Arc<AtomicUsize>) -> Self { QPipe{ stages: Vec::new(), remove: Vec::new(), output: None, log: None, remove_log: true, sig} }
 	pub fn add_stage(&mut self, path: &Path, args: &str) -> &mut Self {
 		self.stages.push((path.to_owned(), args.to_owned()));
 		self
 	}
+	pub fn set_remove_log(&mut self, flag: bool) { self.remove_log = flag; } 
+	pub fn get_remove_log(&self) -> bool { self.remove_log } 
+	pub fn add_remove_file(&mut self, path: &Path) { self.remove.push(path.to_owned()) }
+	pub fn get_remove_iter(&self) -> std::slice::Iter<'_, PathBuf> {self.remove.iter() }
 }
 
 fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: usize) -> Option<QPipe> {
@@ -189,17 +209,33 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 	loop {
 		match rx.recv() {
 			Ok(Some(qpipe)) => {
+				let rm_log = qpipe.get_remove_log();
+				let rm_list: Vec<_> = qpipe.get_remove_iter().cloned().collect();
 				println!("Worker thread {} received job: {:?}", idx, qpipe);
 				let mut pipeline = Pipeline::new();
 				for (path, s) in qpipe.stages.iter() { pipeline.add_stage(path, Some(s.split_ascii_whitespace())); }
-				if let Some(file) = qpipe.log { pipeline.log_file(file.clone()); }
+				let log = if let Some(file) = qpipe.log { pipeline.log_file(file.clone()); Some(file) } else { None };
 				match if let Some(path) = qpipe.output { 
 					pipeline.out_file(&path); 
 					pipeline.run(qpipe.sig)
 				} else {
 					pipeline.run(qpipe.sig)
 				} {
-					Ok(_) => tx.send(idx).expect("Error sending message to parent"),
+					Ok(_) => {
+						if rm_log {
+							if let Some(lfile) = log {
+								if let Err(e) = std::fs::remove_file(&lfile) {
+									error!("Could not remove log file {}: {}", lfile.to_string_lossy(), e);
+								}
+							}
+						}
+						for p in rm_list.iter() {
+							if let Err(e) = std::fs::remove_file(&p) {
+								error!("Could not remove file {}: {}", p.to_string_lossy(), e);
+							}
+						} 
+						tx.send(idx).expect("Error sending message to parent")
+					},
 					Err(e) => {
 						tx.send(-(idx + 1)).expect("Error sending message to parent");
 						return Err(e);
@@ -225,9 +261,10 @@ struct Worker {
 	tx: mpsc::Sender<Option<QPipe>>,
 }
 
-pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize], flock: FileLock) -> Result<(), String> {
+pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize], asset_ids: &[usize], com_set: &[Command], flock: FileLock) -> Result<(), String> {
 	gem_bs.check_signal()?;
-	let mut sched = Scheduler::new(task_list);
+	let tlist: Vec<_> = task_list.iter().copied().collect();
+	let mut sched = Scheduler::new(tlist);
 	let task_path = flock.path();
 	sched.set_lock(flock);
 	
@@ -252,6 +289,10 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 			if !sched.check_lock() {
 				let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?;
 				gem_bs.rescan_assets_and_tasks(&flock)?;
+				if !asset_ids.is_empty() {
+					let tlist = gem_bs.get_required_tasks_from_asset_list(asset_ids, com_set);
+					sched.set_task_list(tlist);
+				}
 				sched.set_lock(flock);
 			}	
 			match sched.get_task(gem_bs) {
@@ -262,11 +303,13 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 					}
 				},
 				Err(SchedulerError::NoSlots) => {
+					debug!("No Slots");
 					thread::sleep(time::Duration::from_millis(1000));
 					avail.push(idx);
 					no_slots = true;
 				},
 				Err(SchedulerError::WaitingForTasks) => {
+					debug!("Waiting for tasks");
 					thread::sleep(time::Duration::from_millis(1000));
 					avail.push(idx);
 				},
@@ -284,6 +327,7 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 					debug!("Job completion by worker thread {}", x);
 					jobs.retain(|(_, ix)| *ix != x);
 					avail.push(x);
+					no_slots = false;
 				},
 				Ok(x) => {
 					error!("Error received from worker thread {}", -(x+1));

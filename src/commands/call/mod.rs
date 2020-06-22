@@ -73,7 +73,7 @@ fn gen_call_command(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValu
 	let task_list = gem_bs.get_required_tasks_from_asset_list(&asset_ids, &com_set);
 	if options.contains_key("_dry_run") { dry_run::handle_dry_run(gem_bs, &options, &task_list); }
 	if let Some(DataValue::String(json_file)) = options.get("_json") { dry_run::handle_json_tasks(gem_bs, &options, &task_list, json_file)?; }
-	if !(options.contains_key("_dry_run") || options.contains_key("_json")) { scheduler::schedule_jobs(gem_bs, &options, &task_list, flock)?; }	
+	if !(options.contains_key("_dry_run") || options.contains_key("_json")) { scheduler::schedule_jobs(gem_bs, &options, &task_list, &asset_ids, &com_set, flock)?; }	
 	Ok(())
 }
 
