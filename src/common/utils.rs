@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::{thread, time};
 use blake2::{Blake2b, Digest};
 
-use compress::ReadType;
+use super::compress::ReadType;
 use crate::common::defs::{SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 
 pub fn get_inode(name: &str) -> Option<u64> {
@@ -122,7 +122,7 @@ where
 					PipelineInput::File(file) => {
 						let fname = file.to_string_lossy();
 						desc.push_str(format!("<cat> {} | {}",fname, com.to_string_lossy()).as_str());
-						match compress::open_reader(file).map_err(|e| format!("Couldn't open input file {} for pipeline: {}", fname, e))? {
+						match super::compress::open_reader(file).map_err(|e| format!("Couldn't open input file {} for pipeline: {}", fname, e))? {
 							ReadType::File(file) => cc.stdin(file),
 							ReadType::Pipe(pipe) => cc.stdin(pipe),
 						}

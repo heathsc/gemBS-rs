@@ -1,5 +1,6 @@
 use serde_json::{Value, Map};
 use std::path::Path;
+use crate::common::compress;
 use crate::config::GemBS;
 use crate::commands::prepare::metadata::SampleData;
 

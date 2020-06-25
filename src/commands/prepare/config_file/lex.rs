@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::common::utils::get_inode;
 use crate::common::defs::Section;
+use crate::common::compress;
 
 struct InFile {
 	name: String,

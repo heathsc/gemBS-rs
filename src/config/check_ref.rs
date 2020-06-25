@@ -5,8 +5,9 @@
 use crate::common::defs::{Section, Metadata, DataValue, Command, ContigInfo, ContigData};
 use crate::config::GemBS;
 use crate::common::utils::Pipeline;
-use crate::common::assets;
+use crate::common::{assets, compress};
 use crate::common::assets::{AssetType, GetAsset};
+
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::{BufRead, BufWriter, Write};
