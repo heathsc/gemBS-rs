@@ -178,7 +178,7 @@ fn check_dbsnp_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.check_signal()
 }
 
-fn make_contig_sizes(gem_bs: &mut GemBS) -> Result<(), String> {	
+pub fn make_contig_sizes(gem_bs: &mut GemBS) -> Result<(), String> {	
 	gem_bs.check_signal()?;
 	let reference = gem_bs.get_reference()?;
 	let tpath = Path::new(Path::new(reference).file_stem().unwrap()).with_extension("gemBS.contig_sizes");
@@ -253,7 +253,6 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.insert_asset("gembs_reference_fai", &gref_fai, AssetType::Derived);			
 	gem_bs.insert_asset("gembs_reference_gzi", &gref_gzi, AssetType::Derived);			
 	gem_bs.insert_asset("contig_md5", &ctg_md5, AssetType::Derived);	
-	make_contig_sizes(gem_bs)?;		
 	gem_bs.check_signal()
 }
 

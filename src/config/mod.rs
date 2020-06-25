@@ -250,6 +250,7 @@ impl GemBS {
 		self.check_signal()?;
 		check_ref::check_ref_and_indices(self)?;
 		self.contig_pool_digest = Some(contig::setup_contigs(self)?);
+		check_ref::make_contig_sizes(self)?;		
 		check_map::check_map(self)?;
 		check_call::check_call(self)?;
 		check_extract::check_extract(self)?;
