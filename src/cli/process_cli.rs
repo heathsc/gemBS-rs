@@ -75,9 +75,17 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 			debug!("User entered 'merge-bcf' command");
 			commands::call::merge_bcfs_command(m_sum, gem_bs)
 		},
+		("index-bcf", Some(m_sum)) => {
+			debug!("User entered 'index-bcf' command");
+			commands::call::index_bcf_command(m_sum, gem_bs)
+		},
 		("extract", Some(m_sum)) => {
 			debug!("User entered 'extract' command");
 			commands::extract::extract_command(m_sum, gem_bs)
+		},
+		("md5sum", Some(m_sum)) => {
+			debug!("User entered 'md5sum' command");
+			commands::md5sum::md5sum_command(m_sum, gem_bs)
 		},
 		_ => {
 			Err("Unknown subcommand".to_string())

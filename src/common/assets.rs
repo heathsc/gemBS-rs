@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::SystemTime;
 
@@ -9,7 +9,7 @@ use super::utils::calc_digest;
 pub enum AssetType { Supplied, Derived, Temp, Log }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AssetStatus { Present, Outdated, Absent }
+pub enum AssetStatus { Present, Outdated, Absent, Incomplete }
 
 #[derive(Debug, Clone)]
 pub struct Asset {
@@ -42,6 +42,7 @@ impl Asset {
 		Asset{id, path: path.to_owned(), idx, creator: None, parents: Vec::new(), asset_type, status, mod_time, mod_time_ances: mod_time}
 	}
 	pub fn recheck_status(&mut self) {
+		trace!("Rechecking status of asset {} {}", self.idx, self.id);
 		let (status, mod_time) = get_status_time(&self.path, self.asset_type);
 		self.status = status;
 		self.mod_time = mod_time;
@@ -61,8 +62,8 @@ impl Asset {
 	pub fn asset_type(&self) -> AssetType { self.asset_type }
 }
 
-pub fn make_log_asset(id: &str, par: &Path) -> (String, PathBuf) {
-	let lname = format!("{}.log", id);
+pub fn make_ext_asset(id: &str, par: &Path, ext: &str) -> (String, PathBuf) {
+	let lname = format!("{}.{}", id, ext);
 	let lpath: PathBuf = [par, Path::new(&lname)].iter().collect();
 	(lname, lpath) 
 }
@@ -136,7 +137,6 @@ impl AssetList {
 	fn calc_mta(&self, idx: usize, visited: &mut Vec<bool>, mtime: &mut Vec<Option<SystemTime>>) {
 		if !visited[idx] {
 			let asset = &self.assets[idx];
-			trace!("Getting mod_time_ances of {:?}", asset);
 			if let AssetType::Supplied = asset.asset_type {	mtime[idx] = asset.mod_time; }
 			else {
 				let cmp_time = |x: Option<SystemTime>, y: Option<SystemTime>| match (x, y) {
@@ -156,8 +156,28 @@ impl AssetList {
 		} 
 	}
 	
-	pub fn recheck_status(&mut self) {
-		for asset in self.assets.iter_mut() { asset.recheck_status() }
+	pub fn recheck_status(&mut self, hs: &HashSet<usize>) {
+		let len = self.assets.len();
+		let mut changed = vec!(None; len);
+		for asset in self.assets.iter_mut().filter(|x| x.asset_type != AssetType::Log) { 
+			if hs.contains(&asset.idx) { asset.status = AssetStatus::Incomplete }
+			else if asset.status != AssetStatus::Present {
+				let mut chg = None;
+				for i in asset.parents.iter() {
+					if let Some(x) = changed[*i] {
+						chg = Some(x);
+						if x { break; }
+					}
+				} 
+				changed[asset.idx] = match chg {
+					Some(false) => Some(false),
+					_ => {
+						asset.recheck_status();
+						Some(asset.status == AssetStatus::Present)					
+					},
+				};
+			}
+		}
 	}
 	
 	pub fn calc_mod_time_ances(&mut self) {

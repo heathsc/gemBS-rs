@@ -2,15 +2,16 @@
 // Make gemBS reference if required
 // Make asset list for refererences, indicies and other associated files
 
-use crate::common::defs::{Section, Metadata, DataValue, Command};
+use crate::common::defs::{Section, Metadata, DataValue, Command, ContigInfo, ContigData};
 use crate::config::GemBS;
 use crate::common::utils::Pipeline;
 use crate::common::assets;
 use crate::common::assets::{AssetType, GetAsset};
 use std::path::{Path, PathBuf};
 use std::fs;
-use std::io::BufRead;
+use std::io::{BufRead, BufWriter, Write};
 use glob::glob;
+use std::collections::HashSet;
 
 fn check_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	// Check reference file
@@ -176,6 +177,34 @@ fn check_dbsnp_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	}
 	gem_bs.check_signal()
 }
+
+fn make_contig_sizes(gem_bs: &mut GemBS) -> Result<(), String> {	
+	gem_bs.check_signal()?;
+	let reference = gem_bs.get_reference()?;
+	let tpath = Path::new(Path::new(reference).file_stem().unwrap()).with_extension("gemBS.contig_sizes");
+	let index_dir = if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::Index, "index_dir") { idx } else { panic!("Internal error - missing index_dir") }; 
+	let index_dir = Path::new(index_dir);
+	let contig_sizes: PathBuf = [index_dir, &tpath].iter().collect();
+	if !contig_sizes.exists() {
+		info!("Creating contig sizes file {}", contig_sizes.to_string_lossy());
+		let omit_ctgs = if let Some(DataValue::StringVec(v)) = gem_bs.get_config(Section::Index, "omit_ctgs") {
+			v.iter().fold(HashSet::new(), |mut h, x| { h.insert(x.as_str()); h })
+		} else { HashSet::new() };
+		let hr = gem_bs.get_contig_hash().get(&ContigInfo::Contigs).expect("No Contig defs entry");
+		let mut wr = BufWriter::new(fs::File::create(&contig_sizes)
+			.map_err(|e| format!("Couldn't open contig_sizes file {} for output: {}", contig_sizes.to_string_lossy(), e))?);
+		gem_bs.check_signal()?;
+		for (_, ctgdat) in hr.iter() {
+			if let ContigData::Contig(ctg) = ctgdat {
+				if !omit_ctgs.contains(ctg.name.as_str()) { writeln!(wr, "{}\t{}", ctg.name, ctg.len)
+						.map_err(|e| format!("Error writing to file {}: {}", contig_sizes.to_string_lossy(), e))?;
+				}
+			}
+		}			
+	}
+	gem_bs.insert_asset("contig_sizes", &contig_sizes, AssetType::Derived);	
+	Ok(())
+}
 	
 fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {	
 	let reference = gem_bs.get_reference()?;
@@ -184,8 +213,7 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	let mut gref = PathBuf::from(index_dir);
 	gref.push(tpath);
 	let gref_fai = gref.with_extension("ref.fai");
-	let gref_gzi = gref.
-	with_extension("ref.gzi");
+	let gref_gzi = gref.with_extension("ref.gzi");
 	let tpath = Path::new(Path::new(reference).file_stem().unwrap()).with_extension("gemBS.contig_md5");
 	let mut ctg_md5 = PathBuf::from(index_dir);
 	ctg_md5.push(tpath);
@@ -224,7 +252,8 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.insert_asset("gembs_reference", &gref, AssetType::Derived);			
 	gem_bs.insert_asset("gembs_reference_fai", &gref_fai, AssetType::Derived);			
 	gem_bs.insert_asset("gembs_reference_gzi", &gref_gzi, AssetType::Derived);			
-	gem_bs.insert_asset("contig_md5", &ctg_md5, AssetType::Derived);			
+	gem_bs.insert_asset("contig_md5", &ctg_md5, AssetType::Derived);	
+	make_contig_sizes(gem_bs)?;		
 	gem_bs.check_signal()
 }
 

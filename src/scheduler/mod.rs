@@ -8,7 +8,7 @@ use std::{fs, thread, time};
 use custom_error::custom_error;
 
 use crate::config::GemBS;
-use crate::common::defs::{DataValue, Command, Section};
+use crate::common::defs::{DataValue, Command, Section, VarType};
 use crate::common::tasks::{TaskStatus, RunningTask};
 use crate::common::utils::{Pipeline, FileLock};
 use crate::common::utils;
@@ -16,6 +16,8 @@ use crate::common::assets::{GetAsset};
 
 mod map;
 mod index;
+mod md5sum;
+mod call;
 
 #[derive(Debug)]
 struct RunJob {
@@ -172,6 +174,7 @@ impl<'a> Scheduler<'a> {
 pub struct QPipe {
 	stages: Vec<(PathBuf, String)>,
 	remove: Vec<PathBuf>,
+	outputs: Vec<PathBuf>,
 	output: Option<PathBuf>,
 	log: Option<PathBuf>,
 	remove_log: bool,
@@ -179,7 +182,7 @@ pub struct QPipe {
 } 
 
 impl QPipe {
-	pub fn new(sig: Arc<AtomicUsize>) -> Self { QPipe{ stages: Vec::new(), remove: Vec::new(), output: None, log: None, remove_log: true, sig} }
+	pub fn new(sig: Arc<AtomicUsize>) -> Self { QPipe{ stages: Vec::new(), remove: Vec::new(), outputs: Vec::new(), output: None, log: None, remove_log: true, sig} }
 	pub fn add_stage(&mut self, path: &Path, args: &str) -> &mut Self {
 		self.stages.push((path.to_owned(), args.to_owned()));
 		self
@@ -187,7 +190,10 @@ impl QPipe {
 	pub fn set_remove_log(&mut self, flag: bool) { self.remove_log = flag; } 
 	pub fn get_remove_log(&self) -> bool { self.remove_log } 
 	pub fn add_remove_file(&mut self, path: &Path) { self.remove.push(path.to_owned()) }
+	pub fn add_outputs(&mut self, path: &Path) { self.outputs.push(path.to_owned()) }
 	pub fn get_remove_iter(&self) -> std::slice::Iter<'_, PathBuf> {self.remove.iter() }
+	pub fn get_outputs_iter(&self) -> std::slice::Iter<'_, PathBuf> {self.outputs.iter() }
+	pub fn set_output(&mut self, out: Option<PathBuf>) { self.output = out; }
 }
 
 fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: usize) -> Option<QPipe> {
@@ -201,6 +207,10 @@ fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: u
 		Command::Index => Some(index::make_index_pipeline(gem_bs, options, job)),
 		Command::Map => Some(map::make_map_pipeline(gem_bs, options, job)),
 		Command::MergeBams => Some(map::make_merge_bams_pipeline(gem_bs, options, job)),
+		Command::Call => Some(call::make_call_pipeline(gem_bs, options, job)),
+		Command::MergeBcfs => Some(call::make_merge_bcfs_pipeline(gem_bs, options, job)),
+		Command::IndexBcf => Some(call::make_index_bcf_pipeline(gem_bs, job)),
+		Command::MD5Sum => Some(md5sum::make_md5sum_pipeline(gem_bs, job)),
 		_ => None, 
 	}
 }
@@ -211,10 +221,12 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 			Ok(Some(qpipe)) => {
 				let rm_log = qpipe.get_remove_log();
 				let rm_list: Vec<_> = qpipe.get_remove_iter().cloned().collect();
-				println!("Worker thread {} received job: {:?}", idx, qpipe);
+				debug!("Worker thread {} received job: {:?}", idx, qpipe);
 				let mut pipeline = Pipeline::new();
 				for (path, s) in qpipe.stages.iter() { pipeline.add_stage(path, Some(s.split_ascii_whitespace())); }
-				let log = if let Some(file) = qpipe.log { pipeline.log_file(file.clone()); Some(file) } else { None };
+				let olist: Vec<_> = qpipe.get_outputs_iter().cloned().collect();
+				olist.iter().for_each(|x| { pipeline.add_output(x); });
+				let log = if let Some(file) = qpipe.log { pipeline.log_file(file.clone()); Some(file) } else { None };				
 				match if let Some(path) = qpipe.output { 
 					pipeline.out_file(&path); 
 					pipeline.run(qpipe.sig)
@@ -222,6 +234,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 					pipeline.run(qpipe.sig)
 				} {
 					Ok(_) => {
+						debug!("Worker thread {} finished job", idx);
 						if rm_log {
 							if let Some(lfile) = log {
 								if let Err(e) = std::fs::remove_file(&lfile) {
@@ -390,4 +403,21 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 	}
 	Ok(())
 }
+
+pub fn add_command_opts(gem_bs: &GemBS, args: &mut String, sec: Section, opt_list: &[(&'static str, &'static str, VarType)]) {
+	for (x, y, t) in opt_list.iter() {
+		match t {
+			VarType::Bool => if gem_bs.get_config_bool(sec, x) { 
+				args.push_str(format!("--{} ", y).as_str()) },
+			VarType::Int => if let Some(i) = gem_bs.get_config_int(sec, x) { 
+				args.push_str(format!("--{} {} ", y, i).as_str()) },
+			VarType::String => if let Some(s) = gem_bs.get_config_str(sec, x) { 
+				args.push_str(format!("--{} {} ", y, s).as_str()) },
+			VarType::Float => if let Some(z) = gem_bs.get_config_float(sec, x) { 
+				args.push_str(format!("--{} {} ", y, z).as_str()) },
+			_ => (),
+		}
+	}
+}
+
 

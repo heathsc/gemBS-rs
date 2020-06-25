@@ -10,7 +10,6 @@ use super::GemBS;
 pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Mapping, name ) { x } else { "." } };
 	let extract_dir = get_dir("extract_dir").to_owned();
-	let strand_specific = gem_bs.get_config_bool(Section::Extract, "strand_specific");
 	let bw_strand_specific = gem_bs.get_config_bool(Section::Extract, "bigwig_strand_specific");
 	let non_cpg = gem_bs.get_config_bool(Section::Extract, "make_non_cpg");
 	let snps = gem_bs.get_config_bool(Section::Extract, "make_snps");
@@ -22,21 +21,24 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 	let mut mextr_suff: Vec<&str> = Vec::new();
 	let mut mextr_comm = String::new();
 	if cpg { 
-		["cpg.txt.gz", "cpg.txt.gz.tbi"].iter().for_each(|x| mextr_suff.push(x));
+		["cpg.txt.gz", "cpg.txt.gz.tbi", "cpg.txt.gz.md5"].iter().for_each(|x| mextr_suff.push(x));
 		mextr_comm.push_str(" --cpg");
 	}
 	if non_cpg {
-		["non_cpg.txt.gz", "non_cpg.txt.gz.tbi"].iter().for_each(|x| mextr_suff.push(x));
+		["non_cpg.txt.gz", "non_cpg.txt.gz.tbi", "non_cpg.txt.gz.md5"].iter().for_each(|x| mextr_suff.push(x));
 		mextr_comm.push_str(" --non-cpg");
 	}
 	if bedmethyl { 
-		["cpg.bed.gz", "cpg.bb", "chg.bed.gz", "chg.bb", "chh.bed.gz", "chh.bb"].iter().for_each(|x| mextr_suff.push(x));
-		if bw_strand_specific { ["pos.bw", "neg.bw"].iter().for_each(|x| mextr_suff.push(x)); }
-		else { mextr_suff.push(".bw") };
+		["cpg.bed.gz", "cpg.bed.gz.md5", "cpg.bb", "cpg.bb.md5", 
+		 "chg.bed.gz", "chg.bed.gz.md5", "chg.bb", "chg.bb.md5",
+		 "chh.bed.gz", "chh.bed.gz.md5", "chh.bb", "chh.bb.md5",].iter().for_each(|x| mextr_suff.push(x));
+		if bw_strand_specific { 
+			["pos.bw", "pos.bw.md5", "neg.bw", "neg.bw.md5"].iter().for_each(|x| mextr_suff.push(x)); 
+		} else { [".bw", ".bw.md5"].iter().for_each(|x| mextr_suff.push(x)); }
 		mextr_comm.push_str(" --bed-methyl");
 	}
 	let mut snpxtr_suff: Vec<&str> = Vec::new();
-	if snps { ["_snps.txt.gz", "_snps.txt.gz.tbi"].iter().for_each(|x| snpxtr_suff.push(x)) }
+	if snps { ["snps.txt.gz", "snps.txt.gz.md5", "snps.txt.gz.tbi"].iter().for_each(|x| snpxtr_suff.push(x)) }
 	let snp_list = if let Some(DataValue::String(s)) = gem_bs.get_config(Section::Index, "snp_list") { Some(PathBuf::from(s)) } else { None };
 	if let Some(p) = snp_list { snpxtr_inputs.push(gem_bs.insert_asset("snp_list", &p, AssetType::Supplied)); }
 	let handle_file = |gb: &mut GemBS, nm: String, p: &Path| {
@@ -57,7 +59,7 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 			let mut out_vec = Vec::new();
 			for suff in mextr_suff.iter() { out_vec.push(handle_file(gem_bs, format!("{}_{}", bc, suff), extract_path))}
 			let id = format!("mextr_{}", bc);
-			let (lname, lpath) = assets::make_log_asset(&id, extract_path);
+			let (lname, lpath) = assets::make_ext_asset(&id, extract_path, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Extract methylation values for barcode {}", bc).as_str(),
 					Command::Extract, format!("{} --barcode {}", mextr_comm, bc).as_str(), &[bcf], &out_vec, Some(log_index));
@@ -67,7 +69,7 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 			let mut out_vec = Vec::new();
 			for suff in snpxtr_suff.iter() { out_vec.push(handle_file(gem_bs, format!("{}_{}", bc, suff), extract_path))}
 			let id = format!("snpxtr_{}", bc);
-			let (lname, lpath) = assets::make_log_asset(&id, extract_path);
+			let (lname, lpath) = assets::make_ext_asset(&id, extract_path, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Extract SNPs for barcode {}", bc).as_str(),
 					Command::Extract, format!("--snps --barcode {}", bc).as_str(), &[bcf], &out_vec, Some(log_index));

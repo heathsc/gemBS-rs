@@ -12,8 +12,8 @@ args:
     - json: {short: j, long: json-file, takes_value: true, value_name: JSON, help: Location of gemBS JSON file}
     - dir: {short: d, long: dir, takes_value: true, value_name: DIR, help: set working directory}
     - gembs_root: {short :r, long: gembs-root, takes_value: true, value_name: DIR, help: set root of gemBS installation}
-    - ignore_times: {short: i, long: ignore-times, help: Ignore file modification times when evaluating the status of tasks}
     - all: {short: a, long: all, help: Consider all tasks required for the requested command}
+    - ignore_times: {short: i, long: ignore-times, help: Ignore file modification times when evaluating the status of tasks}
     - ignore_status: {short: I, long: ignore-status, help: Ignore status of tasks when compiling task list}
     - keep_logs: {short: k, long: keep-logs, help: Don't remove log files after successful completion of task}
 subcommands:
@@ -63,6 +63,7 @@ subcommands:
           - overconv_seq: {short: v, long: overconversion-sequence, value_name: SEQUENCE_NAME, takes_value: true, help: Name of overconversion sequencing control}
           - non_bs: {long: non-bs, help: Map as regular (non-bisulfite) data}
           - bs: {long: bs, help: Map as bisulfite data}
+          - no_md5: {long: no-md5, help: Do not automatically calculate md5 sums}
           - no_merge: {long: no-merge, help: Do not automatically merge BAMs}
           - dry_run: {long: dry-run, help: Output pending mapping commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
@@ -79,6 +80,7 @@ subcommands:
           - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
           - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
+          - no_md5: {long: no-md5, help: Do not automatically calculate md5 sums}
           - dry_run: {long: dry-run, help: Output pending mapping commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
           - benchmark_mode: {long: benchmark_mode, help: Omit dates etc. from output to make comparison simpler}
@@ -105,9 +107,11 @@ subcommands:
           - keep_unmatched: {short: k, long: keep-unmatched, help: Do not discard reads that do not form proper pairs}
           - species: {short: e, long: species, value_name: SPECIES, takes_value: true, help: Species name}
           - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
+          - no_md5: {long: no-md5, help: Do not automatically calculate md5 sums}
+          - no_index: {long: no-index, help: Do not automatically calculate index of final BCF}
           - haploid: {short: '1', long: haploid, help: Force genotype calls to be haploid}
           - conversion: {short: C, long: conversion, value_name: "UNDER OVER", takes_value: true, multiple: true, number_of_values: 2, help: "set conversion rates (under over)"}          
-          - ref_bias: {short: R, long: reference_bias, value_name: BIAS, takes_value: true, help: set bias to reference homozygote}          
+          - ref_bias: {short: R, long: reference-bias, value_name: BIAS, takes_value: true, help: set bias to reference homozygote}          
           - pool: {long: pool, value_name: POOL, takes_value: true, multiple: true, help: Contig pool for methylation calling}                   
           - no_merge: {long: no-merge, help: Do not automatically merge BAMs}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
@@ -125,6 +129,8 @@ subcommands:
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for merge step}
           - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
           - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
+          - no_md5: {long: no-md5, help: Do not automatically calculate md5 sum of merged BCF}
+          - no_index: {long: no-index, help: Do not automatically index merged BCF}
           - remove: {short: r, long: remove, help: Remove individual BCFs after merging}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
@@ -151,6 +157,7 @@ subcommands:
           - non_cpg: {short:N, long: non-cpg, help: Output gemBS bed with non-CpG sites}
           - bed_methyl: {short:B, long: bed-methyl, help: "Output ENCODE standard output (bedMethyl, bigBed and bigWig)"}
           - snps: {short:S, long: snps, help: Output SNPs}
+          - no_md5: {long: no-md5, help: Do not automatically calculate md5 sums}
           - snp_list: {long: snp-list, value_name: SNP_LIST, takes_value: true, help: Path to file with list of SNPs to output}          
           - snp_db: {long: snp-db, value_name: SNP_DB, takes_value: true, help: Path to dbSNP_idx processed SNP database file}          
           - dry_run: {long: dry-run, help: Output pending commands without execution}
@@ -171,6 +178,29 @@ subcommands:
           - project: {short: p, long: project, value_name: NAME, takes_value: true, help: Output title for report (project name)}
           - output_dir: {short: o, long: output-dir, value_name: PATH, takes_value: true, help: Output directory for call report}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for report pipeline}
+    - md5sum:
+        setting: DeriveDisplayOrder
+        about: Calculate md5 sums of output files (normally triggered automatically by the other commands)
+        args:
+          - scope: {case_insensitive: true, help: Types of output files to process, index: 1, possible_values: [map, call]}
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - dry_run: {long: dry-run, help: Output pending commands without execution}
+          - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
+        groups:
+          - sample_desc:
+             args: [sample, barcode] 
+    - index-bcf:
+        setting: DeriveDisplayOrder
+        about: Calculate index of final (merged) BCF files (normally triggered automatically by the call or bcf-merge commands)
+        args:
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - dry_run: {long: dry-run, help: Output pending commands without execution}
+          - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
+        groups:
+          - sample_desc:
+             args: [sample, barcode] 
     - db-sync:
         setting: DeriveDisplayOrder
         about: Synchronize database

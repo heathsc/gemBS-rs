@@ -5,11 +5,10 @@ use crate::config::GemBS;
 use crate::common::defs::{Section, Command, DataValue};
 use crate::common::assets::GetAsset;
 use crate::common::{dry_run, utils};
-use super::call;
 use crate::scheduler;
 
 fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>) -> Result<Vec<usize>, String> {	
-	let barcodes = call::get_barcode_list(gem_bs, options)?;
+	let barcodes = super::get_barcode_list(gem_bs, options)?;
 	let mut asset_list = Vec::new();
 	for bc in barcodes.iter() {
 		if gem_bs.get_config_bool(Section::Extract, "make_cpg") { asset_list.push(gem_bs.get_asset(format!("{}_cpg.txt.gz", bc).as_str()).unwrap().idx()) }

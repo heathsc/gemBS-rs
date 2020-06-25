@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 
 use crate::config::GemBS;
 use crate::common::assets::{Asset, GetAsset};
-use crate::common::defs::{DataValue, Section, Metadata, FileType};
+use crate::common::defs::{DataValue, Section, Metadata, FileType, VarType};
 use crate::common::tasks::Task;
 use super::QPipe;
 
@@ -77,6 +77,16 @@ fn get_read_groups(dataset: &str, href: &HashMap<Metadata, DataValue>) -> String
 
 pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: usize) -> QPipe
 {
+	lazy_static! {
+    	static ref OPT_LIST: Vec<(&'static str, &'static str, VarType)> = {
+        	let mut m = Vec::new();
+        	m.push(("underconversion_sequence", "underconversion-sequence", VarType::String));
+        	m.push(("overconversion_sequence", "overconversion-sequence", VarType::String));
+        	m.push(("benchmark_mode", "benchmark-mode", VarType::Bool));
+			m
+		};
+	}
+	
 	let threads = gem_bs.get_config_int(Section::Mapping, "threads");
 	let mapping_threads = gem_bs.get_config_int(Section::Mapping, "mapping_threads").or(threads);
 	let sort_threads = gem_bs.get_config_int(Section::Mapping, "sort_threads").or(mapping_threads);
@@ -86,7 +96,7 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	let task = &gem_bs.get_tasks()[job];
 	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
 	// Check type of mapping
-	let single_bam = task.id().starts_with("single_bam");
+	let single_bam = task.id().starts_with("single_map");
 		
 	// Check inputs
 	let (mut vfile, dataset) = check_inputs(gem_bs, task);
@@ -94,7 +104,7 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	
 	// Check outputs
 	let outs = check_outputs(gem_bs, task);
-	let (outfile, cram) = if let Some(x) = outs[0] { (x, false) } else if let Some(x) = outs[1] { (x, false) } else { panic!("No mapping outfile set!") };
+	let (outfile, cram) = if let Some(x) = outs[0] { (x, false) } else if let Some(x) = outs[1] { (x, true) } else { panic!("No mapping outfile set!") };
 	let tmp_dir = match gem_bs.get_config_str(Section::Mapping, "tmp_dir") {
 		Some(x) => Some(Path::new(x)),
 		None => outfile.path().parent(),
@@ -121,17 +131,13 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 		else { format!("bam2fq {}", vfile[0].path().to_string_lossy()) };
 		pipeline.add_stage(&bam2fq, &args);
 	} else { mapper_args.push_str(format!("-i {} ", vfile[0].path().to_string_lossy()).as_str()) }
-	if gem_bs.get_config_bool(Section::Mapping, "benchmark_mode") { mapper_args.push_str("--benchmark-mode ") }
 	if paired { mapper_args.push_str("--paired-end-alignment ")}
 	if gem_bs.get_config_bool(Section::Mapping, "non_stranded") { mapper_args.push_str("--bisulfite-conversion non-stranded ") }
 	else if gem_bs.get_config_bool(Section::Mapping, "reverse_conversion") { mapper_args.push_str("--bisulfite-conversion inferred-G2A-C2T ") }
 	else { mapper_args.push_str("--bisulfite-conversion inferred-C2T-G2A ") }
-	if let Some(x) = gem_bs.get_config_str(Section::Mapping, "underconversion_sequence") {
-		mapper_args.push_str(format!("--underconversion-sequence {} ", x).as_str())	
-	}
-	if let Some(x) = gem_bs.get_config_str(Section::Mapping, "overconversion_sequence") {
-		mapper_args.push_str(format!("--overconversion-sequence {} ", x).as_str())	
-	}
+	
+	super::add_command_opts(gem_bs, &mut mapper_args, Section::Mapping, &OPT_LIST);
+
 	mapper_args.push_str(format!("--report-file {} ", outs[2].unwrap().path().to_string_lossy()).as_str());
 	mapper_args.push_str(format!("--sam-read-group-header {}", read_groups).as_str());
 	
@@ -154,6 +160,8 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	}
 	samtools_args.push('-');
 	if gem_bs.get_config_bool(Section::Mapping, "keep_logs") { pipeline.set_remove_log(false) }
+	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get md5sum output asset").path()); }
+
 	pipeline.add_stage(&mapper_path, &mapper_args)
 			.add_stage(&read_name_clean, &read_name_clean_args)
 			.add_stage(&samtools, &samtools_args);
@@ -166,7 +174,8 @@ pub fn make_merge_bams_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, 
 	let merge_threads = gem_bs.get_config_int(Section::Mapping, "merge_threads").or(threads);
 	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
 	let samtools_path = gem_bs.get_exec_path("samtools");
-	let mut args = if let Some(t) = merge_threads { format!("merge --threads {} ", t) } else { String::from("merge") };
+	let mut args = String::from("merge --write-index ");
+	if let Some(x) = merge_threads { args.push_str(format!("--threads {} ", x).as_str())}
 	let task = &gem_bs.get_tasks()[job];
 	let output = gem_bs.get_asset(*task.outputs().next().expect("No output files for merge step")).expect("Couldn't get asset");
 	let cram = output.id().ends_with(".cram");
@@ -183,6 +192,7 @@ pub fn make_merge_bams_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, 
 		if remove_bams { pipeline.add_remove_file(&asset.path()); }
 	}	
 	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
+	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get md5sum output asset").path()); }
 	if gem_bs.get_config_bool(Section::Mapping, "keep_logs") { pipeline.set_remove_log(false) }
 	pipeline.add_stage(&samtools_path, &args);
 	pipeline

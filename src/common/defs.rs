@@ -151,7 +151,7 @@ pub enum VarType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Command {
-	Index, Map, MergeBams, Call, MergeBcfs, Extract, MapReport, CallReport,	
+	Index, Map, MergeBams, Call, MergeBcfs, Extract, MapReport, CallReport, MD5Sum,	IndexBcf
 }
 
 impl fmt::Display for Command {
@@ -165,6 +165,8 @@ impl fmt::Display for Command {
 			Command::Extract => write!(f, "extract"),
 			Command::MapReport => write!(f, "map-report"),
 			Command::CallReport => write!(f, "call-report"),
+			Command::MD5Sum => write!(f, "md5sum"),
+			Command::IndexBcf => write!(f, "index-bcf"),
 		}
 	}
 }

@@ -21,6 +21,7 @@ fn make_gem_index(gem_bs: &GemBS, job: usize, bisulfite: bool) -> QPipe
 	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
 	if let Some(x) = gem_bs.get_tasks()[job].log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
 	if gem_bs.get_config_bool(Section::Index, "keep_logs") { pipeline.set_remove_log(false) }
+	for out in gem_bs.get_tasks()[job].outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get md5sum output asset").path()); }
 	pipeline.add_stage(&gem_indexer, &args);	
 	pipeline	
 }

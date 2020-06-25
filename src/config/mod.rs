@@ -122,6 +122,9 @@ impl GemBS {
 	pub fn get_config_str(&self, section: Section, name: &str) -> Option<&str> {
 		if let Some(DataValue::String(x)) = self.get_config(section, name) { Some(x) } else { None }
 	}	
+	pub fn get_config_float(&self, section: Section, name: &str) -> Option<f64> {
+		if let Some(DataValue::Float(x)) = self.get_config(section, name) { Some(*x) } else { None }
+	}	
 	pub fn get_sample_data_ref(&self) ->  &HashMap<String, HashMap<Metadata, DataValue>> {
 		if let GemBSHash::SampleData(href) = &self.var[1] { &href }
 		else { panic!("Internal error!"); }
@@ -132,8 +135,9 @@ impl GemBS {
 		ix
 	}
 	pub fn add_task(&mut self, id: &str, desc: &str, command: Command, args: &str, inputs: &[usize], outputs: &[usize], log: Option<usize>) -> usize {
+//	pub fn add_task<S: AsRef<str>>(&mut self, id: S, desc: S, command: Command, args: S, inputs: &[usize], outputs: &[usize], log: Option<usize>) -> usize {
 		debug!("Adding task: {} {} {:?} {} in: {:?} out: {:?}", id, desc, command, args, inputs, outputs);
-		let task = self.tasks.add_task(id, desc, command, args, inputs, outputs, log);
+		let task = self.tasks.add_task(id, desc, command, args , inputs, outputs, log);
 		for inp in inputs.iter() {
 			if let Some(x) = self.assets.get_asset(*inp).unwrap().creator() { self.add_parent_child(task, x); }
 		}
@@ -252,22 +256,25 @@ impl GemBS {
 		self.asset_digest = Some(self.assets.get_digest());
 		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());
 		self.assets.calc_mod_time_ances();
-		self.handle_status(lock)?;
+		let running = get_running_tasks(lock)?;		
+		self.handle_status(&running)?;
 		Ok(())		
 	}
 	pub fn rescan_assets_and_tasks(&mut self, lock: &FileLock) -> Result<(), String> {
-		self.assets.recheck_status();
+		let running = get_running_tasks(lock)?;		
+		let running_ids = running.iter().map(|x| self.tasks.find_task(x.id())).fold(HashSet::new(), |mut h, x| {
+			if let Some(t) = x { self.tasks[t].outputs().for_each(|y| {h.insert(*y);}) }
+			h
+		});
+		self.assets.recheck_status(&running_ids);
 		self.assets.calc_mod_time_ances();
-		self.handle_status(lock)?;
+		self.handle_status(&running)?;
 		Ok(())				
 	}
-	fn handle_status(&mut self, lock: &FileLock) -> Result<(), String> {
+
+	fn handle_status(&mut self, running: &[RunningTask]) -> Result<(), String> {
 		self.tasks.iter_mut().for_each(|x| x.clear_status());
-		let running: Vec<RunningTask> = if lock.path().exists() {		
-			let reader = lock.reader().map_err(|e| format!("Error: Could not open JSON config file {} for reading: {}", lock.path().to_string_lossy(), e))?;
-			serde_json::from_reader(reader).map_err(|e| format!("Error: failed to read JSON config file {}: {}", lock.path().to_string_lossy(), e))?
-		} else { Vec::new() };
-		self.calc_task_statuses(&running);	
+		self.calc_task_statuses(running);	
 		Ok(())	
 	}
 	fn calc_task_statuses(&mut self, running: &[RunningTask]) {
@@ -367,6 +374,13 @@ impl GemBS {
 	}
 }
 
+fn get_running_tasks(lock: &FileLock) -> Result<Vec<RunningTask>, String> {
+	let running: Vec<RunningTask> = if lock.path().exists() {		
+		let reader = lock.reader().map_err(|e| format!("Error: Could not open JSON config file {} for reading: {}", lock.path().to_string_lossy(), e))?;
+		serde_json::from_reader(reader).map_err(|e| format!("Error: failed to read JSON config file {}: {}", lock.path().to_string_lossy(), e))?
+	} else { Vec::new() };
+	Ok(running)
+}
 impl GetAsset<usize> for GemBS {
 	fn get_asset(&self, idx: usize) -> Option<&Asset> {
 		self.assets.get_asset(idx)

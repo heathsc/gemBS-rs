@@ -32,7 +32,6 @@ impl Task {
 	}
 	pub fn idx(&self) -> usize { self.idx }
 	pub fn id(&self) -> &str { &self.id }
-	pub fn id_clone(&self) -> Rc<String> { Rc::clone(&self.id) }
 	pub fn command(&self) -> Command { self.command }
 	pub fn status(&self) -> Option<TaskStatus> { self.status }
 	pub fn set_status(&mut self, status: TaskStatus) { self.status = Some(status); }
@@ -113,9 +112,6 @@ pub struct RunningTask {
 }
 
 impl RunningTask {
-	pub fn new(id: String, command: String, args: String) -> Self {
-		RunningTask{id: Rc::new(id), command, args, caller: utils::get_user_host_string() }
-	}
 	pub fn from_task(task: &Task) -> Self {
 		RunningTask{id: Rc::clone(&task.id), command: format!("{}",task.command), 
 			args: task.args.clone(), caller: utils::get_user_host_string()}
