@@ -372,6 +372,26 @@ impl GemBS {
 		}
 		tlist
 	}
+	pub fn get_json_files_for_barcode(&self, barcode: &str) -> Vec<usize> {
+		let mut json_files = Vec::new();
+		if let Some(t) = self.tasks.find_task(format!("single_map_{}", barcode).as_str()) {
+			for i in self.tasks[t].outputs() {
+				let asset = self.get_asset(*i).expect("Couldn't get asset");
+				if asset.id().ends_with(".json") { json_files.push(asset.idx()) }
+			}		
+		} else if let Some(t) = self.tasks.find_task(format!("merge-bam_{}", barcode).as_str()) {
+			for ix in self.tasks[t].parents() {
+				let task = &self.tasks[*ix];
+				if task.id().starts_with("map_") {
+					for i in task.outputs() {
+						let asset = self.get_asset(*i).expect("Couldn't get asset");
+						if asset.id().ends_with(".json") { json_files.push(asset.idx()) }
+					}		
+				}
+			}
+		} else { panic!("Couldn't find map tasks for barcode"); }
+		json_files
+	}
 }
 
 fn get_running_tasks(lock: &FileLock) -> Result<Vec<RunningTask>, String> {

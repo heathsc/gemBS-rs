@@ -113,6 +113,7 @@ lazy_static! {
       	m.push(("left_trim", OptionType::Global("left_trim", VarType::Int)));
       	m.push(("right_trim", OptionType::Global("right_trim", VarType::Int)));
       	m.push(("conversion", OptionType::Global("conversion", VarType::FloatVec)));
+      	m.push(("auto_conversion", OptionType::Global("auto_conversion", VarType::Bool)));
     	m.push(("ref_bias", OptionType::Global("reference_bias", VarType::Float)));
       	m.push(("strand_specific", OptionType::Global("strand_specific", VarType::Bool)));
       	m.push(("bigwig_strand_specific", OptionType::Global("bigwig_strand_specific", VarType::Bool)));

@@ -111,6 +111,7 @@ subcommands:
           - no_index: {long: no-index, help: Do not automatically calculate index of final BCF}
           - haploid: {short: '1', long: haploid, help: Force genotype calls to be haploid}
           - conversion: {short: C, long: conversion, value_name: "UNDER OVER", takes_value: true, multiple: true, number_of_values: 2, help: "set conversion rates (under over)"}          
+          - auto_conversion: {long: auto-conversion, help: Try to calculate conversion rates from data}          
           - ref_bias: {short: R, long: reference-bias, value_name: BIAS, takes_value: true, help: set bias to reference homozygote}          
           - pool: {long: pool, value_name: POOL, takes_value: true, multiple: true, help: Contig pool for methylation calling}                   
           - no_merge: {long: no-merge, help: Do not automatically merge BAMs}

@@ -286,9 +286,7 @@ impl<'a> FileLock<'a> {
 pub fn get_signal(sig: Arc<AtomicUsize>) -> usize {
 	sig.load(Ordering::Relaxed)
 }
-pub fn set_signal(sig: Arc<AtomicUsize>, s: usize) -> usize {
-	sig.swap(s, Ordering::Relaxed)
-}
+
 pub fn check_signal(sig: Arc<AtomicUsize>) -> Result<(), String> {
 	match get_signal(sig) {
 		0 => Ok(()),

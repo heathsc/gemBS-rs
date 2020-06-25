@@ -207,7 +207,7 @@ fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: u
 		Command::Index => Some(index::make_index_pipeline(gem_bs, options, job)),
 		Command::Map => Some(map::make_map_pipeline(gem_bs, options, job)),
 		Command::MergeBams => Some(map::make_merge_bams_pipeline(gem_bs, options, job)),
-		Command::Call => Some(call::make_call_pipeline(gem_bs, options, job)),
+		Command::Call => Some(call::make_call_pipeline(gem_bs, job)),
 		Command::MergeBcfs => Some(call::make_merge_bcfs_pipeline(gem_bs, options, job)),
 		Command::IndexBcf => Some(call::make_index_bcf_pipeline(gem_bs, job)),
 		Command::MD5Sum => Some(md5sum::make_md5sum_pipeline(gem_bs, job)),

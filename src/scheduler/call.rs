@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
-use std::io::{BufWriter, Write};
+use serde_json::Value;
+use std::io::{BufWriter, Write, BufReader};
 use regex::Regex;
 use lazy_static::lazy_static;
 
 use crate::config::GemBS;
-use crate::common::assets::{Asset, GetAsset};
-use crate::common::defs::{DataValue, Section, Metadata, FileType, ContigInfo, ContigData, VarType};
+use crate::common::assets::GetAsset;
+use crate::common::defs::{DataValue, Section, ContigInfo, ContigData, VarType};
 use crate::common::tasks::Task;
 use super::QPipe;
 
@@ -51,7 +52,89 @@ fn make_pool_file(gem_bs: &GemBS, barcode: &str, pool: Option<&str>, output: &Pa
 	} else { None }
 }
 
-pub fn make_call_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: usize) -> QPipe
+#[derive(Debug)]
+struct BaseCounts {
+	read1: [usize; 4],
+	read2: [usize; 4],
+}
+
+impl BaseCounts {
+	fn new() -> Self { BaseCounts{read1: [0; 4], read2: [0; 4]}}
+}
+
+fn get_counts(val: &Value) -> Option<(usize, usize)> {
+	if let Value::Array(v) = val {
+		let mut cts = Vec::new();
+		for x in v.iter() {	if let Value::Number(y) = x { if let Some(i) = y.as_u64() { cts.push(i as usize) }}}
+		if cts.len() == 2 { Some((cts[0], cts[1])) }
+		else { None }
+	} else { None }
+}
+fn get_base_counts(map: &serde_json::map::Map<String, Value>, ct: &mut BaseCounts) {
+	let gct = |base, ix, ct: &mut BaseCounts| { if let Some((a, b)) = map.get(base).and_then(|x| get_counts(x)) { ct.read1[ix] += a; ct.read2[ix] += b; }};
+	gct("A", 0, ct);
+	gct("C", 1, ct);
+	gct("G", 2, ct);
+	gct("T", 3, ct);
+}
+fn add_conversion_counts(gem_bs: &GemBS, ix: usize, counts: &mut [BaseCounts; 2]) {
+	let path = gem_bs.get_asset(ix).expect("Couldn't get JSON asset").path();
+	let file = match fs::File::open(path) {
+		Err(e) => panic!("Couldn't open {}: {}", path.to_string_lossy(), e),
+		Ok(f) => f,
+	};
+	let reader = Box::new(BufReader::new(file));
+	let obj: Value = serde_json::from_reader(reader).expect("Couldn't parse JSON file");
+	if let Value::Object(x) = obj {
+		if let Some(Value::Object(bc)) = x.get("BaseCounts") {
+			let gc = |name, bc: &serde_json::map::Map<_, _>, ct: &mut BaseCounts| {
+				if let Some(Value::Object(cts)) = bc.get(name) { get_base_counts(cts, ct) }};	
+			gc("UnderConversionControlC2T", bc, &mut counts[0]);
+			gc("UnderConversionControlG2A", bc, &mut counts[0]);
+			gc("OverConversionControlC2T", bc, &mut counts[1]);
+			gc("OverConversionControlG2A", bc, &mut counts[1]);
+		}
+	}
+}
+	
+fn calc_conversion(cts: &BaseCounts) -> Option<f64> {
+	let n1 = cts.read1[0] + cts.read1[2] + cts.read2[1] + cts.read2[3];
+	let n2 = cts.read1[1] + cts.read1[3] + cts.read2[0] + cts.read2[2];
+	if (n1 + n2) >= 10000 && n1 > 0 && n2 > 0 {
+		let z = ((cts.read1[0] + cts.read2[3]) as f64) / (n1 as f64);
+		let a = ((cts.read1[3] + cts.read2[0]) as f64) * (1.0 - z) - ((cts.read1[1] + cts.read2[2]) as f64) * z;
+		let b = (n2 as f64) * (1.0 - z);
+		Some(a / b)	
+	} else { None }
+}
+
+fn get_conversion_rate(gem_bs: &GemBS, barcode: &str) -> (f64, f64) {
+	let (mut under, mut over) = if gem_bs.get_config_bool(Section::Calling, "auto_conversion") {	
+		let json_files = gem_bs.get_json_files_for_barcode(barcode);
+		let mut counts = [BaseCounts::new(), BaseCounts::new()];
+		for f in json_files.iter() { add_conversion_counts(gem_bs, *f, &mut counts); }
+		// Do some sanity checking to avoid using crazy values.
+		let under = calc_conversion(&counts[0]).and_then(|z| {
+			if z < 0.9 { None }
+			else if z < 0.999 { Some (1.0 - z) }
+			else { Some (0.001) }
+		});
+		let over = calc_conversion(&counts[1]).and_then(|z| {
+			if z > 0.15 { None }
+			else if z > 0.001 { Some (z) }
+			else { Some (0.001) }
+		});
+		(under, over)
+	} else { (None, None) };
+	// Bring in config values if conversion rates not set
+	if let Some(DataValue::FloatVec(v)) = gem_bs.get_config(Section::Calling, "conversion") {
+		if under.is_none() && !v.is_empty() { under = Some(v[0]) }
+		if over.is_none() && v.len() > 1 { over = Some(v[1]) }
+	}
+	(under.unwrap_or(0.01), over.unwrap_or(0.05))
+}
+
+pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 {
 	lazy_static! {
     	static ref OPT_LIST: Vec<(&'static str, &'static str, VarType)> = {
@@ -82,6 +165,7 @@ pub fn make_call_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVa
 	let contig_pool = make_pool_file(gem_bs, barcode, pool, output_bcf);
 	let contig_sizes = gem_bs.get_asset("contig_sizes").expect("Couldn't find contig sizes asset").path();
 	let gembs_ref = gem_bs.get_asset("gembs_reference").expect("Couldn't find gemBS reference asset");
+	let (under, over) = get_conversion_rate(gem_bs, barcode);
 	
 	// Set up bs_call arguments
 	let mut args = format!("--output {} --output-type b --reference {} --sample {} --contig-sizes {} --report-file {} "
@@ -91,6 +175,7 @@ pub fn make_call_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVa
 		pipeline.add_remove_file(&cp);
 	}
 	if let Some(t) = call_threads { args.push_str(format!("--threads {} ", t).as_str()); }
+	args.push_str(format!("--conversion {},{} ", under, over).as_str());
 	super::add_command_opts(gem_bs, &mut args, Section::Calling, &OPT_LIST);
 	args.push_str(&gem_bs.get_asset(in_bam).unwrap().path().to_string_lossy());
 
