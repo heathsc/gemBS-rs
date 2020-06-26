@@ -87,7 +87,7 @@ fn make_known_var_list() -> KnownVarList {
 	kv_list.add_known_var("jobs", VarType::Int, vec!(Section::Calling, Section::Extract));
 	kv_list.add_known_var("bcf_dir", VarType::String, vec!(Section::Calling));
 	kv_list.add_known_var("mapq_threshold", VarType::Int, vec!(Section::Calling));
-	kv_list.add_known_var("qual_threshold", VarType::Int, vec!(Section::Calling));
+	kv_list.add_known_var("qual_threshold", VarType::Int, vec!(Section::Calling, Section::Extract));
 	kv_list.add_known_var("left_trim", VarType::Int, vec!(Section::Calling));
 	kv_list.add_known_var("right_trim", VarType::Int, vec!(Section::Calling));
 	kv_list.add_known_var("species", VarType::String, vec!(Section::Calling));

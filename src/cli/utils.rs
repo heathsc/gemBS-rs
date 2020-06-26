@@ -110,6 +110,7 @@ lazy_static! {
      	m.push(("keep_unmatched", OptionType::Global("keep_improper_pairs", VarType::Bool)));
       	m.push(("mapq_threshold", OptionType::Global("mapq_threshold", VarType::Int)));
       	m.push(("qual_threshold", OptionType::Global("qual_threshold", VarType::Int)));
+      	m.push(("phred_threshold", OptionType::Global("phred_threshold", VarType::Int)));
       	m.push(("left_trim", OptionType::Global("left_trim", VarType::Int)));
       	m.push(("right_trim", OptionType::Global("right_trim", VarType::Int)));
       	m.push(("conversion", OptionType::Global("conversion", VarType::FloatVec)));
@@ -126,7 +127,7 @@ lazy_static! {
      	m.push(("bed_methyl", OptionType::Global("make_bedmethyl", VarType::Bool)));
      	m.push(("snps", OptionType::Global("make_snps", VarType::Bool)));
     	m.push(("snp_list", OptionType::Global("snp_list", VarType::String)));
-    	m.push(("snps_db", OptionType::Global("snps_db", VarType::String)));
+    	m.push(("snp_db", OptionType::Global("snp_db", VarType::String)));
  	  	m.push(("sampling", OptionType::Global("sampling_rate", VarType::Int)));
 	  	m.push(("make_bs_index", OptionType::Local(VarType::Bool)));
 	  	m.push(("make_dbsnp_index", OptionType::Local(VarType::Bool)));

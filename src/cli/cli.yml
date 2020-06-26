@@ -149,6 +149,7 @@ subcommands:
           - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
           - strand_specific: {short:s, long: strand-specific, help: Output separate lines in CpG file for each strand}
           - bigwig_strand_specific: {short:W, long: bigwig-strand-specific, help: Output separate bigWig files for each strand}
+          - qual_threshold: {short: Q, long: qual-threshold, value_name: QUAL_THRESHOLD, takes_value: true, help: Threshold for base quality scores}
           - phred_threshold: {short: q, long: phred_threshold, value_name: PHRED, takes_value: true, help: Minimum threshold for genotype PHRED score}
           - min_inform: {short: I, long: min-inform, value_name: N, takes_value: true, help: Minimum threshold for informative reads}
           - min_nc: {short: M, long: min-nc, value_name: N, takes_value: true, help: Minimum number of non-converted reads for non-CpG sites}
@@ -202,9 +203,3 @@ subcommands:
         groups:
           - sample_desc:
              args: [sample, barcode] 
-    - db-sync:
-        setting: DeriveDisplayOrder
-        about: Synchronize database
-        args:
-          - confirm: {short:y, long: yes, help: Confirm operation}
- 

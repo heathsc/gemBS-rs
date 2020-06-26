@@ -11,7 +11,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Mapping, name ) { x } else { "." } };
 	let bcf_dir = get_dir("bcf_dir").to_owned();
 	let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");
-	let ext = if make_cram { "cram" } else {"bam" };
+	let (ext, idx_ext) = if make_cram { ("cram", "cram.crai") } else { ("bam", "bam.csi") };
 	let samples = gem_bs.get_samples();
 	let pools = contig::get_contig_pools(gem_bs);
 	let mut common_inputs = Vec::new();
@@ -28,6 +28,8 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 	for (bcode, name) in samples.iter() {
 		let bam = if let Some(x) = gem_bs.get_asset(format!("{}.{}", bcode, ext).as_str()) { x.idx() } 
 		else { panic!("alignment file {}.{} not found", bcode, ext); };
+		let bam_idx = if let Some(x) = gem_bs.get_asset(format!("{}.{}", bcode, idx_ext).as_str()) { x.idx() } 
+		else { panic!("index file {}.{} not found", bcode, idx_ext); };
 		let replace_meta_var = |s: &str| {
 			if let Some(sm) = name { s.replace("@BARCODE", bcode).replace("@SAMPLE", sm) } else { s.replace("@BARCODE", bcode) }
 		};
@@ -38,6 +40,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 			for pool in pools.iter() {
 				let mut in_vec = common_inputs.clone();
 				in_vec.push(bam);
+				in_vec.push(bam_idx);
 				let out = handle_file(gem_bs, format!("{}_{}.bcf", bcode, pool), None, bcf_path);
 				let out1 = handle_file(gem_bs, format!("{}_{}.json", bcode, pool), Some(format!("{}_{}_call.json", bcode, pool)), bcf_path);
 				out_bcfs.push(out);

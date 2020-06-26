@@ -50,6 +50,8 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 	for (bc, name) in samples.iter() {
 		let bcf = if let Some(x) = gem_bs.get_asset(format!("{}.bcf", bc).as_str()) { x.idx() } 
 		else { panic!("alignment file {}.bcf not found", bc); };
+		let bcf_ix = if let Some(x) = gem_bs.get_asset(format!("{}.bcf.csi", bc).as_str()) { x.idx() } 
+		else { panic!("BCF index file {}.bcf.csi not found", bc); };
 		let replace_meta_var = |s: &str| {
 			if let Some(sm) = name { s.replace("@BARCODE", bc).replace("@SAMPLE", sm) } else { s.replace("@BARCODE", bc) }
 		};
@@ -62,7 +64,7 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 			let (lname, lpath) = assets::make_ext_asset(&id, extract_path, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Extract methylation values for barcode {}", bc).as_str(),
-					Command::Extract, format!("{} --barcode {}", mextr_comm, bc).as_str(), &[bcf], &out_vec, Some(log_index));
+					Command::Extract, format!("{} --barcode {}", mextr_comm, bc).as_str(), &[bcf, bcf_ix], &out_vec, Some(log_index));
 			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
 		if !snpxtr_suff.is_empty() {
@@ -72,7 +74,7 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 			let (lname, lpath) = assets::make_ext_asset(&id, extract_path, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Extract SNPs for barcode {}", bc).as_str(),
-					Command::Extract, format!("--snps --barcode {}", bc).as_str(), &[bcf], &out_vec, Some(log_index));
+					Command::Extract, format!("--snps --barcode {}", bc).as_str(), &[bcf, bcf_ix], &out_vec, Some(log_index));
 			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
 	}

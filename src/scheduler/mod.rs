@@ -18,6 +18,7 @@ mod map;
 mod index;
 mod md5sum;
 mod call;
+mod extract;
 
 #[derive(Debug)]
 struct RunJob {
@@ -211,6 +212,7 @@ fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: u
 		Command::MergeBcfs => Some(call::make_merge_bcfs_pipeline(gem_bs, options, job)),
 		Command::IndexBcf => Some(call::make_index_bcf_pipeline(gem_bs, job)),
 		Command::MD5Sum => Some(md5sum::make_md5sum_pipeline(gem_bs, job)),
+		Command::Extract => Some(extract::make_extract_pipeline(gem_bs, job)),
 		_ => None, 
 	}
 }
@@ -236,6 +238,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 					Ok(_) => {
 						debug!("Worker thread {} finished job", idx);
 						if rm_log {
+							trace!("Removing log file {:?}", log);
 							if let Some(lfile) = log {
 								if let Err(e) = std::fs::remove_file(&lfile) {
 									error!("Could not remove log file {}: {}", lfile.to_string_lossy(), e);

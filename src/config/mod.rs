@@ -122,6 +122,9 @@ impl GemBS {
 	pub fn get_config_str(&self, section: Section, name: &str) -> Option<&str> {
 		if let Some(DataValue::String(x)) = self.get_config(section, name) { Some(x) } else { None }
 	}	
+	pub fn get_config_stringvec(&self, section: Section, name: &str) -> Option<&Vec<String>> {
+		if let Some(DataValue::StringVec(x)) = self.get_config(section, name) { Some(x) } else { None }
+	}	
 	pub fn get_config_float(&self, section: Section, name: &str) -> Option<f64> {
 		if let Some(DataValue::Float(x)) = self.get_config(section, name) { Some(*x) } else { None }
 	}	
