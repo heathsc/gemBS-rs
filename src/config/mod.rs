@@ -165,7 +165,6 @@ impl GemBS {
 	pub fn read_json_config(&mut self) -> Result<(), String> {
 		self.check_signal()?;
 		let json_file = &self.fs.as_ref().unwrap().json_file;
-//		let lock = FileLock::new(json_file).map_err(|e| format!("Error: Could not obtain lock on JSON config file: {}", e))?;
 		let lock = timed_wait_for_lock(self.get_signal_clone(), json_file).map_err(|e| format!("Error: Could not obtain lock on JSON config file: {}", e))?;
 		let reader = lock.reader().map_err(|e| format!("Error: Could not open JSON config file {} for reading: {}", json_file.to_string_lossy(), e))?;
 		self.var = serde_json::from_reader(reader).map_err(|e| format!("Error: failed to read JSON config file {}: {}", json_file.to_string_lossy(), e))?;

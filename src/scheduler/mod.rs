@@ -55,11 +55,20 @@ impl Drop for RunJob {
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum SchedState {
+	Ready,
+	NoSlots,
+	Waiting(Option<time::SystemTime>),
+	Abort,
+}
+
 #[derive(Debug)]
 pub struct Scheduler<'a> {
 	running: Rc<RefCell<Vec<usize>>>, // Tasks running on this machine
 	lock: Option<FileLock<'a>>,
 	task_list: Vec<usize>,
+	state: SchedState,
 }
 
 custom_error!{pub SchedulerError
@@ -75,7 +84,7 @@ custom_error!{pub SchedulerError
 
 impl<'a> Scheduler<'a> {
 	fn new(task_list: Vec<usize>) -> Self { 
-		Scheduler{running: Rc::new(RefCell::new(Vec::new())), lock: None, task_list }
+		Scheduler{running: Rc::new(RefCell::new(Vec::new())), lock: None, task_list, state: SchedState::Ready }
 	}
 	fn set_task_list(&mut self, task_list: Vec<usize>) { self.task_list = task_list; }
 	fn is_empty(&self) -> bool { self.running.borrow().is_empty() }
@@ -128,6 +137,10 @@ impl<'a> Scheduler<'a> {
 		if self.lock.is_none() {return Err(SchedulerError::NoLock)}
 		let lock = self.lock.as_ref().unwrap();
 		let running_jobs = lock.path().exists();
+		let lmod_time = match lock.path().metadata() {
+			Ok(md) => md.modified().ok(),
+			_ => None
+		};
 		let avail_slots = self.get_avail_slots(gem_bs);
 		debug!("Avail slots: {}", avail_slots);
 		let mut task_idx = None;
@@ -166,9 +179,14 @@ impl<'a> Scheduler<'a> {
 			Ok(rj) 
 		} else {
 			self.drop_lock();	
-			if avail_tasks { Err(SchedulerError::NoSlots)}
-			else if !running_jobs { Err(SchedulerError::NoTasksReady) }
-			else { Err(SchedulerError::WaitingForTasks)}
+			if avail_tasks { 
+				self.state = SchedState::NoSlots;
+				Err(SchedulerError::NoSlots)
+			} else if !running_jobs { Err(SchedulerError::NoTasksReady) }
+			else {
+				self.state = SchedState::Waiting(lmod_time);
+				Err(SchedulerError::WaitingForTasks)
+			}
 		}
 	}
 }
@@ -256,6 +274,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 					},
 					Err(e) => {
 						tx.send(-(idx + 1)).expect("Error sending message to parent");
+						debug!("Worker thread {} shutting down after error", idx);
 						return Err(e);
 					},
 				}			
@@ -277,6 +296,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 struct Worker {
 	handle: thread::JoinHandle<Result<(), String>>,
 	tx: mpsc::Sender<Option<QPipe>>,
+	ix: usize,
 }
 
 pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize], asset_ids: &[usize], com_set: &[Command], flock: FileLock) -> Result<(), String> {
@@ -295,14 +315,29 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 		let (tx, rx) = mpsc::channel();
 		let ctr = mpsc::Sender::clone(&ctr_tx);
 		let handle = thread::spawn(move || { worker_thread(ctr, rx, ix)});
-		workers.push(Worker{handle, tx});
+		workers.push(Worker{handle, tx, ix: ix as usize});
 		avail.push(ix);
 	}
-	let mut abort = false;
-	let mut no_slots = false;
 	loop {
 		gem_bs.check_signal()?;
-		let worker_ix = if no_slots { None } else { avail.pop() };
+		let worker_ix = match sched.state {
+			SchedState::Ready => avail.pop(),
+			SchedState::Waiting(t) => {
+				// Check if run file has changed state since we entered SchedState::Waiting
+				let mt = match task_path.metadata() {
+					Ok(md) => md.modified().ok(),
+					_ => None,
+				};
+				if match (t, mt) {
+					(Some(x), Some(y)) => y > x,
+					_ => true, 
+				} {
+					sched.state = SchedState::Ready;
+					avail.pop()
+				} else { None }
+			},
+			_ => None,
+		};
 		if let Some(idx) =  worker_ix {
 			if !sched.check_lock() {
 				let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?;
@@ -324,7 +359,6 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 					debug!("No Slots");
 					thread::sleep(time::Duration::from_millis(1000));
 					avail.push(idx);
-					no_slots = true;
 				},
 				Err(SchedulerError::WaitingForTasks) => {
 					debug!("Waiting for tasks");
@@ -345,46 +379,47 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 					debug!("Job completion by worker thread {}", x);
 					jobs.retain(|(_, ix)| *ix != x);
 					avail.push(x);
-					no_slots = false;
+					sched.state = SchedState::Ready;
 				},
 				Ok(x) => {
 					error!("Error received from worker thread {}", -(x+1));
-					abort = true;
+					sched.state = SchedState::Abort;
 					break;
 				},
 				Err(mpsc::TryRecvError::Empty) => {},
 				Err(e) => {
 					error!("Scheduler thread received error: {}", e);
-					abort = true;
+					sched.state = SchedState::Abort;
 					break;
 				}				
 			}
 							
 		} else if !sched.is_empty() {
-			match ctr_rx.recv_timeout(time::Duration::from_millis(500)) {
+			match ctr_rx.recv_timeout(time::Duration::from_millis(1000)) {
 				Ok(x) if x >= 0 => {
 					debug!("Job completion by worker thread {}", x);
 					jobs.retain(|(_, ix)| *ix != x);
 					avail.push(x);
-					no_slots = false;
+					sched.state = SchedState::Ready;
 				},
 				Ok(x) => {
 					error!("Error received from worker thread {}", -(x+1));
-					abort = true;
+					sched.state = SchedState::Abort;
 					break;
 				},
 				Err(mpsc::RecvTimeoutError::Timeout) => {},
 				Err(e) => {
 					error!("Scheduler thread received error: {}", e);
-					abort = true;
+					sched.state = SchedState::Abort;
 					break;
 				}				
 			}
-		}
+		} else { thread::sleep(time::Duration::from_secs(5)) }
 	}
-	while !(abort || sched.is_empty()) {
+	while !sched.is_empty() {
+		if let SchedState::Abort = sched.state { break; }
 		gem_bs.check_signal()?;
-		match ctr_rx.recv_timeout(time::Duration::from_millis(500)) {
+		match ctr_rx.recv_timeout(time::Duration::from_millis(1000)) {
 			Ok(x) if x >= 0 => {
 				debug!("Job completion by worker thread {}", x);
 				jobs.retain(|(_, ix)| *ix != x);
@@ -400,13 +435,22 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 			}				
 		}
 	}	
-	if !abort {
+	if SchedState::Abort != sched.state {
 		for w in workers.drain(..) {
-			w.tx.send(None).expect("Error when shutting down thread");
-			w.handle.join().expect("Error received from worker at join")?;
+			if w.tx.send(None).is_err() {
+				debug!("Error when trying to send shutdown signal to worker thread {}", w.ix);
+				sched.state = SchedState::Abort;
+				break;
+			}
+			if w.handle.join().is_err() { 
+				debug!("Error received from worker {} at join", w.ix);
+				sched.state = SchedState::Abort;
+				break;
+			}
 		}
 	}
-	Ok(())
+	if let SchedState::Abort = sched.state { Err("Exiting after error".to_string()) }
+	else { Ok(()) }
 }
 
 pub fn add_command_opts(gem_bs: &GemBS, args: &mut String, sec: Section, opt_list: &[(&'static str, &'static str, VarType)]) {
