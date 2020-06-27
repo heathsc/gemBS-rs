@@ -91,25 +91,25 @@ impl<'a> Scheduler<'a> {
 	fn set_lock(&mut self, lock: FileLock<'a>) { self.lock = Some(lock); }
 	fn drop_lock(&mut self) { self.lock = None; }
 	fn check_lock(&self) -> bool {self.lock.is_some() }
-	fn get_avail_slots(&mut self, gem_bs: &mut GemBS) -> usize {
-		let ncpus = num_cpus::get() as isize;
+	fn get_avail_slots(&mut self, gem_bs: &mut GemBS) -> f64 {
+		let ncpus = num_cpus::get() as f64;
 		let mut avail = ncpus;
 		let rf = self.running.borrow();
 		for ix in rf.iter() {
 			let n = match gem_bs.get_tasks()[*ix].command() {
 				Command::Index | Command::Map => ncpus,
 				Command::Call => {
-					if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Calling, "jobs") { *x } else { 1 }
+					if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Calling, "jobs") { ncpus / (*x as f64) } else { 1.0 }
 				},
 				Command::Extract => {
-					if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Extract, "jobs") { *x } else { 1 }
+					if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Extract, "jobs") { ncpus / (*x as f64) } else { 1.0 }
 				},
-				_ => 1,
+				_ => 1.0,
 			};			
 			if n < avail { avail -= n }
-			else { avail = 0 };
+			else { avail = 0.0 };
 		}
-		avail as usize
+		avail + 0.0001
 	}
 	
 	fn add_task(&mut self, gem_bs: &mut GemBS, ix: usize) -> Result<(), SchedulerError> {
@@ -145,9 +145,9 @@ impl<'a> Scheduler<'a> {
 		debug!("Avail slots: {}", avail_slots);
 		let mut task_idx = None;
 		let mut avail_tasks = true;
-		let ncpus = num_cpus::get();
-		let mut max = 0;
-		if avail_slots > 0 {
+		let ncpus = num_cpus::get() as f64;
+		let mut max = 0.0;
+		if avail_slots > 0.0 {
 			avail_tasks = false;
 			for ix in self.task_list.iter() {
 				let task = &gem_bs.get_tasks()[*ix];
@@ -156,12 +156,12 @@ impl<'a> Scheduler<'a> {
 					let n = match gem_bs.get_tasks()[*ix].command() {
 						Command::Index | Command::Map => ncpus,
 						Command::Call => {
-							if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Calling, "jobs") { *x as usize} else { 1 }
+							if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Calling, "jobs") { ncpus / (*x as f64)} else { 1.0 }
 						},
 						Command::Extract => {
-							if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Extract, "jobs") { *x as usize} else { 1 }
+							if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Extract, "jobs") { ncpus / (*x as f64)} else { 1.0 }
 						},
-						_ => 1,
+						_ => 1.0,
 					};
 					if n <= avail_slots && n > max { 
 						max = n; 
