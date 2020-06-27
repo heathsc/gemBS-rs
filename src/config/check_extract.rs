@@ -64,7 +64,8 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 			let (lname, lpath) = assets::make_ext_asset(&id, extract_path, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Extract methylation values for barcode {}", bc).as_str(),
-					Command::Extract, format!("{} --barcode {}", mextr_comm, bc).as_str(), &[bcf, bcf_ix], &out_vec, Some(log_index));
+					Command::Extract, format!("{} --barcode {}", mextr_comm, bc).as_str());
+			gem_bs.add_task_inputs(task, &[bcf, bcf_ix]).add_outputs(&out_vec).set_log(Some(log_index)).set_barcode(bc);
 			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
 		if !snpxtr_suff.is_empty() {
@@ -74,7 +75,8 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 			let (lname, lpath) = assets::make_ext_asset(&id, extract_path, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Extract SNPs for barcode {}", bc).as_str(),
-					Command::Extract, format!("--snps --barcode {}", bc).as_str(), &[bcf, bcf_ix], &out_vec, Some(log_index));
+					Command::Extract, format!("--snps --barcode {}", bc).as_str());
+			gem_bs.add_task_inputs(task, &[bcf, bcf_ix]).add_outputs(&out_vec).set_log(Some(log_index)).set_barcode(bc);
 			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
 	}

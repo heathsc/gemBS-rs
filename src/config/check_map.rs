@@ -116,7 +116,8 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 				let (lname, lpath) = assets::make_ext_asset(&id, &bpath, "log");
 				let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);
 				let task = gem_bs.add_task(&id, format!("Map dataset {} for barcode {}", dat, sample.barcode).as_str(),
-					Command::Map, format!("--dataset {}", dat).as_str(), &in_vec, &[out1, out2], Some(log_index));
+					Command::Map, format!("--dataset {}", dat).as_str());
+				gem_bs.add_task_inputs(task, &in_vec).add_outputs(&[out1, out2]).set_log(Some(log_index)).set_barcode(&sample.barcode);
 				[out1, out2].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &in_vec));
 				bams.push(out1);
 			} else {
@@ -127,12 +128,14 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 				let (lname, lpath) = assets::make_ext_asset(&id, &bpath, "log");
 				let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 				let task = gem_bs.add_task(&id, format!("Map dataset {} for barcode {}", dat, sample.barcode).as_str(),
-					Command::Map, format!("--barcode {} --no-md5", sample.barcode).as_str(), &in_vec, &[out1, out2, out3], Some(log_index));
+					Command::Map, format!("--barcode {} --no-md5", sample.barcode).as_str());
+				gem_bs.add_task_inputs(task, &in_vec).add_outputs(&[out1, out2, out3]).set_log(Some(log_index)).set_barcode(&sample.barcode);
 				[out1, out2, out3].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &in_vec));
 				let (md5_name, md5_path)  = assets::make_ext_asset(gem_bs.get_asset_mut(out1).unwrap().id(), &bpath, "md5");
 				let md5 = gem_bs.insert_asset(&md5_name, &md5_path, AssetType::Derived);
 				let md5_task = gem_bs.add_task(&md5_name, format!("Calc MD5 sum for {}", id).as_str(),
-					Command::MD5Sum, format!("--barcode {} map", sample.barcode).as_str(), &[out1], &[md5], None);
+					Command::MD5Sum, format!("--barcode {} map", sample.barcode).as_str());
+				gem_bs.add_task_inputs(md5_task, &[out1]).add_outputs(&[md5]).set_barcode(&sample.barcode);
 				gem_bs.get_asset_mut(md5).unwrap().set_creator(md5_task, &[out1]);
 								
 			};
@@ -144,13 +147,15 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 			let (lname, lpath) = assets::make_ext_asset(&id, &bpath, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Merge datasets for barcode {}", sample.barcode).as_str(),
-				Command::MergeBams, format!("--barcode {} --no-md5", sample.barcode).as_str(), &bams, &[out1, out2], Some(log_index));
+				Command::MergeBams, format!("--barcode {} --no-md5", sample.barcode).as_str());
+			gem_bs.add_task_inputs(task, &bams).add_outputs(&[out1, out2]).set_log(Some(log_index)).set_barcode(&sample.barcode);
 			[out1, out2].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &bams));
 			let out_asset = gem_bs.get_asset_mut(out1).unwrap();
 			let (md5_name, md5_path)  = assets::make_ext_asset(out_asset.id(), &bpath, "md5");
 			let md5 = gem_bs.insert_asset(&md5_name, &md5_path, AssetType::Derived);
 			let md5_task = gem_bs.add_task(&md5_name, format!("Calc MD5 sum for {}", id).as_str(),
-				Command::MD5Sum, format!("--barcode {} map", sample.barcode).as_str(), &[out1], &[md5], None);
+				Command::MD5Sum, format!("--barcode {} map", sample.barcode).as_str());
+			gem_bs.add_task_inputs(md5_task, &[out1]).add_outputs(&[md5]).set_barcode(&sample.barcode);
 			gem_bs.get_asset_mut(md5).unwrap().set_creator(md5_task, &[out1]);
 		}
 	}

@@ -137,14 +137,15 @@ impl GemBS {
 		debug!("Inserting Asset({}): {} {} {:?}", ix, id, path.to_string_lossy(), asset_type);
 		ix
 	}
-	pub fn add_task(&mut self, id: &str, desc: &str, command: Command, args: &str, inputs: &[usize], outputs: &[usize], log: Option<usize>) -> usize {
-//	pub fn add_task<S: AsRef<str>>(&mut self, id: S, desc: S, command: Command, args: S, inputs: &[usize], outputs: &[usize], log: Option<usize>) -> usize {
-		debug!("Adding task: {} {} {:?} {} in: {:?} out: {:?}", id, desc, command, args, inputs, outputs);
-		let task = self.tasks.add_task(id, desc, command, args , inputs, outputs, log);
+	pub fn add_task_inputs(&mut self, task: usize, inputs: &[usize]) -> &mut Task {
 		for inp in inputs.iter() {
 			if let Some(x) = self.assets.get_asset(*inp).unwrap().creator() { self.add_parent_child(task, x); }
 		}
-		task
+		self.tasks.get_idx(task).add_inputs(inputs)
+	}
+	pub fn add_task(&mut self, id: &str, desc: &str, command: Command, args: &str) -> usize {
+		debug!("Adding task: {} {} {:?} {}", id, desc, command, args);
+		self.tasks.add_task(id, desc, command, args)
 	}
 	pub fn get_tasks_iter(&self) -> slice::Iter<'_, Task> { self.tasks.iter() }
 	pub fn get_tasks(&self) -> &TaskList { &self.tasks }
@@ -291,7 +292,7 @@ impl GemBS {
 			}
 			(x.idx(), s)
 		}).collect();
-		svec.iter().for_each(|(ix, s)| self.tasks[*ix].set_status(*s));
+		svec.iter().for_each(|(ix, s)| {self.tasks[*ix].set_status(*s);} );
 	}
 	pub fn task_status(&self, task: &Task) -> TaskStatus {
 		if let Some(s) = task.status() { return s; }
