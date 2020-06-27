@@ -94,7 +94,7 @@ fn make_snpxtr_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
 	let mut opt_list = Vec::new();
 	opt_list.push(("threads", "threads", VarType::Bool));
 	opt_list.push(("snp_list", "snps", VarType::String));
-	opt_list.push(("snp_db", "snp_db", VarType::String));
+	opt_list.push(("dbsnp_index", "dbsnp", VarType::String));
 	super::add_command_opts(gem_bs, &mut args, Section::Extract, &opt_list);
 	args.push_str(&in_bcf.to_string_lossy());
 

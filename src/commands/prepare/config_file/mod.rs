@@ -106,7 +106,6 @@ fn make_known_var_list() -> KnownVarList {
 	kv_list.add_known_var("contig_pool_limit", VarType::Int, vec!(Section::Calling));
 	kv_list.add_known_var("extract_dir", VarType::String, vec!(Section::Extract));
 	kv_list.add_known_var("snp_list", VarType::String, vec!(Section::Extract));
-	kv_list.add_known_var("snp_db", VarType::String, vec!(Section::Extract));
 	kv_list.add_known_var("allow_het", VarType::Bool, vec!(Section::Extract));
 	kv_list.add_known_var("phred_threshold", VarType::Int, vec!(Section::Extract));
 	kv_list.add_known_var("min_inform", VarType::Int, vec!(Section::Extract));

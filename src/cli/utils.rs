@@ -127,7 +127,7 @@ lazy_static! {
      	m.push(("bed_methyl", OptionType::Global("make_bedmethyl", VarType::Bool)));
      	m.push(("snps", OptionType::Global("make_snps", VarType::Bool)));
     	m.push(("snp_list", OptionType::Global("snp_list", VarType::String)));
-    	m.push(("snp_db", OptionType::Global("snp_db", VarType::String)));
+    	m.push(("snp_db", OptionType::Global("dbsnp_index", VarType::String)));
  	  	m.push(("sampling", OptionType::Global("sampling_rate", VarType::Int)));
 	  	m.push(("make_bs_index", OptionType::Local(VarType::Bool)));
 	  	m.push(("make_dbsnp_index", OptionType::Local(VarType::Bool)));
