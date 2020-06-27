@@ -126,6 +126,8 @@ impl<'a> Scheduler<'a> {
 			return Err(SchedulerError::NoTasks)
 		}
 		if self.lock.is_none() {return Err(SchedulerError::NoLock)}
+		let lock = self.lock.as_ref().unwrap();
+		let running_jobs = lock.path().exists();
 		let avail_slots = self.get_avail_slots(gem_bs);
 		debug!("Avail slots: {}", avail_slots);
 		let mut task_idx = None;
@@ -165,7 +167,7 @@ impl<'a> Scheduler<'a> {
 		} else {
 			self.drop_lock();	
 			if avail_tasks { Err(SchedulerError::NoSlots)}
-			else if self.running.borrow().is_empty() { Err(SchedulerError::NoTasksReady) }
+			else if !running_jobs { Err(SchedulerError::NoTasksReady) }
 			else { Err(SchedulerError::WaitingForTasks)}
 		}
 	}
