@@ -68,6 +68,7 @@ impl Task {
 	pub fn inputs(&self) -> std::slice::Iter<'_, usize> { self.inputs.iter() }
 	pub fn outputs(&self) -> std::slice::Iter<'_, usize> { self.outputs.iter() }
 	pub fn args(&self) -> &str { &self.args }
+	pub fn barcode(&self) -> Option<&String> { self.barcode.as_ref() }
 }
 
 #[derive(Debug)]

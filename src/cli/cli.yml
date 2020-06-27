@@ -203,3 +203,15 @@ subcommands:
         groups:
           - sample_desc:
              args: [sample, barcode] 
+    - run:
+        setting: DeriveDisplayOrder
+        about: Run all pending pipeline commands
+        args:
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - dry_run: {long: dry-run, help: Output pending commands without execution}
+          - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
+        groups:
+          - sample_desc:
+             args: [sample, barcode] 
+             

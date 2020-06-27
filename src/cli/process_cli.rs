@@ -87,6 +87,10 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 			debug!("User entered 'md5sum' command");
 			commands::md5sum::md5sum_command(m_sum, gem_bs)
 		},
+		("run", Some(m_sum)) => {
+			debug!("User entered 'run' command");
+			commands::run::run_command(m_sum, gem_bs)
+		},
 		_ => {
 			Err("Unknown subcommand".to_string())
 		},
