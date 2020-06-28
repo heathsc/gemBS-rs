@@ -66,6 +66,8 @@ fn make_known_var_list() -> KnownVarList {
 	kv_list.add_known_var("sampling_rate", VarType::Int, vec!(Section::Index));
 	kv_list.add_known_var("populate_cache", VarType::Bool, vec!(Section::Index));
 	kv_list.add_known_var("threads", VarType::Int, vec!(Section::Index, Section::Mapping, Section::Calling, Section::Extract, Section::Report));
+	kv_list.add_known_var("cores", VarType::Int, vec!(Section::Index, Section::Mapping, Section::Calling, Section::Extract, Section::Report));
+	kv_list.add_known_var("memory", VarType::Int, vec!(Section::Index, Section::Mapping, Section::Calling, Section::Extract, Section::Report));
 	kv_list.add_known_var("keep_logs", VarType::Bool, vec!(Section::Index, Section::Mapping, Section::Calling, Section::Extract, Section::Report));
 	kv_list.add_known_var("merge_threads", VarType::Int, vec!(Section::Mapping, Section::Calling));
 	kv_list.add_known_var("map_threads", VarType::Int, vec!(Section::Mapping));

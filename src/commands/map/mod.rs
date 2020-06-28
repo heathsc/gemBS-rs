@@ -11,31 +11,37 @@ fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataV
 	let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");		
 	let suffix = if make_cram { "cram" } else { "bam" };
 	let mut asset_ids = HashSet::new();
-	if let Some(DataValue::String(dataset)) = options.get("_dataset") {
-		if let Some(asset) = gem_bs.get_asset(format!("{}.bam", dataset).as_str()).or_else(|| {
-			if let Some(DataValue::String(bc)) = gem_bs.get_sample_data_ref().get(dataset).and_then(|rf| rf.get(&Metadata::SampleBarcode)) {
-				gem_bs.get_asset(format!("{}.{}", bc, suffix).as_str())
-			} else { None }
-		}) { asset_ids.insert(asset.idx()); } else { return Err(format!("Unknown dataset {}", dataset)) }	
-	} else if let Some(DataValue::String(barcode)) = options.get("_barcode") {
-		let mut id = format!("{}.{}", barcode, suffix);
-		if let Some(asset) = gem_bs.get_asset(id.as_str()) { asset_ids.insert(asset.idx()); }	
-		else { return Err(format!("Unknown barcode {}", barcode)) }
-		id.push_str(".md5");
-		asset_ids.insert(gem_bs.get_asset(id.as_str()).expect("Couldn't get md5 file for BAM").idx());
-	} else if let Some(DataValue::String(sample)) = options.get("_sample") {
-		let mut asset = None;
-		for hr in gem_bs.get_sample_data_ref().values() {
-			if let Some(DataValue::String(x)) = hr.get(&Metadata::SampleName) {
-				if x == sample {
-					if let Some(DataValue::String(bc)) = hr.get(&Metadata::SampleBarcode) {	
-						asset = gem_bs.get_asset(format!("{}.{}", bc, suffix).as_str());
-						break;
+	if let Some(DataValue::StringVec(dvec)) = options.get("_dataset") {
+		for dataset in dvec.iter() {
+			if let Some(asset) = gem_bs.get_asset(format!("{}.bam", dataset).as_str()).or_else(|| {
+				if let Some(DataValue::String(bc)) = gem_bs.get_sample_data_ref().get(dataset).and_then(|rf| rf.get(&Metadata::SampleBarcode)) {
+					gem_bs.get_asset(format!("{}.{}", bc, suffix).as_str())
+				} else { None }
+			}) { asset_ids.insert(asset.idx()); } else { return Err(format!("Unknown dataset {}", dataset)) }	
+		}
+	} else if let Some(DataValue::StringVec(bvec)) = options.get("_barcode") {
+		for barcode in bvec.iter() {
+			let mut id = format!("{}.{}", barcode, suffix);
+			if let Some(asset) = gem_bs.get_asset(id.as_str()) { asset_ids.insert(asset.idx()); }	
+			else { return Err(format!("Unknown barcode {}", barcode)) }
+			id.push_str(".md5");
+			asset_ids.insert(gem_bs.get_asset(id.as_str()).expect("Couldn't get md5 file for BAM").idx());
+		}
+	} else if let Some(DataValue::StringVec(svec)) = options.get("_sample") {
+		for sample in svec.iter() {
+			let mut asset = None;
+			for hr in gem_bs.get_sample_data_ref().values() {
+				if let Some(DataValue::String(x)) = hr.get(&Metadata::SampleName) {
+					if x == sample {
+						if let Some(DataValue::String(bc)) = hr.get(&Metadata::SampleBarcode) {	
+							asset = gem_bs.get_asset(format!("{}.{}", bc, suffix).as_str());
+							break;
+						}
 					}
 				}
 			}
+			if let Some(a) = asset { asset_ids.insert(a.idx()); } else { return Err(format!("Unknown sample {}", sample)) }	
 		}
-		if let Some(a) = asset { asset_ids.insert(a.idx()); } else { return Err(format!("Unknown sample {}", sample)) }	
 	} else {
 		let mut samples = HashSet::new();
 		for hr in gem_bs.get_sample_data_ref().values() {
@@ -73,7 +79,11 @@ pub fn map_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.read_json_config()?;
 	
 	let mut options = handle_options(m, gem_bs, Section::Mapping);
-	if options.contains_key("_dataset") { options.insert("_no_md5", DataValue::Bool(true)); }
+	if options.contains_key("_no_merge") { options.insert("_no_md5", DataValue::Bool(true)); }
+	if options.contains_key("_dataset") { 
+		options.insert("_no_md5", DataValue::Bool(true)); 
+		options.insert("_no_merge", DataValue::Bool(true)); 
+	}
 	gen_map_command(gem_bs, &options)
 }
 

@@ -82,6 +82,8 @@ lazy_static! {
         m.push(("merge_threads", OptionType::Global("merge_threads", VarType::Int)));
         m.push(("sort_threads", OptionType::Global("sort_threads", VarType::Int)));
         m.push(("call_threads", OptionType::Global("call_threads", VarType::Int)));
+        m.push(("cores", OptionType::Global("cores", VarType::Int)));
+        m.push(("memory", OptionType::Global("memory", VarType::Int)));
         m.push(("sort_memory", OptionType::Global("sort_memory", VarType::String)));
         m.push(("tmp_dir", OptionType::Global("tmp_dir", VarType::String)));
         m.push(("underconv_seq", OptionType::Global("underconversion_sequence", VarType::String)));
@@ -99,9 +101,9 @@ lazy_static! {
       	m.push(("remove", OptionType::Local(VarType::Bool)));
       	m.push(("paired", OptionType::Local(VarType::Bool)));
      	m.push(("file_type", OptionType::Local(VarType::FileType)));
-		m.push(("sample", OptionType::Special("_sample", VarType::String)));
-		m.push(("barcode", OptionType::Special("_barcode", VarType::String)));
-		m.push(("dataset", OptionType::Special("_dataset", VarType::String)));
+		m.push(("sample", OptionType::Special("_sample", VarType::StringVec)));
+		m.push(("barcode", OptionType::Special("_barcode", VarType::StringVec)));
+		m.push(("dataset", OptionType::Special("_dataset", VarType::StringVec)));
       	m.push(("list_pools", OptionType::Special("_list_pools", VarType::Int)));
       	m.push(("pool", OptionType::Special("_pool", VarType::StringVec)));
       	m.push(("haploid", OptionType::Global("haploid", VarType::Bool)));

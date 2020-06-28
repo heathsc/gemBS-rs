@@ -25,6 +25,15 @@ pub fn get_inode(name: &str) -> Option<u64> {
 	}
 }
 
+pub fn get_phys_memory() -> Option<usize> {
+	let (page_size, num_pages) = unsafe { 
+		(libc::sysconf(libc::_SC_PAGE_SIZE), libc::sysconf(libc::_SC_PHYS_PAGES))
+	};
+	if page_size > 0 && num_pages > 0 {
+		Some ((page_size as usize) * (num_pages as usize))
+	} else { None }
+}
+
 pub enum PipelineOutput<'a> {
 	File(&'a Path),
 	Pipe,

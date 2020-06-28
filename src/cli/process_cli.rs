@@ -47,6 +47,8 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 	if m.is_present("ignore_times") { gem_bs.set_ignore_times(true); }
 	if m.is_present("ignore_status") { gem_bs.set_ignore_status(true); }
 	if m.is_present("all") { gem_bs.set_all(true); }
+
+	info!("Total memory detected: {}", gem_bs.total_mem());
 	
 	// Now handle subcommands
 	

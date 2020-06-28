@@ -34,6 +34,8 @@ subcommands:
         about: Prepare genome indexes
         args:
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads (default - all available cores)}
+          - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - all available cores)}
+          - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - all available memory)}
           - sampling: {short: s, long: sampling-rate, value_name: SAMPLING_RATE, takes_value: true, help: Text sampling rate - increasing will decrease index size but also performance}
           - make_bs_index: {short: b, long: bs-index, help: Generate bisulfite index}
           - make_nonbs_index: {short: n, long: nonbs-index, help: Generate non-bisulfite (regular) index}
@@ -45,9 +47,11 @@ subcommands:
         setting: DeriveDisplayOrder
         about: Read mapping
         args:
-          - dataset: {short: D, long: dataset, value_name: DATASET, takes_value: true, help: Dataset to be mapped}
-          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
-          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - dataset: {short: D, long: dataset, value_name: DATASET, takes_value: true, multiple: true, help: Dataset to be mapped}
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, multiple: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample to be mapped}
+          - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - all available cores)}
+          - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - all available memory)}
           - tmp_dir: {short: d, long: tmp-dir, value_name: PATH, takes_value: true, help: Temporary directory to perform sorting operations}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for mapping pipeline}
           - map_threads: {long: map-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for GEM3 mapper}
@@ -76,9 +80,12 @@ subcommands:
         about: Merge BAM files for each sample (if required)
         args:
           - contigs: {short: l, long: contig-list, value_name: CONTIG, takes_value: true, multiple: true, help: List of contigs for methylation calling}
-          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
-          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, multiple: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample to be mapped}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
+          - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
+          - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
           - no_md5: {long: no-md5, help: Do not automatically calculate md5 sums}
           - dry_run: {long: dry-run, help: Output pending mapping commands without execution}
@@ -91,8 +98,8 @@ subcommands:
         setting: DeriveDisplayOrder
         about: Methylation and SNP calling
         args:
-          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
-          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, multiple: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample to be mapped}
           - mapq_threshold: {short: q, long: mapq-threshold, value_name: MAPQ_THRESHOLD, takes_value: true, help: Threshold for MAPQ scores}
           - qual_threshold: {short: Q, long: qual-threshold, value_name: QUAL_THRESHOLD, takes_value: true, help: Threshold for base quality scores}
           - right_trim: {short: g, long: right-trim, value_name: BASES, takes_value: true, help: Bases to trim from right of read}
@@ -102,6 +109,8 @@ subcommands:
           - call_threads: {long: call-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for methylation caller}
           - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for merging}
           - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
+          - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - keep_duplicates: {short: u, long: keep-duplicates, help: Do not merge duplicate reads}
           - ignore_duplicate_flag: {short: U, long: ignore-duplicate-flag, help: Ignore duplicate flag from SAM/BAM files}
           - keep_unmatched: {short: k, long: keep-unmatched, help: Do not discard reads that do not form proper pairs}
@@ -125,11 +134,13 @@ subcommands:
         setting: DeriveDisplayOrder
         about: Merge BCF files for each sample (if required)
         args:
-          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
-          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, multiple: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample to be mapped}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for merge step}
           - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
           - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
+          - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - no_md5: {long: no-md5, help: Do not automatically calculate md5 sum of merged BCF}
           - no_index: {long: no-index, help: Do not automatically index merged BCF}
           - remove: {short: r, long: remove, help: Remove individual BCFs after merging}
@@ -143,10 +154,12 @@ subcommands:
         setting: DeriveDisplayOrder
         about: Produce methylation and SNP summary files
         args:
-          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
-          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, multiple: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample to be mapped}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
+          - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - strand_specific: {short:s, long: strand-specific, help: Output separate lines in CpG file for each strand}
           - bigwig_strand_specific: {short:W, long: bigwig-strand-specific, help: Output separate bigWig files for each strand}
           - qual_threshold: {short: Q, long: qual-threshold, value_name: QUAL_THRESHOLD, takes_value: true, help: Threshold for base quality scores}
@@ -155,7 +168,7 @@ subcommands:
           - min_nc: {short: M, long: min-nc, value_name: N, takes_value: true, help: Minimum number of non-converted reads for non-CpG sites}
           - allow_het: {short:H, long: allow-het, help: Allow both homozygous and heterozygous sites}
           - ref_bias: {short: R, long: reference_bias, value_name: BIAS, takes_value: true, help: set bias to reference homozygote}          
-          - cpg: {short:c, long: cpg, help: Output gemBS bed with CpG sites}
+          - cpg: {short:C, long: cpg, help: Output gemBS bed with CpG sites}
           - non_cpg: {short:N, long: non-cpg, help: Output gemBS bed with non-CpG sites}
           - bed_methyl: {short:B, long: bed-methyl, help: "Output ENCODE standard output (bedMethyl, bigBed and bigWig)"}
           - snps: {short:S, long: snps, help: Output SNPs}
@@ -173,20 +186,28 @@ subcommands:
         args:
           - project: {short: p, long: project, value_name: NAME, takes_value: true, help: Output title for report (project name)}
           - output_dir: {short: o, long: output-dir, value_name: PATH, takes_value: true, help: Output directory for mapping report}
+          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
+          - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
     - call-report:
         setting: DeriveDisplayOrder
         about: Generate calling summary report
         args:
           - project: {short: p, long: project, value_name: NAME, takes_value: true, help: Output title for report (project name)}
           - output_dir: {short: o, long: output-dir, value_name: PATH, takes_value: true, help: Output directory for call report}
-          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for report pipeline}
+          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
+          - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
     - md5sum:
         setting: DeriveDisplayOrder
         about: Calculate md5 sums of output files (normally triggered automatically by the other commands)
         args:
           - scope: {case_insensitive: true, help: Types of output files to process, index: 1, possible_values: [map, call]}
-          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
-          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, multiple: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample to be mapped}
+          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
+          - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
         groups:
@@ -196,8 +217,12 @@ subcommands:
         setting: DeriveDisplayOrder
         about: Calculate index of final (merged) BCF files (normally triggered automatically by the call or bcf-merge commands)
         args:
-          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
-          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, multiple: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample to be mapped}
+          - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
+          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
+          - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
         groups:
@@ -207,11 +232,13 @@ subcommands:
         setting: DeriveDisplayOrder
         about: Run all pending pipeline commands
         args:
-          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, help: Name of sample to be mapped}
-          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, help: Barcode of sample to be mapped}
+          - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, multiple: true, help: Name of sample to be mapped}
+          - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample to be mapped}
+          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
+          - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
         groups:
           - sample_desc:
              args: [sample, barcode] 
-             
