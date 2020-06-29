@@ -83,7 +83,7 @@ lazy_static! {
         m.push(("sort_threads", OptionType::Global("sort_threads", VarType::Int)));
         m.push(("call_threads", OptionType::Global("call_threads", VarType::Int)));
         m.push(("cores", OptionType::Global("cores", VarType::Int)));
-        m.push(("memory", OptionType::Global("memory", VarType::Int)));
+        m.push(("memory", OptionType::Global("memory", VarType::String)));
         m.push(("sort_memory", OptionType::Global("sort_memory", VarType::String)));
         m.push(("tmp_dir", OptionType::Global("tmp_dir", VarType::String)));
         m.push(("underconv_seq", OptionType::Global("underconversion_sequence", VarType::String)));

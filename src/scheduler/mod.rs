@@ -4,8 +4,11 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, mpsc};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::{fs, thread, time};
 use custom_error::custom_error;
+use regex::Regex;
+use lazy_static::lazy_static;
 
 use crate::config::GemBS;
 use crate::common::defs::{DataValue, Command, Section, VarType};
@@ -82,6 +85,83 @@ custom_error!{pub SchedulerError
 	Signal = "Caught signal - quitting",
 }
 
+fn get_requirements(gem_bs: &GemBS, section: Section, default_all: bool) -> (f64, usize) {
+	lazy_static! { static ref RE: Regex = Regex::new(r"^(\d+)([kKmMgG]?)$").unwrap(); }
+
+	let ncpus = num_cpus::get() as isize;
+	let total_mem = gem_bs.total_mem();
+	let n = {
+		if let Some(x) = gem_bs.get_config_int(section, "cores") { if x > ncpus { ncpus as f64 } else {x as f64 }}
+		else if let Some(x) = gem_bs.get_config_int(section, "jobs") { if x > ncpus { 1.0 } else { (ncpus as f64) / (x as f64) }}
+		else if default_all { ncpus as f64 }
+		else { 1.0 }
+	};
+	let m = {
+		if let Some(x) = gem_bs.get_config_str(section, "memory") { 
+			if let Some(mem) = get_mem_from_str(x, total_mem) { mem }
+			else { panic!("Could not parse memory requirements {} for Section {:?}", x, section) }
+		} else if default_all { total_mem } else { 0 }
+	};
+	(n, m)
+}
+
+fn get_mem_from_str(s: &str, total_mem: usize) -> Option<usize> {
+	lazy_static! { static ref RE: Regex = Regex::new(r"^(\d+)([kKmMgG]?)$").unwrap(); }
+
+	let (mem, success) = {
+		if let Some(cap) = RE.captures(s) {
+			if let Ok(a) = <usize>::from_str(cap.get(1).unwrap().as_str()) {
+				let fact = if let Some(y) = cap.get(2) {
+					match y.as_str() {
+						"k" | "K" => 0x400,
+						"m" | "M" => 0x10000,
+						"g" | "G" => 0x40000000,
+						_ => 1,
+					}
+				} else { 1 };
+				if a > total_mem / fact { (total_mem, true) } else { (a * fact, true) }
+			} else { (0, false) }
+		} else { (0, false) }
+	};
+	if success { Some(mem) } else { None }
+}
+
+fn get_merge_bcf_req(gem_bs: &GemBS) -> (f64, usize) {
+	let (mut n, _) = get_requirements(gem_bs, Section::Calling, false);
+	let threads = gem_bs.get_config_int(Section::Calling, "threads");
+	let merge_threads = gem_bs.get_config_int(Section::Calling, "merge_threads").or(threads).map(|x| x as f64);
+	if let Some(t) = merge_threads { if t < n { n = t }	}
+	(n, 0)
+}
+
+fn get_merge_bam_req(gem_bs: &GemBS) -> (f64, usize) {
+	let (mut n, _) = get_requirements(gem_bs, Section::Mapping, false);
+	let threads = gem_bs.get_config_int(Section::Mapping, "threads");
+	let merge_threads = if let Some(t) = gem_bs.get_config_int(Section::Mapping, "merge_threads").or(threads) { t as usize } else { 1 };
+	if (merge_threads as f64) < n { n = merge_threads as f64 }
+	let total_mem = gem_bs.total_mem();
+	let mem_str = gem_bs.get_config_str(Section::Mapping, "sort_memory").unwrap_or("768M");
+	let tmem = if let Some(mem) = get_mem_from_str(mem_str, total_mem) { mem * merge_threads}
+	else { panic!("Could not parse memory requirements {} for BAM merging", mem_str) };
+	let m = if tmem > total_mem { total_mem } else { tmem };
+	(n, m)
+}
+
+fn get_command_req(gem_bs: &GemBS, com: Command) -> (f64, usize) {
+	match com {
+		Command::Index => get_requirements(gem_bs, Section::Index, true),
+		Command::Map => get_requirements(gem_bs, Section::Mapping, true),
+		Command::Call => get_requirements(gem_bs, Section::Calling, false),
+		Command::IndexBcf => get_requirements(gem_bs, Section::Calling, false),
+		Command::Extract => get_requirements(gem_bs, Section::Extract, false),
+		Command::MapReport => get_requirements(gem_bs, Section::Report, false),
+		Command::CallReport => get_requirements(gem_bs, Section::Report, false),
+		Command::MD5Sum => (1.0, 0), // No special requirement for MD5Sum, and can not be multithreaded
+		Command::MergeBams => get_merge_bam_req(gem_bs),
+		Command::MergeBcfs => get_merge_bcf_req(gem_bs),
+	}			
+}
+
 impl<'a> Scheduler<'a> {
 	fn new(task_list: Vec<usize>) -> Self { 
 		Scheduler{running: Rc::new(RefCell::new(Vec::new())), lock: None, task_list, state: SchedState::Ready }
@@ -91,25 +171,19 @@ impl<'a> Scheduler<'a> {
 	fn set_lock(&mut self, lock: FileLock<'a>) { self.lock = Some(lock); }
 	fn drop_lock(&mut self) { self.lock = None; }
 	fn check_lock(&self) -> bool {self.lock.is_some() }
-	fn get_avail_slots(&mut self, gem_bs: &mut GemBS) -> f64 {
+	fn get_avail_slots_mem(&mut self, gem_bs: &mut GemBS) -> (f64, usize) {
 		let ncpus = num_cpus::get() as f64;
+		let mut tmem = gem_bs.total_mem();
 		let mut avail = ncpus;
 		let rf = self.running.borrow();
 		for ix in rf.iter() {
-			let n = match gem_bs.get_tasks()[*ix].command() {
-				Command::Index | Command::Map => ncpus,
-				Command::Call => {
-					if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Calling, "jobs") { ncpus / (*x as f64) } else { 1.0 }
-				},
-				Command::Extract => {
-					if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Extract, "jobs") { ncpus / (*x as f64) } else { 1.0 }
-				},
-				_ => 1.0,
-			};			
+			let (n, mem) = get_command_req(gem_bs, gem_bs.get_tasks()[*ix].command());		
+			if tmem > mem { tmem -= mem }
+			else { tmem = 0 }
 			if n < avail { avail -= n }
 			else { avail = 0.0 };
 		}
-		avail + 0.0001
+		(avail + 0.0001, tmem)
 	}
 	
 	fn add_task(&mut self, gem_bs: &mut GemBS, ix: usize) -> Result<(), SchedulerError> {
@@ -141,11 +215,11 @@ impl<'a> Scheduler<'a> {
 			Ok(md) => md.modified().ok(),
 			_ => None
 		};
-		let avail_slots = self.get_avail_slots(gem_bs);
-		debug!("Avail slots: {}", avail_slots);
+		let (avail_slots, avail_mem) = self.get_avail_slots_mem(gem_bs);		
+		debug!("Avail slots: {}, avail memory: {:.1} GB", avail_slots, (avail_mem as f64) / 1073741824.0);
+
 		let mut task_idx = None;
 		let mut avail_tasks = true;
-		let ncpus = num_cpus::get() as f64;
 		let mut max = 0.0;
 		if avail_slots > 0.0 {
 			avail_tasks = false;
@@ -153,17 +227,9 @@ impl<'a> Scheduler<'a> {
 				let task = &gem_bs.get_tasks()[*ix];
 				if let Some(TaskStatus::Ready) = task.status() {
 					avail_tasks = true;
-					let n = match gem_bs.get_tasks()[*ix].command() {
-						Command::Index | Command::Map => ncpus,
-						Command::Call => {
-							if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Calling, "jobs") { ncpus / (*x as f64)} else { 1.0 }
-						},
-						Command::Extract => {
-							if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Extract, "jobs") { ncpus / (*x as f64)} else { 1.0 }
-						},
-						_ => 1.0,
-					};
-					if n <= avail_slots && n > max { 
+					let (n, mem) = get_command_req(gem_bs, gem_bs.get_tasks()[*ix].command());
+
+					if n <= avail_slots && mem <= avail_mem && n > max { 
 						max = n; 
 						task_idx = Some(*ix);
 					}
