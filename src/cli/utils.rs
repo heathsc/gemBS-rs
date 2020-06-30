@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::collections::HashMap;
 use crate::config::GemBS;
 use lazy_static::lazy_static;
-use crate::common::defs::{Section, DataValue, VarType, FileType};
+use crate::common::defs::{Section, DataValue, VarType, FileType, JobLen, MemSize};
 
 pub fn from_arg_matches<T: FromStr>(m: &ArgMatches, option: &str) -> Option<T> {
 	match m.value_of(option) {
@@ -27,7 +27,9 @@ pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
 		VarType::Float => m.value_of(opt).and_then(|x| <f64>::from_str(x).ok().map(DataValue::Float)),
 		VarType::String => m.value_of(opt).map(|x| DataValue::String(x.to_owned())),
 		VarType::FileType => m.value_of(opt).and_then(|x| <FileType>::from_str(x).ok().map(DataValue::FileType)),
-		VarType::FloatVec => m.values_of(opt).and_then(|v| {
+		VarType::JobLen => m.value_of(opt).and_then(|x| <JobLen>::from_str(x).ok().map(DataValue::JobLen)),
+		VarType::MemSize => m.value_of(opt).and_then(|x| <MemSize>::from_str(x).ok().map(DataValue::MemSize)),
+		VarType::FloatVec => m.values_of(opt).and_then(|v| {			
 			let vec:Vec<_> = v.map(|x| <f64>::from_str(x).ok().unwrap()).collect();
 			Some(DataValue::FloatVec(vec))
 		}),
@@ -83,8 +85,9 @@ lazy_static! {
         m.push(("sort_threads", OptionType::Global("sort_threads", VarType::Int)));
         m.push(("call_threads", OptionType::Global("call_threads", VarType::Int)));
         m.push(("cores", OptionType::Global("cores", VarType::Int)));
-        m.push(("memory", OptionType::Global("memory", VarType::String)));
-        m.push(("sort_memory", OptionType::Global("sort_memory", VarType::String)));
+        m.push(("time", OptionType::Global("time", VarType::JobLen)));
+        m.push(("memory", OptionType::Global("memory", VarType::MemSize)));
+        m.push(("sort_memory", OptionType::Global("sort_memory", VarType::MemSize)));
         m.push(("tmp_dir", OptionType::Global("tmp_dir", VarType::String)));
         m.push(("underconv_seq", OptionType::Global("underconversion_sequence", VarType::String)));
         m.push(("overconv_seq", OptionType::Global("overconversion_sequence", VarType::String)));

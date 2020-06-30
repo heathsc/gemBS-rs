@@ -1,6 +1,10 @@
 use std::str::FromStr;
 use std::fmt;
+use std::convert::From;
 use serde::{Deserialize, Serialize};
+use regex::Regex;
+use lazy_static::lazy_static;
+
 use crate::config::contig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -95,6 +99,101 @@ impl fmt::Display for FileType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct MemSize {
+	mem: usize,	
+}
+
+impl MemSize {
+	pub fn mem(&self) -> usize { self.mem }
+}
+
+impl FromStr for MemSize {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+		lazy_static! { static ref RE: Regex = Regex::new(r"^(\d+)([kKmMgG]?)$").unwrap(); }
+		let (mem, success) = {
+			if let Some(cap) = RE.captures(s) {
+				if let Ok(a) = <usize>::from_str(cap.get(1).unwrap().as_str()) {
+					let fact = if let Some(y) = cap.get(2) {
+						match y.as_str() {
+							"k" | "K" => 0x400,
+							"m" | "M" => 0x100000,
+							"g" | "G" => 0x40000000,
+							_ => return Err("Invalid memory string"),
+						}
+					} else { 1 };
+					(a * fact, true)
+				} else { (0, false) }
+			} else { (0, false) }
+		};
+		if success { Ok(MemSize{mem}) } else { Err("Invalid memory string") }
+	}
+}
+
+impl fmt::Display for MemSize {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let mem = self.mem;
+		if mem.trailing_zeros() >= 30 { write!(f, "{}G", mem >> 30) }
+		else if mem.trailing_zeros() >= 20 { write!(f, "{}M", mem >> 20) }
+		else if mem.trailing_zeros() >= 10 { write!(f, "{}M", mem >> 10) }
+		else { write!(f, "{}", mem) }
+	}	
+}
+
+impl From<usize> for MemSize {
+	fn from(mem: usize) -> Self { MemSize{mem}}	
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct JobLen {
+	secs: usize,	
+}
+
+impl FromStr for JobLen {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+		lazy_static! { static ref RE: Regex = Regex::new(r"^(\d+-)?(\d+:)?(\d+:)?(\d+)$").unwrap(); }
+		if let Some(cap) = RE.captures(s) {
+			let mut v = [None; 4];			
+			if let Some(s) = cap.get(1) { if let Ok(x) = <usize>::from_str(s.as_str().trim_end_matches('-')) { v[0] = Some(x); } else { return Err("Invalid time") } }
+			if let Some(s) = cap.get(2) { if let Ok(x) = <usize>::from_str(s.as_str().trim_end_matches(':')) { v[1] = Some(x); } else { return Err("Invalid time") } }
+			if let Some(s) = cap.get(3) { if let Ok(x) = <usize>::from_str(s.as_str().trim_end_matches(':')) { v[2] = Some(x); } else { return Err("Invalid time") } }
+			if let Some(s) = cap.get(4) { if let Ok(x) = <usize>::from_str(s.as_str()) { v[3] = Some(x); } else { return Err("Invalid time") } }
+
+			match v[..] {
+				[None, None, None, Some(mins)] if mins <= 60 => Ok(JobLen{secs: mins * 60}),
+				[None, Some(mins), None, Some(secs)] if mins <= 60 && secs <= 60 =>  Ok(JobLen{secs: mins * 60 + secs}),
+				[None, Some(hrs), Some(mins), Some(secs)] if hrs <= 24 && mins <= 60 && secs <= 60 => Ok(JobLen{secs: hrs * 3600 + mins * 60 + secs}),
+				[Some(days), None, None, Some(hrs)] if hrs <= 24 => Ok(JobLen{secs: (days * 24 + hrs) * 3600 }),
+				[Some(days), Some(hrs), None, Some(mins)] if hrs <= 24 && mins <= 60 => Ok(JobLen{secs: (days * 24 * 60 + hrs * 60 + mins) * 60 }),
+				[Some(days), Some(hrs), Some(mins), Some(secs)] if hrs <= 24 && mins <= 60 && secs <= 60 => Ok(JobLen{secs: days * 24 * 3600 + hrs * 3600 + mins * 60 + secs}),
+				_ => Err("Invalid time"),
+			}
+		} else { Err("Invalid time") }
+    }
+}
+
+impl fmt::Display for JobLen {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let mut secs = self.secs;
+		let days = secs / (24 * 3600);
+		secs %= 24 * 3600;
+		let hrs = secs / 3600;
+		secs %= 3600;
+		let mins = secs / 60;
+		secs %= 60;
+		match (days, hrs, mins, secs) {
+			(0, 0, min, 0) => write!(f, "{}", min),
+			(0, 0, min, sec) => write!(f, "{}:{}", min, sec),
+			(0, hr, min, sec) => write!(f, "{}:{}:{}", hr, min, sec),
+			(day, hr, 0, 0) => write!(f, "{}-{}", day, hr),
+			(day, hr, min, 0) => write!(f, "{}-{}:{}", day, hr, min),
+			(day, hr, min, sec) => write!(f, "{}-{}:{}:{}", day, hr, min, sec),
+		} 
+	}	
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ReadEnd { End1, End2 }
 
 impl FromStr for ReadEnd {
@@ -119,6 +218,8 @@ pub enum DataValue {
 	Int(isize),	
 	Float(f64),
 	FloatVec(Vec<f64>),
+	JobLen(JobLen),
+	MemSize(MemSize),
 }
 
 impl DataValue {
@@ -126,7 +227,9 @@ impl DataValue {
 		match vtype {
 			VarType::String | VarType::StringVec => Ok(DataValue::String(s.to_string())),
 			VarType::ReadEnd => Ok(DataValue::ReadEnd(s.parse::<ReadEnd>()?)),
+			VarType::JobLen => Ok(DataValue::JobLen(s.parse::<JobLen>()?)),
 			VarType::FileType => Ok(DataValue::FileType(s.parse::<FileType>()?)),
+			VarType::MemSize => Ok(DataValue::MemSize(s.parse::<MemSize>()?)),
 			VarType::Bool => match s.to_lowercase().as_str() {
 				"false" | "no" | "0" => Ok(DataValue::Bool(false)),
 				"true" | "yes" | "1" => Ok(DataValue::Bool(true)),
@@ -146,7 +249,7 @@ impl DataValue {
 
 #[derive(Debug, Clone, Copy)]
 pub enum VarType {
-	String, StringVec, Bool, Int, Float, FloatVec, ReadEnd, FileType,
+	String, StringVec, Bool, Int, Float, FloatVec, ReadEnd, FileType, JobLen, MemSize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

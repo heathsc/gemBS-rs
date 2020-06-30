@@ -12,7 +12,7 @@ use serde::{Serialize, Deserialize};
 use std::path::Path;
 use std::rc::Rc;
 
-use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
+use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, JobLen, MemSize, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 use crate::common::assets::{Asset, AssetList, AssetType, AssetStatus, GetAsset};
 use crate::common::tasks::{Task, TaskList, TaskStatus, RunningTask};
 use crate::common::utils::{FileLock, timed_wait_for_lock, get_phys_memory};
@@ -130,6 +130,12 @@ impl GemBS {
 	}	
 	pub fn get_config_float(&self, section: Section, name: &str) -> Option<f64> {
 		if let Some(DataValue::Float(x)) = self.get_config(section, name) { Some(*x) } else { None }
+	}	
+	pub fn get_config_joblen(&self, section: Section, name: &str) -> Option<JobLen> {
+		if let Some(DataValue::JobLen(x)) = self.get_config(section, name) { Some(*x) } else { None }
+	}	
+	pub fn get_config_memsize(&self, section: Section, name: &str) -> Option<MemSize> {
+		if let Some(DataValue::MemSize(x)) = self.get_config(section, name) { Some(*x) } else { None }
 	}	
 	pub fn get_sample_data_ref(&self) ->  &HashMap<String, HashMap<Metadata, DataValue>> {
 		if let GemBSHash::SampleData(href) = &self.var[1] { &href }

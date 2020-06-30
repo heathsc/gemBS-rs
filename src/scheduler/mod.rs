@@ -4,7 +4,6 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, mpsc};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::str::FromStr;
 use std::{fs, thread, time};
 use custom_error::custom_error;
 use regex::Regex;
@@ -96,34 +95,8 @@ fn get_requirements(gem_bs: &GemBS, section: Section, default_all: bool) -> (f64
 		else if default_all { ncpus as f64 }
 		else { 1.0 }
 	};
-	let m = {
-		if let Some(x) = gem_bs.get_config_str(section, "memory") { 
-			if let Some(mem) = get_mem_from_str(x, total_mem) { mem }
-			else { panic!("Could not parse memory requirements {} for Section {:?}", x, section) }
-		} else if default_all { total_mem } else { 0 }
-	};
+	let m = { if let Some(x) = gem_bs.get_config_memsize(section, "memory") { if x.mem() > total_mem { total_mem } else {x.mem() } } else if default_all { total_mem } else { 0 }};
 	(n, m)
-}
-
-fn get_mem_from_str(s: &str, total_mem: usize) -> Option<usize> {
-	lazy_static! { static ref RE: Regex = Regex::new(r"^(\d+)([kKmMgG]?)$").unwrap(); }
-
-	let (mem, success) = {
-		if let Some(cap) = RE.captures(s) {
-			if let Ok(a) = <usize>::from_str(cap.get(1).unwrap().as_str()) {
-				let fact = if let Some(y) = cap.get(2) {
-					match y.as_str() {
-						"k" | "K" => 0x400,
-						"m" | "M" => 0x10000,
-						"g" | "G" => 0x40000000,
-						_ => 1,
-					}
-				} else { 1 };
-				if a > total_mem / fact { (total_mem, true) } else { (a * fact, true) }
-			} else { (0, false) }
-		} else { (0, false) }
-	};
-	if success { Some(mem) } else { None }
 }
 
 fn get_merge_bcf_req(gem_bs: &GemBS) -> (f64, usize) {
@@ -140,9 +113,7 @@ fn get_merge_bam_req(gem_bs: &GemBS) -> (f64, usize) {
 	let merge_threads = if let Some(t) = gem_bs.get_config_int(Section::Mapping, "merge_threads").or(threads) { t as usize } else { 1 };
 	if (merge_threads as f64) < n { n = merge_threads as f64 }
 	let total_mem = gem_bs.total_mem();
-	let mem_str = gem_bs.get_config_str(Section::Mapping, "sort_memory").unwrap_or("768M");
-	let tmem = if let Some(mem) = get_mem_from_str(mem_str, total_mem) { mem * merge_threads}
-	else { panic!("Could not parse memory requirements {} for BAM merging", mem_str) };
+	let tmem = merge_threads * gem_bs.get_config_memsize(Section::Mapping, "sort_memory").unwrap_or_else(|| 0x30000000.into()).mem();
 	let m = if tmem > total_mem { total_mem } else { tmem };
 	(n, m)
 }
@@ -156,7 +127,7 @@ fn get_command_req(gem_bs: &GemBS, com: Command) -> (f64, usize) {
 		Command::Extract => get_requirements(gem_bs, Section::Extract, false),
 		Command::MapReport => get_requirements(gem_bs, Section::Report, false),
 		Command::CallReport => get_requirements(gem_bs, Section::Report, false),
-		Command::MD5Sum => (1.0, 0), // No special requirement for MD5Sum, and can not be multithreaded
+		Command::MD5Sum => (1.0, 0), // No special requirement for MD5Sum, and it can not be multithreaded
 		Command::MergeBams => get_merge_bam_req(gem_bs),
 		Command::MergeBcfs => get_merge_bcf_req(gem_bs),
 	}			

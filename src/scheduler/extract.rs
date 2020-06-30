@@ -1,16 +1,14 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::rc::Rc;
-use serde_json::Value;
-use std::io::{BufWriter, Write, BufReader};
+use std::io::{BufWriter, Write};
 use regex::Regex;
 use lazy_static::lazy_static;
 
 use crate::config::GemBS;
 use crate::common::assets::GetAsset;
-use crate::common::defs::{DataValue, Section, ContigInfo, ContigData, VarType};
-use crate::common::tasks::Task;
+use crate::common::defs::{Section, ContigInfo, ContigData, VarType};
 use super::QPipe;
 
 fn make_contig_file(gem_bs: &GemBS, barcode: &str, output_dir: &Path) -> PathBuf {

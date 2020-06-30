@@ -59,6 +59,9 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Mapping, name ) { x } else { "." } };
 	let seq_dir = get_dir("sequence_dir").to_owned();
 	let bam_dir = get_dir("bam_dir").to_owned();
+	let cores = gem_bs.get_config_int(Section::Mapping, "cores").map(|x| x as usize);
+	let memory = gem_bs.get_config_memsize(Section::Mapping, "memory");
+	let time = gem_bs.get_config_joblen(Section::Mapping, "time");
 	let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");
 	let mut common_inputs = Vec::new();
 	if make_cram {
@@ -117,7 +120,8 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 				let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);
 				let task = gem_bs.add_task(&id, format!("Map dataset {} for barcode {}", dat, sample.barcode).as_str(),
 					Command::Map, format!("--dataset {}", dat).as_str());
-				gem_bs.add_task_inputs(task, &in_vec).add_outputs(&[out1, out2]).set_log(Some(log_index)).set_barcode(&sample.barcode);
+				gem_bs.add_task_inputs(task, &in_vec).add_outputs(&[out1, out2]).set_log(Some(log_index)).set_barcode(&sample.barcode)
+					.add_cores(cores).add_memory(memory).add_time(time);
 				[out1, out2].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &in_vec));
 				bams.push(out1);
 			} else {
@@ -129,7 +133,8 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 				let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 				let task = gem_bs.add_task(&id, format!("Map dataset {} for barcode {}", dat, sample.barcode).as_str(),
 					Command::Map, format!("--barcode {} --no-md5", sample.barcode).as_str());
-				gem_bs.add_task_inputs(task, &in_vec).add_outputs(&[out1, out2, out3]).set_log(Some(log_index)).set_barcode(&sample.barcode);
+				gem_bs.add_task_inputs(task, &in_vec).add_outputs(&[out1, out2, out3]).set_log(Some(log_index)).set_barcode(&sample.barcode)
+					.add_cores(cores).add_memory(memory).add_time(time);
 				[out1, out2, out3].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &in_vec));
 				let (md5_name, md5_path)  = assets::make_ext_asset(gem_bs.get_asset_mut(out1).unwrap().id(), &bpath, "md5");
 				let md5 = gem_bs.insert_asset(&md5_name, &md5_path, AssetType::Derived);
@@ -148,7 +153,8 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Merge datasets for barcode {}", sample.barcode).as_str(),
 				Command::MergeBams, format!("--barcode {} --no-md5", sample.barcode).as_str());
-			gem_bs.add_task_inputs(task, &bams).add_outputs(&[out1, out2]).set_log(Some(log_index)).set_barcode(&sample.barcode);
+			gem_bs.add_task_inputs(task, &bams).add_outputs(&[out1, out2]).set_log(Some(log_index)).set_barcode(&sample.barcode)
+				.add_cores(cores).add_memory(memory).add_time(time);
 			[out1, out2].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &bams));
 			let out_asset = gem_bs.get_asset_mut(out1).unwrap();
 			let (md5_name, md5_path)  = assets::make_ext_asset(out_asset.id(), &bpath, "md5");

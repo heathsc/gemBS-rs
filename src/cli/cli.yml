@@ -36,6 +36,7 @@ subcommands:
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads (default - all available cores)}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - all available cores)}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - all available memory)}
+          - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - sampling: {short: s, long: sampling-rate, value_name: SAMPLING_RATE, takes_value: true, help: Text sampling rate - increasing will decrease index size but also performance}
           - make_bs_index: {short: b, long: bs-index, help: Generate bisulfite index}
           - make_nonbs_index: {short: n, long: nonbs-index, help: Generate non-bisulfite (regular) index}
@@ -52,13 +53,14 @@ subcommands:
           - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample to be mapped}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - all available cores)}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - all available memory)}
+          - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - tmp_dir: {short: d, long: tmp-dir, value_name: PATH, takes_value: true, help: Temporary directory to perform sorting operations}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for mapping pipeline}
           - map_threads: {long: map-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for GEM3 mapper}
           - sort_threads: {long: sort-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for sorting}
           - sort_memory: {long: sort-memory, value_name: MEMORY, takes_value: true, help: Amount of memory per sort thread}
           - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for merging}
-          - file_type: {short: T, long: type, value_name: FILE_TYPE, takes_value: true, possible_values: [PAIRED, SINGLE, INTERLEAVED, STREAM, BAM], help: Type of data file}
+          - file_type: {short: F, long: type, value_name: FILE_TYPE, takes_value: true, possible_values: [PAIRED, SINGLE, INTERLEAVED, STREAM, BAM], help: Type of data file}
           - paired: {short: p, long: paired-end, help: Input data is paired end}
           - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
           - reverse: {short: R, long: reverse-conversion, help: Assume G2A conversion on read 1 and C2T on read 2}
@@ -85,6 +87,7 @@ subcommands:
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
           - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - remove: {short: r, long: remove, help: Remove individual BAMs after merging}
           - no_md5: {long: no-md5, help: Do not automatically calculate md5 sums}
@@ -110,6 +113,7 @@ subcommands:
           - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for merging}
           - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - keep_duplicates: {short: u, long: keep-duplicates, help: Do not merge duplicate reads}
           - ignore_duplicate_flag: {short: U, long: ignore-duplicate-flag, help: Ignore duplicate flag from SAM/BAM files}
@@ -140,6 +144,7 @@ subcommands:
           - merge_threads: {long: merge-threads, value_name: THREADS, takes_value: true, help: Number of threads for merging}
           - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - no_md5: {long: no-md5, help: Do not automatically calculate md5 sum of merged BCF}
           - no_index: {long: no-index, help: Do not automatically index merged BCF}
@@ -159,6 +164,7 @@ subcommands:
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - strand_specific: {short:s, long: strand-specific, help: Output separate lines in CpG file for each strand}
           - bigwig_strand_specific: {short:W, long: bigwig-strand-specific, help: Output separate bigWig files for each strand}
@@ -188,6 +194,7 @@ subcommands:
           - output_dir: {short: o, long: output-dir, value_name: PATH, takes_value: true, help: Output directory for mapping report}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
     - call-report:
         setting: DeriveDisplayOrder
@@ -197,6 +204,7 @@ subcommands:
           - output_dir: {short: o, long: output-dir, value_name: PATH, takes_value: true, help: Output directory for call report}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
     - md5sum:
         setting: DeriveDisplayOrder
@@ -207,6 +215,7 @@ subcommands:
           - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample to be mapped}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
@@ -222,6 +231,7 @@ subcommands:
           - jobs: {short: j, long: jobs, value_name: JOBS, takes_value: true, help: Number of parallel jobs}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
@@ -236,6 +246,7 @@ subcommands:
           - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample to be mapped}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
           - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
