@@ -89,7 +89,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 			Command::MD5Sum, format!("--barcode {} call", bcode).as_str());
 		let md5_cores = gem_bs.get_config_int(Section::MD5Sum, "cores").map(|x| x as usize).or(Some(1));
 		let md5_memory = gem_bs.get_config_memsize(Section::MD5Sum, "memory");
-		let md5_time = gem_bs.get_config_joblen(Section::Mapping, "time").or_else(|| Some(3600.into()));
+		let md5_time = gem_bs.get_config_joblen(Section::MD5Sum, "time").or_else(|| Some(3600.into()));
 		gem_bs.add_task_inputs(md5_task, &[bcf_asset]).add_outputs(&[md5]).set_barcode(bcode)
 			.add_cores(md5_cores).add_memory(md5_memory).add_time(md5_time);
 		gem_bs.get_asset_mut(md5).unwrap().set_creator(md5_task, &[bcf_asset]);

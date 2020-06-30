@@ -1,7 +1,6 @@
 use super::defs::{Command, JobLen, MemSize};
 use std::ops::{Deref, DerefMut};
 use std::slice;
-use std::convert::From;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use std::path::Path;

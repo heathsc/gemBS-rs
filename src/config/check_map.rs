@@ -142,7 +142,7 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 					Command::MD5Sum, format!("--barcode {} map", sample.barcode).as_str());
 				let md5_cores = gem_bs.get_config_int(Section::MD5Sum, "cores").map(|x| x as usize).or(Some(1));
 				let md5_memory = gem_bs.get_config_memsize(Section::MD5Sum, "memory");
-				let md5_time = gem_bs.get_config_joblen(Section::Mapping, "time").or_else(|| Some(3600.into()));
+				let md5_time = gem_bs.get_config_joblen(Section::MD5Sum, "time").or_else(|| Some(3600.into()));
 				gem_bs.add_task_inputs(md5_task, &[out1]).add_outputs(&[md5]).set_barcode(&sample.barcode)
 					.add_cores(md5_cores).add_memory(md5_memory).add_time(md5_time);
 				gem_bs.get_asset_mut(md5).unwrap().set_creator(md5_task, &[out1]);
@@ -165,7 +165,7 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 			let md5 = gem_bs.insert_asset(&md5_name, &md5_path, AssetType::Derived);
 			let md5_cores = gem_bs.get_config_int(Section::MD5Sum, "cores").map(|x| x as usize).or(Some(1));
 			let md5_memory = gem_bs.get_config_memsize(Section::MD5Sum, "memory");
-			let md5_time = gem_bs.get_config_joblen(Section::Mapping, "time").or_else(|| Some(3600.into()));
+			let md5_time = gem_bs.get_config_joblen(Section::MD5Sum, "time").or_else(|| Some(3600.into()));
 			let md5_task = gem_bs.add_task(&md5_name, format!("Calc MD5 sum for {}", id).as_str(),
 				Command::MD5Sum, format!("--barcode {} map", sample.barcode).as_str());
 			gem_bs.add_task_inputs(md5_task, &[out1]).add_outputs(&[md5]).set_barcode(&sample.barcode)
