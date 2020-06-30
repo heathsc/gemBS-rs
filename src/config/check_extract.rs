@@ -10,6 +10,9 @@ use super::GemBS;
 pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Mapping, name ) { x } else { "." } };
 	let extract_dir = get_dir("extract_dir").to_owned();
+	let cores = gem_bs.get_config_int(Section::Extract, "cores").map(|x| x as usize);
+	let memory = gem_bs.get_config_memsize(Section::Extract, "memory");
+	let time = gem_bs.get_config_joblen(Section::Extract, "time");
 	let bw_strand_specific = gem_bs.get_config_bool(Section::Extract, "bigwig_strand_specific");
 	let non_cpg = gem_bs.get_config_bool(Section::Extract, "make_non_cpg");
 	let snps = gem_bs.get_config_bool(Section::Extract, "make_snps");
@@ -65,7 +68,8 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Extract methylation values for barcode {}", bc).as_str(),
 					Command::Extract, format!("{} --barcode {}", mextr_comm, bc).as_str());
-			gem_bs.add_task_inputs(task, &[bcf, bcf_ix]).add_outputs(&out_vec).set_log(Some(log_index)).set_barcode(bc);
+			gem_bs.add_task_inputs(task, &[bcf, bcf_ix]).add_outputs(&out_vec).set_log(Some(log_index)).set_barcode(bc)
+				.add_cores(cores).add_memory(memory).add_time(time);
 			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
 		if !snpxtr_suff.is_empty() {
@@ -76,7 +80,8 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Extract SNPs for barcode {}", bc).as_str(),
 					Command::Extract, format!("--snps --barcode {}", bc).as_str());
-			gem_bs.add_task_inputs(task, &[bcf, bcf_ix]).add_outputs(&out_vec).set_log(Some(log_index)).set_barcode(bc);
+			gem_bs.add_task_inputs(task, &[bcf, bcf_ix]).add_outputs(&out_vec).set_log(Some(log_index)).set_barcode(bc)
+				.add_cores(cores).add_memory(memory).add_time(time);
 			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
 	}

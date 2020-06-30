@@ -12,6 +12,9 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 	let bcf_dir = get_dir("bcf_dir").to_owned();
 	let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");
 	let (ext, idx_ext) = if make_cram { ("cram", "cram.crai") } else { ("bam", "bam.csi") };
+	let cores = gem_bs.get_config_int(Section::Calling, "cores").map(|x| x as usize);
+	let memory = gem_bs.get_config_memsize(Section::Calling, "memory");
+	let time = gem_bs.get_config_joblen(Section::Calling, "time");
 	let samples = gem_bs.get_samples();
 	let pools = contig::get_contig_pools(gem_bs);
 	let mut common_inputs = Vec::new();
@@ -49,7 +52,8 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 				let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 				let call_task = gem_bs.add_task(&id, format!("Call BCFs for pool {}, barcode {}", pool, bcode).as_str(),
 				 	Command::Call, format!("--barcode {} --pool {}", bcode, pool).as_str());
-				gem_bs.add_task_inputs(call_task, &in_vec).add_outputs(&[out, out1]).set_log(Some(log_index)).set_barcode(bcode);
+				gem_bs.add_task_inputs(call_task, &in_vec).add_outputs(&[out, out1]).set_log(Some(log_index)).set_barcode(bcode)
+					.add_cores(cores).add_memory(memory).add_time(time);
 				[out, out1].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(call_task, &in_vec));
 			}
 			let out = handle_file(gem_bs, format!("{}.bcf", bcode), None, bcf_path);
@@ -58,7 +62,8 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let merge_task = gem_bs.add_task(&id, format!("Merge BCFs for barcode {}", bcode).as_str(),
 				 	Command::MergeBcfs, format!("--barcode {} --no_md5 --no_index", bcode).as_str());
-			gem_bs.add_task_inputs(merge_task, &out_bcfs).add_outputs(&[out]).set_log(Some(log_index)).set_barcode(bcode);
+			gem_bs.add_task_inputs(merge_task, &out_bcfs).add_outputs(&[out]).set_log(Some(log_index)).set_barcode(bcode)
+				.add_cores(cores).add_memory(memory).add_time(time);
 			gem_bs.get_asset_mut(out).unwrap().set_creator(merge_task, &out_bcfs);
 		} else {
 			let mut in_vec = common_inputs.clone();
@@ -70,7 +75,8 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let call_task = gem_bs.add_task(&id, format!("Call BCFs for barcode {}", bcode).as_str(),
 				 	Command::Call, format!("--barcode {} --no_md5 --no_index", bcode).as_str());
-			gem_bs.add_task_inputs(call_task, &in_vec).add_outputs(&[out, out1]).set_log(Some(log_index)).set_barcode(bcode);
+			gem_bs.add_task_inputs(call_task, &in_vec).add_outputs(&[out, out1]).set_log(Some(log_index)).set_barcode(bcode)
+				.add_cores(cores).add_memory(memory).add_time(time);
 			[out, out1].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(call_task, &in_vec));
 		}
 		let id = format!("{}.bcf", bcode);
@@ -89,7 +95,8 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 		let csi = gem_bs.insert_asset(&csi_name, &csi_path, AssetType::Derived);
 		let csi_task = gem_bs.add_task(&csi_name, format!("Calc Index for {}", id).as_str(),
 			Command::IndexBcf, format!("--barcode {}", bcode).as_str());
-		gem_bs.add_task_inputs(csi_task, &[bcf_asset]).add_outputs(&[csi]).set_barcode(bcode);
+		gem_bs.add_task_inputs(csi_task, &[bcf_asset]).add_outputs(&[csi]).set_barcode(bcode)
+			.add_cores(cores).add_memory(memory).add_time(time);
 		gem_bs.get_asset_mut(csi).unwrap().set_creator(csi_task, &[bcf_asset]);		
 	}
 	Ok(())
