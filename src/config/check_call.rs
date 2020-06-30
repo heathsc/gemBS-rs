@@ -87,7 +87,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 		let md5 = gem_bs.insert_asset(&md5_name, &md5_path, AssetType::Derived);
 		let md5_task = gem_bs.add_task(&md5_name, format!("Calc MD5 sum for {}", id).as_str(),
 			Command::MD5Sum, format!("--barcode {} call", bcode).as_str());
-		gem_bs.add_task_inputs(md5_task, &[bcf_asset]).add_outputs(&[md5]).set_barcode(bcode);
+		gem_bs.add_task_inputs(md5_task, &[bcf_asset]).add_outputs(&[md5]).set_barcode(bcode).add_time(Some(3600.into()));
 		gem_bs.get_asset_mut(md5).unwrap().set_creator(md5_task, &[bcf_asset]);
 
 		// Add bcf-index asset and task

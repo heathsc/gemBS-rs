@@ -193,6 +193,11 @@ impl fmt::Display for JobLen {
 	}	
 }
 
+impl From<usize> for JobLen {
+	fn from(secs: usize) -> Self { JobLen{secs}}	
+}
+
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ReadEnd { End1, End2 }
 
