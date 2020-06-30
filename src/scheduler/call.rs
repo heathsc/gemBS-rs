@@ -110,7 +110,7 @@ fn calc_conversion(cts: &BaseCounts) -> Option<f64> {
 
 fn get_conversion_rate(gem_bs: &GemBS, barcode: &str) -> (f64, f64) {
 	let (mut under, mut over) = if gem_bs.get_config_bool(Section::Calling, "auto_conversion") {	
-		let json_files = gem_bs.get_json_files_for_barcode(barcode);
+		let json_files = gem_bs.get_mapping_json_files_for_barcode(barcode);
 		let mut counts = [BaseCounts::new(), BaseCounts::new()];
 		for f in json_files.iter() { add_conversion_counts(gem_bs, *f, &mut counts); }
 		// Do some sanity checking to avoid using crazy values.

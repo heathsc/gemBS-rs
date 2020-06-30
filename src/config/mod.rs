@@ -18,11 +18,12 @@ use crate::common::tasks::{Task, TaskList, TaskStatus, RunningTask};
 use crate::common::utils::{FileLock, timed_wait_for_lock, get_phys_memory};
 use std::slice;
 
-pub mod check_ref;
 pub mod contig;
-pub mod check_map;
-pub mod check_call;
-pub mod check_extract;
+mod check_ref;
+mod check_map;
+mod check_report;
+mod check_call;
+mod check_extract;
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GemBSHash {
@@ -266,7 +267,9 @@ impl GemBS {
 		self.contig_pool_digest = Some(contig::setup_contigs(self)?);
 		check_ref::make_contig_sizes(self)?;		
 		check_map::check_map(self)?;
+		check_report::check_map_report(self)?;
 		check_call::check_call(self)?;
+		check_report::check_variant_report(self)?;
 		check_extract::check_extract(self)?;
 		self.asset_digest = Some(self.assets.get_digest());
 		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());
@@ -387,7 +390,7 @@ impl GemBS {
 		}
 		tlist
 	}
-	pub fn get_json_files_for_barcode(&self, barcode: &str) -> Vec<usize> {
+	pub fn get_mapping_json_files_for_barcode(&self, barcode: &str) -> Vec<usize> {
 		let mut json_files = Vec::new();
 		if let Some(t) = self.tasks.find_task(format!("single_map_{}", barcode).as_str()) {
 			for i in self.tasks[t].outputs() {
@@ -405,6 +408,26 @@ impl GemBS {
 				}
 			}
 		} else { panic!("Couldn't find map tasks for barcode"); }
+		json_files
+	}
+	pub fn get_calling_json_files_for_barcode(&self, barcode: &str) -> Vec<usize> {
+		let mut json_files = Vec::new();
+		if let Some(t) = self.tasks.find_task(format!("single_bcf_call_{}", barcode).as_str()) {
+			for i in self.tasks[t].outputs() {
+				let asset = self.get_asset(*i).expect("Couldn't get asset");
+				if asset.id().ends_with(".json") { json_files.push(asset.idx()) }
+			}		
+		} else if let Some(t) = self.tasks.find_task(format!("bcf_mergecall_{}", barcode).as_str()) {
+			for ix in self.tasks[t].parents() {
+				let task = &self.tasks[*ix];
+				if task.id().starts_with("bcf_call_") {
+					for i in task.outputs() {
+						let asset = self.get_asset(*i).expect("Couldn't get asset");
+						if asset.id().ends_with(".json") { json_files.push(asset.idx()) }
+					}		
+				}
+			}
+		} else { panic!("Couldn't find bcf call tasks for barcode"); }
 		json_files
 	}
 }

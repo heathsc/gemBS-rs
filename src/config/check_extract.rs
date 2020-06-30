@@ -1,5 +1,5 @@
 // Check requirements and presence of source and derived files for extraction
-// Make asset list for BCFs, BED, BigWig etc. associated with traction
+// Make asset list for BCFs, BED, BigWig etc. associated with extraction
 
 use std::path::{Path, PathBuf};
 use crate::common::defs::{Section, DataValue, Command};
@@ -8,7 +8,7 @@ use crate::common::assets;
 use super::GemBS;
 
 pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
-	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Mapping, name ) { x } else { "." } };
+	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Extract, name ) { x } else { "." } };
 	let extract_dir = get_dir("extract_dir").to_owned();
 	let cores = gem_bs.get_config_int(Section::Extract, "cores").map(|x| x as usize).or_else(|| Some(2));
 	let memory = gem_bs.get_config_memsize(Section::Extract, "memory");

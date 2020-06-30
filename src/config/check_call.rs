@@ -8,7 +8,7 @@ use super::GemBS;
 use super::contig;
 
 pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
-	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Mapping, name ) { x } else { "." } };
+	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Calling, name ) { x } else { "." } };
 	let bcf_dir = get_dir("bcf_dir").to_owned();
 	let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");
 	let (ext, idx_ext) = if make_cram { ("cram", "cram.crai") } else { ("bam", "bam.csi") };
@@ -70,7 +70,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 			in_vec.push(bam);
 			let out = handle_file(gem_bs, format!("{}.bcf", bcode), None, bcf_path);
 			let out1 = handle_file(gem_bs, format!("{}.json", bcode), Some(format!("{}_call.json", bcode)), bcf_path);
-			let id = format!("bcf_call_{}", bcode);
+			let id = format!("single_bcf_call_{}", bcode);
 			let (lname, lpath) = assets::make_ext_asset(&id, bcf_path, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let call_task = gem_bs.add_task(&id, format!("Call BCFs for barcode {}", bcode).as_str(),

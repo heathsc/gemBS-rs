@@ -42,7 +42,7 @@ pub fn handle_json_tasks(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 		let task = &gem_bs.get_tasks()[*ix];
 		let args = get_arg_string(task, options);
 		let id = task.id();
-		let command = format!("gemBS {}", task.command());
+		let command = format!("{}", task.command());
 		let inputs: Vec<&Path> = task.inputs().map(|x| gem_bs.get_asset(*x).unwrap().path()).collect();
 		let outputs: Vec<&Path> = task.outputs().map(|x| gem_bs.get_asset(*x).unwrap().path()).collect();
 		let depend: Vec<&str> = task.parents().iter().filter(|x| task_set.contains(x)).map(|x| gem_bs.get_tasks()[*x].id()).collect();
