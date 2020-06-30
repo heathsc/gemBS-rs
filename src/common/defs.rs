@@ -9,7 +9,7 @@ use crate::config::contig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Section {
-	Default, Index, Mapping, Calling, Extract, Report,
+	Default, Index, Mapping, Calling, Extract, Report, MD5Sum,
 }
 
 impl FromStr for Section {
@@ -23,6 +23,7 @@ impl FromStr for Section {
             "calling" => Ok(Section::Calling),
             "extract" => Ok(Section::Extract),
             "report" => Ok(Section::Report),
+            "md5sum" => Ok(Section::MD5Sum),
             _ => Err("no match"),
         }
     }

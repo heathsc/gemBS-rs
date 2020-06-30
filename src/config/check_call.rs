@@ -12,9 +12,9 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 	let bcf_dir = get_dir("bcf_dir").to_owned();
 	let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");
 	let (ext, idx_ext) = if make_cram { ("cram", "cram.crai") } else { ("bam", "bam.csi") };
-	let cores = gem_bs.get_config_int(Section::Calling, "cores").map(|x| x as usize);
-	let memory = gem_bs.get_config_memsize(Section::Calling, "memory");
-	let time = gem_bs.get_config_joblen(Section::Calling, "time");
+	let cores = gem_bs.get_config_int(Section::Calling, "cores").map(|x| x as usize).or_else(|| Some(2));
+	let memory = gem_bs.get_config_memsize(Section::Calling, "memory").or_else(|| Some(0x100000000.into())); // 4G
+	let time = gem_bs.get_config_joblen(Section::Calling, "time").or_else(|| Some(3600.into()));
 	let samples = gem_bs.get_samples();
 	let pools = contig::get_contig_pools(gem_bs);
 	let mut common_inputs = Vec::new();
@@ -87,7 +87,11 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 		let md5 = gem_bs.insert_asset(&md5_name, &md5_path, AssetType::Derived);
 		let md5_task = gem_bs.add_task(&md5_name, format!("Calc MD5 sum for {}", id).as_str(),
 			Command::MD5Sum, format!("--barcode {} call", bcode).as_str());
-		gem_bs.add_task_inputs(md5_task, &[bcf_asset]).add_outputs(&[md5]).set_barcode(bcode).add_time(Some(3600.into()));
+		let md5_cores = gem_bs.get_config_int(Section::MD5Sum, "cores").map(|x| x as usize).or(Some(1));
+		let md5_memory = gem_bs.get_config_memsize(Section::MD5Sum, "memory");
+		let md5_time = gem_bs.get_config_joblen(Section::Mapping, "time").or_else(|| Some(3600.into()));
+		gem_bs.add_task_inputs(md5_task, &[bcf_asset]).add_outputs(&[md5]).set_barcode(bcode)
+			.add_cores(md5_cores).add_memory(md5_memory).add_time(md5_time);
 		gem_bs.get_asset_mut(md5).unwrap().set_creator(md5_task, &[bcf_asset]);
 
 		// Add bcf-index asset and task

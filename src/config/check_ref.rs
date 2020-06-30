@@ -161,7 +161,7 @@ fn make_dbsnp_tasks(gem_bs: &mut GemBS, dbsnp_files: Vec<PathBuf>) {
 	let index_task = gem_bs.add_task(id, desc, command, args);
 	let cores = gem_bs.get_config_int(Section::Index, "cores").map(|x| x as usize);
 	let memory = gem_bs.get_config_memsize(Section::Index, "memory");
-	let time = gem_bs.get_config_joblen(Section::Index, "time");
+	let time = gem_bs.get_config_joblen(Section::Index, "time").or(Some(21600.into()));
 	gem_bs.add_task_inputs(index_task, &in_vec).add_outputs(&[index]).set_log(Some(log_index))
 		.add_cores(cores).add_memory(memory).add_time(time);
 	gem_bs.get_asset_mut(index).unwrap().set_creator(index_task, &in_vec);	
@@ -271,7 +271,7 @@ fn add_make_index_task(gem_bs: &mut GemBS, idx_name: &str, desc: &str, command: 
 	let log_index = gem_bs.insert_asset(&log_name, &log_path, AssetType::Log);
 	let cores = gem_bs.get_config_int(Section::Index, "cores").map(|x| x as usize);
 	let memory = gem_bs.get_config_memsize(Section::Index, "memory");
-	let time = gem_bs.get_config_joblen(Section::Index, "time");
+	let time = gem_bs.get_config_joblen(Section::Index, "time").or_else(|| Some(21600.into()));
 	let index_task = gem_bs.add_task(&id, &desc, command, &args);
 	gem_bs.add_task_inputs(index_task, &[gref]).add_outputs(&[index]).set_log(Some(log_index))
 		.add_cores(cores).add_memory(memory).add_time(time);
