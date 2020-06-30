@@ -9,7 +9,6 @@ use crate::scheduler;
 
 fn collect_terminal_assets(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue>) -> Result<Vec<usize>, String> {
 	let barcodes = super::get_barcode_list(gem_bs, options)?;
-	println!("{:?}", barcodes);
 	let mut flag = vec!(true; gem_bs.get_assets().len());	
 	// First we mask out all assets that are requirements of other assets
 	for asset in gem_bs.get_assets().iter() { asset.parents().iter().for_each(|x| flag[*x] = false); }
