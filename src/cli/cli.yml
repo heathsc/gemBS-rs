@@ -196,6 +196,8 @@ subcommands:
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
           - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
+          - dry_run: {long: dry-run, help: Output pending commands without execution}
+          - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
     - call-report:
         setting: DeriveDisplayOrder
         about: Generate calling summary report
@@ -206,6 +208,8 @@ subcommands:
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
           - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
+          - dry_run: {long: dry-run, help: Output pending commands without execution}
+          - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
     - md5sum:
         setting: DeriveDisplayOrder
         about: Calculate md5 sums of output files (normally triggered automatically by the other commands)

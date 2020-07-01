@@ -269,7 +269,7 @@ impl GemBS {
 		check_map::check_map(self)?;
 		check_report::check_map_report(self)?;
 		check_call::check_call(self)?;
-		check_report::check_variant_report(self)?;
+		check_report::check_call_report(self)?;
 		check_extract::check_extract(self)?;
 		self.asset_digest = Some(self.assets.get_digest());
 		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());
@@ -367,12 +367,17 @@ impl GemBS {
 	pub fn all(&self) -> bool { self.all }
 	pub fn get_required_tasks_from_asset_list(&self, assets: &[usize], com_list: &[Command]) -> Vec<usize> {
 		let com_set = com_list.iter().fold(HashSet::new(), |mut hs, x| { hs.insert(*x); hs });
-		fn check_reqd(i: usize, reqd: &mut HashSet<usize>, tlist: &mut Vec<usize>, rf: &TaskList, com_set: &HashSet<Command>, ignore: bool) {
+		fn check_reqd(i: usize, reqd: &mut HashSet<usize>, tlist: &mut Vec<usize>, rf: &TaskList, arf: &AssetList, com_set: &HashSet<Command>, ignore: bool) {
 			if ! reqd.contains(&i) {
 				reqd.insert(i);
 				let st = rf[i].status().expect("Status not set for task");
 				if ignore || st != TaskStatus::Complete {
-					for j in rf[i].parents() { check_reqd(*j, reqd, tlist, rf, com_set, ignore) }
+					for ix in rf[i].inputs() {
+						let asset = arf.get_asset(*ix).unwrap();
+						if let Some(j) = asset.creator() {
+							if asset.status() != AssetStatus::Present { check_reqd(j, reqd, tlist, rf, arf, com_set, ignore) }
+						}
+					}
 				}
 				if (ignore || st == TaskStatus::Ready || st == TaskStatus::Waiting) && 
 					com_set.contains(&rf[i].command()) { tlist.push(i); }
@@ -383,13 +388,17 @@ impl GemBS {
 		let asset_ref = &self.assets;
 		let tasks = self.get_tasks();
 		let ignore = self.ignore_status();
-		for i in assets { 
-			if let Some(j) = asset_ref.get_asset(*i).unwrap().creator() {
-				check_reqd(j, &mut reqd, &mut tlist, tasks, &com_set, ignore); 
+		for i in assets {
+			let asset = asset_ref.get_asset(*i).unwrap(); 
+			if let Some(j) = asset.creator() {
+				if asset.status() != AssetStatus::Present {
+					check_reqd(j, &mut reqd, &mut tlist, tasks, asset_ref, &com_set, ignore);
+				} 
 			}
 		}
 		tlist
 	}
+
 	pub fn get_mapping_json_files_for_barcode(&self, barcode: &str) -> Vec<usize> {
 		let mut json_files = Vec::new();
 		if let Some(t) = self.tasks.find_task(format!("single_map_{}", barcode).as_str()) {

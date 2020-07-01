@@ -49,7 +49,7 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	Ok(())
 }
 
-pub fn check_variant_report(gem_bs: &mut GemBS) -> Result<(), String> {
+pub fn check_call_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Report, name ) { x } else { "gemBS_reports" } };
 	let rdir = Path::new(get_dir("report_dir"));
 	let report_dir: PathBuf = [rdir, Path::new("variant_calling")].iter().collect(); 
@@ -76,7 +76,7 @@ pub fn check_variant_report(gem_bs: &mut GemBS) -> Result<(), String> {
 		out_vec.push(handle_file(gem_bs, &id, &id, &bc_dir));
 		json_files.extend(gem_bs.get_calling_json_files_for_barcode(bc)); 
 	}
-	let task = gem_bs.add_task("variant_report", "Generate variant report", Command::MapReport, "");
+	let task = gem_bs.add_task("variant_report", "Generate variant report", Command::CallReport, "");
 	gem_bs.add_task_inputs(task, &json_files).add_outputs(&out_vec).add_cores(cores).add_memory(memory).add_time(time);
 	out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &json_files));
 	

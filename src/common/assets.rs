@@ -16,8 +16,8 @@ pub struct Asset {
 	id: Rc<String>,
 	path: PathBuf,
 	idx: usize,
-	creator: Option<usize>,
-	parents: Vec<usize>,
+	creator: Option<usize>, // Id of task that creates this asset
+	parents: Vec<usize>, // Ids of inputs assets of creator task
 	asset_type: AssetType,
 	status: AssetStatus,
 	mod_time: Option<SystemTime>,
