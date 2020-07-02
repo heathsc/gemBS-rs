@@ -296,6 +296,13 @@ pub fn get_signal(sig: Arc<AtomicUsize>) -> usize {
 	sig.load(Ordering::Relaxed)
 }
 
+pub fn check_signal(sig: Arc<AtomicUsize>) -> Result<(), String> {
+	match get_signal(sig) {
+		0 => Ok(()),
+		s => Err(format!("Received {} signal.  Closing down", signal_msg(s))),
+	}
+}
+
 pub fn wait_for_lock<'a>(sig: Arc<AtomicUsize>, path: &'a Path) -> Result<FileLock<'a>, String> { timed_wait_for_lock(sig, path) }
 
 pub fn timed_wait_for_lock<'a>(sig: Arc<AtomicUsize>, path: &'a Path) -> Result<FileLock<'a>, String> {

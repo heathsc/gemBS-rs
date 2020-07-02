@@ -74,7 +74,7 @@ pub fn check_call_report(gem_bs: &mut GemBS) -> Result<(), String> {
 		out_vec.push(handle_file(gem_bs, &id, &id, &bc_dir));
 		let id = format!("{}_variants.html", bc);
 		out_vec.push(handle_file(gem_bs, &id, &id, &bc_dir));
-		json_files.extend(gem_bs.get_calling_json_files_for_barcode(bc)); 
+		json_files.push(gem_bs.get_asset(format!("{}_call.json", bc).as_str()).expect("Couldn't fine call JSON asset for call report").idx());
 	}
 	let task = gem_bs.add_task("variant_report", "Generate variant report", Command::CallReport, "");
 	gem_bs.add_task_inputs(task, &json_files).add_outputs(&out_vec).add_cores(cores).add_memory(memory).add_time(time);

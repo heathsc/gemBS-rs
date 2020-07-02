@@ -35,7 +35,7 @@ pub fn run_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?; 
 	gem_bs.setup_assets_and_tasks(&flock)?;
 	let assets = collect_terminal_assets(gem_bs, &options)?;
-	let com_set = [Command::Index, Command::Map, Command::MergeBams, Command::Call, Command::MergeBcfs, Command::Extract,
+	let com_set = [Command::Index, Command::Map, Command::MergeBams, Command::MergeCallJsons, Command::Call, Command::MergeBcfs, Command::Extract,
 		Command::MapReport, Command::CallReport, Command::MD5Sum, Command::IndexBcf];
 	let task_list = gem_bs.get_required_tasks_from_asset_list(&assets, &com_set);
 	if options.contains_key("_dry_run") { dry_run::handle_dry_run(gem_bs, &options, &task_list) }

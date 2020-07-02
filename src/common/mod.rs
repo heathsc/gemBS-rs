@@ -4,3 +4,4 @@ pub mod assets;
 pub mod tasks;
 pub mod dry_run;
 pub mod compress;
+pub mod json_call_stats;

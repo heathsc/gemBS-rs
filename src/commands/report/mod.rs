@@ -22,7 +22,6 @@ pub fn map_report_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), Stri
 	gem_bs.setup_assets_and_tasks(&flock)?;
 	let com_set = if gem_bs.all() { vec!(Command::Index, Command::Map, Command::MapReport) } else { vec!(Command::MapReport) };
 	let assets = collect_assets(gem_bs, "map_report")?;
-	
 	let task_list = gem_bs.get_required_tasks_from_asset_list(&assets, &com_set);
 	if options.contains_key("_dry_run") { dry_run::handle_dry_run(gem_bs, &options, &task_list) }
 	if let Some(DataValue::String(json_file)) = options.get("_json") { dry_run::handle_json_tasks(gem_bs, &options, &task_list, json_file)?; }
@@ -39,7 +38,7 @@ pub fn call_report_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), Str
 	let task_path = gem_bs.get_task_file_path();
 	let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?; 
 	gem_bs.setup_assets_and_tasks(&flock)?;
-	let com_set = if gem_bs.all() { vec!(Command::Index, Command::Map, Command::MergeBams, Command::IndexBcf, Command::Call, Command::CallReport) } else { vec!(Command::CallReport) };
+	let com_set = if gem_bs.all() { vec!(Command::Index, Command::Map, Command::MergeBams, Command::MergeCallJsons, Command::IndexBcf, Command::Call, Command::CallReport) } else { vec!(Command::CallReport, Command::MergeCallJsons) };
 	let assets = collect_assets(gem_bs, "variant_report")?;
 	
 	let task_list = gem_bs.get_required_tasks_from_asset_list(&assets, &com_set);

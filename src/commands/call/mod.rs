@@ -20,6 +20,7 @@ fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataV
 			for barcode in barcodes.iter() {
 				if let Some(asset) = gem_bs.get_asset(format!("{}.bcf", barcode).as_str()) { asset_ids.insert(asset.idx()); }
 				else { return Err(format!("Unknown barcode {}", barcode)) }
+				asset_ids.insert(gem_bs.get_asset(format!("{}_call.json", barcode).as_str()).expect("Couldn't get call JSON asset").idx());
 			}
 		}
 		if !options.contains_key("_no_index") {
@@ -31,8 +32,10 @@ fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataV
 	// Now the individual contig pools
 	if !options.contains_key("_merge") && !options.contains_key("_index") && pools.len() > 1 {
 		let add_bcf_asset = |b: &str, p: &str, rf: &mut HashSet<usize>| {
-			if let Some(asset) = gem_bs.get_asset(format!("{}_{}.bcf", b, p).as_str()) { rf.insert(asset.idx()); Ok(()) }
-			else { Err(format!("Unknown pool {}", p)) }
+			if let Some(asset) = gem_bs.get_asset(format!("{}_{}.bcf", b, p).as_str()) { rf.insert(asset.idx()); }
+			else { return Err(format!("Unknown pool {}", p)); }
+			if let Some(asset) = gem_bs.get_asset(format!("{}_{}_call.bcf", b, p).as_str()) { rf.insert(asset.idx()); Ok(()) }
+			else { Err("Couldn't get pool JSON asset".to_string()) }
 		};
 		let add_pool_asset = |p: &str, rf: &mut HashSet<usize>| -> Result<(), String> {
 			for barcode in barcodes.iter() { add_bcf_asset(barcode, p, rf)? }
@@ -53,7 +56,10 @@ fn gen_call_command(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValu
 	if !options.contains_key("_no_md5") { super::md5sum::get_assets_md5_call(gem_bs, &options, &mut assets, &mut coms)?; }
 	if gem_bs.all() { [Command::Index, Command::Map, Command::MergeBams, Command::Call].iter().for_each(|x| { coms.insert(*x); }) }
 	else if !(options.contains_key("_merge") || options.contains_key("_index")) { coms.insert(Command::Call); }
-	if !(options.contains_key("_no_merge") || options.contains_key("_index")) { coms.insert(Command::MergeBcfs); }
+	if !(options.contains_key("_no_merge") || options.contains_key("_index")) { 
+		coms.insert(Command::MergeBcfs); 
+		coms.insert(Command::MergeCallJsons); 
+	}
 	if !options.contains_key("_no_index") { coms.insert(Command::IndexBcf); }
 	let asset_ids: Vec<_> = assets.iter().copied().collect();
 	let com_set: Vec<_> = coms.iter().copied().collect();

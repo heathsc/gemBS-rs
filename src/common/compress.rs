@@ -80,6 +80,11 @@ pub fn open_bufreader(name: &Path) -> Result<Box<dyn BufRead>> {
 	}
 }
 
+pub fn open_bufwriter(path: &Path) -> Result<Box<dyn Write>> {
+	let file = File::create(path)?;
+	Ok(Box::new(BufWriter::new(file)))
+}
+
 pub fn get_reader(name: Option<&str>) -> Result<Box<dyn BufRead>> {
     match name {
         Some(file) => open_bufreader(Path::new(file)),

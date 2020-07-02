@@ -15,12 +15,14 @@ use crate::common::tasks::{TaskStatus, RunningTask};
 use crate::common::utils::{Pipeline, FileLock};
 use crate::common::utils;
 use crate::common::assets::{GetAsset};
+use report::SampleJsonFiles;
 
 mod map;
 mod index;
 mod md5sum;
 mod call;
 mod extract;
+mod report;
 
 #[derive(Debug)]
 struct RunJob {
@@ -130,6 +132,7 @@ fn get_command_req(gem_bs: &GemBS, com: Command) -> (f64, usize) {
 		Command::MD5Sum => (1.0, 0), // No special requirement for MD5Sum, and it can not be multithreaded
 		Command::MergeBams => get_merge_bam_req(gem_bs),
 		Command::MergeBcfs => get_merge_bcf_req(gem_bs),
+		Command::MergeCallJsons => (1.0, 0),
 	}			
 }
 
@@ -229,8 +232,23 @@ impl<'a> Scheduler<'a> {
 }
 
 #[derive(Debug)]
+pub enum QPipeCom { 
+	MapReport((Option<String>, Vec<SampleJsonFiles>)), 
+	CallReport((Option<String>, Vec<SampleJsonFiles>)),
+	MergeCallJsons(SampleJsonFiles),
+}
+
+#[derive(Debug)]
+pub enum QPipeStage {
+	External(Vec<(PathBuf, String)>),
+	Internal(QPipeCom),
+	None,
+}
+
+#[derive(Debug)]
 pub struct QPipe {
-	stages: Vec<(PathBuf, String)>,
+//	stages: Vec<(PathBuf, String)>,
+	stages: QPipeStage,
 	remove: Vec<PathBuf>,
 	outputs: Vec<PathBuf>,
 	output: Option<PathBuf>,
@@ -240,9 +258,18 @@ pub struct QPipe {
 } 
 
 impl QPipe {
-	pub fn new(sig: Arc<AtomicUsize>) -> Self { QPipe{ stages: Vec::new(), remove: Vec::new(), outputs: Vec::new(), output: None, log: None, remove_log: true, sig} }
+	pub fn new(sig: Arc<AtomicUsize>) -> Self { QPipe{ stages: QPipeStage::None, remove: Vec::new(), outputs: Vec::new(), output: None, log: None, remove_log: true, sig} }
 	pub fn add_stage(&mut self, path: &Path, args: &str) -> &mut Self {
-		self.stages.push((path.to_owned(), args.to_owned()));
+		let stage = (path.to_owned(), args.to_owned());
+		match &mut self.stages {
+			QPipeStage::None => self.stages = QPipeStage::External(vec!(stage)),
+			QPipeStage::External(ref mut s) => s.push(stage),
+			_ => panic!("Can't push stages to internal command"),
+		}
+		self
+	}
+	pub fn add_com(&mut self, com: QPipeCom) -> &mut Self {
+		if let QPipeStage::None = self.stages { self.stages = QPipeStage::Internal(com)	} else { panic!("Can't add internal command to existing pipeline") }
 		self
 	}
 	pub fn set_remove_log(&mut self, flag: bool) { self.remove_log = flag; } 
@@ -270,6 +297,8 @@ fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: u
 		Command::IndexBcf => Some(call::make_index_bcf_pipeline(gem_bs, job)),
 		Command::MD5Sum => Some(md5sum::make_md5sum_pipeline(gem_bs, job)),
 		Command::Extract => Some(extract::make_extract_pipeline(gem_bs, job)),
+		Command::MapReport => Some(report::make_map_report_pipeline(gem_bs, job)),
+		Command::MergeCallJsons => Some(report::make_merge_call_jsons_pipeline(gem_bs, job)),
 		_ => None, 
 	}
 }
@@ -280,18 +309,28 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 			Ok(Some(qpipe)) => {
 				let rm_log = qpipe.get_remove_log();
 				let rm_list: Vec<_> = qpipe.get_remove_iter().cloned().collect();
+				let out_list: Vec<_> = qpipe.get_outputs_iter().cloned().collect();
 				debug!("Worker thread {} received job: {:?}", idx, qpipe);
-				let mut pipeline = Pipeline::new();
-				for (path, s) in qpipe.stages.iter() { pipeline.add_stage(path, Some(s.split_ascii_whitespace())); }
-				let olist: Vec<_> = qpipe.get_outputs_iter().cloned().collect();
-				olist.iter().for_each(|x| { pipeline.add_output(x); });
-				let log = if let Some(file) = qpipe.log { pipeline.log_file(file.clone()); Some(file) } else { None };				
-				match if let Some(path) = qpipe.output { 
-					pipeline.out_file(&path); 
-					pipeline.run(qpipe.sig)
-				} else {
-					pipeline.run(qpipe.sig)
-				} {
+				let log = &qpipe.log.to_owned();
+				let res = match qpipe.stages {
+					QPipeStage::External(stages) => {
+						let mut pipeline = Pipeline::new();
+						for (path, s) in stages.iter() { pipeline.add_stage(path, Some(s.split_ascii_whitespace())); }
+						out_list.iter().for_each(|x| { pipeline.add_output(x); });
+						if let Some(file) = log { pipeline.log_file(file.clone()); }
+						let opath = &qpipe.output.to_owned();
+						if let Some(path) = opath { pipeline.out_file(&path); }
+						pipeline.run(qpipe.sig)
+					},
+					QPipeStage::Internal(com) => {
+						match com {
+							QPipeCom::MergeCallJsons(x) => report::merge_call_jsons(Arc::clone(&qpipe.sig), &qpipe.outputs, &x),
+							_ => Ok(None),						
+						}
+					},
+					QPipeStage::None => Err("No pipeline stages".to_string())
+				};
+				match res {
 					Ok(_) => {
 						debug!("Worker thread {} finished job", idx);
 						if rm_log {
@@ -390,7 +429,7 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 					if let Some(qpipe) = handle_job(gem_bs, options, job.task_idx) {
 						jobs.push((job, idx));					
 						workers[idx as usize].tx.send(Some(qpipe)).expect("Error sending new command to worker thread");
-					}
+					} else { return Err("Empty command pipeline!".to_string()) };
 				},
 				Err(SchedulerError::NoSlots) => {
 					debug!("No Slots");

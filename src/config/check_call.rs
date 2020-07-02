@@ -22,11 +22,11 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 		if let Some(x) = gem_bs.get_asset(*f) { common_inputs.push(x.idx()) } else { panic!("{} not found", f) };
 	}
 	if let Some(x) = gem_bs.get_asset("dbsnp_index") { common_inputs.push(x.idx()) } 
-	let handle_file = |gb: &mut GemBS, nm: String, id: Option<String>, p: &Path| {
+	let handle_file = |gb: &mut GemBS, nm: String, id: Option<String>, p: &Path, st: AssetType| {
 		let tpath = Path::new(nm.as_str());
 		let path: PathBuf = [p, tpath].iter().collect();
-		if let Some(s) = id { gb.insert_asset(s.as_str(), &path, AssetType::Derived) }
-		else { gb.insert_asset(nm.as_str(), &path, AssetType::Derived) }
+		if let Some(s) = id { gb.insert_asset(s.as_str(), &path, st) }
+		else { gb.insert_asset(nm.as_str(), &path, st) }
 	}; 
 	for (bcode, name) in samples.iter() {
 		let bam = if let Some(x) = gem_bs.get_asset(format!("{}.{}", bcode, ext).as_str()) { x.idx() } 
@@ -40,13 +40,15 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 		let bcf_path = Path::new(&tmp_bcf_dir);	
 		if pools.len() > 1 {
 			let mut out_bcfs = Vec::new();
+			let mut out_jsons = Vec::new();
 			for pool in pools.iter() {
 				let mut in_vec = common_inputs.clone();
 				in_vec.push(bam);
 				in_vec.push(bam_idx);
-				let out = handle_file(gem_bs, format!("{}_{}.bcf", bcode, pool), None, bcf_path);
-				let out1 = handle_file(gem_bs, format!("{}_{}.json", bcode, pool), Some(format!("{}_{}_call.json", bcode, pool)), bcf_path);
+				let out = handle_file(gem_bs, format!("{}_{}.bcf", bcode, pool), None, bcf_path, AssetType::Derived);
+				let out1 = handle_file(gem_bs, format!("{}_{}.json", bcode, pool), Some(format!("{}_{}_call.json", bcode, pool)), bcf_path, AssetType::Temp);
 				out_bcfs.push(out);
+				out_jsons.push(out1);
 				let id = format!("bcf_call_{}_{}", bcode, pool);
 				let (lname, lpath) = assets::make_ext_asset(&id, bcf_path, "log");
 				let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
@@ -56,7 +58,8 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 					.add_cores(cores).add_memory(memory).add_time(time);
 				[out, out1].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(call_task, &in_vec));
 			}
-			let out = handle_file(gem_bs, format!("{}.bcf", bcode), None, bcf_path);
+			let out = handle_file(gem_bs, format!("{}.bcf", bcode), None, bcf_path, AssetType::Derived);
+			let out1 = handle_file(gem_bs, format!("{}_call.json", bcode), None, bcf_path, AssetType::Derived);
 			let id = format!("bcf_mergecall_{}", bcode);
 			let (lname, lpath) = assets::make_ext_asset(&id, bcf_path, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
@@ -65,11 +68,15 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 			gem_bs.add_task_inputs(merge_task, &out_bcfs).add_outputs(&[out]).set_log(Some(log_index)).set_barcode(bcode)
 				.add_cores(cores).add_memory(memory).add_time(time);
 			gem_bs.get_asset_mut(out).unwrap().set_creator(merge_task, &out_bcfs);
+			let id = format!("merge_call_jsons_{}", bcode);
+			let merge_json_task = gem_bs.add_task(&id, format!("Merge JSONs for barcode {}", bcode).as_str(), Command::MergeCallJsons, "");
+			gem_bs.add_task_inputs(merge_json_task, &out_jsons).add_outputs(&[out1]).set_barcode(bcode);
+			gem_bs.get_asset_mut(out1).unwrap().set_creator(merge_json_task, &out_jsons);
 		} else {
 			let mut in_vec = common_inputs.clone();
 			in_vec.push(bam);
-			let out = handle_file(gem_bs, format!("{}.bcf", bcode), None, bcf_path);
-			let out1 = handle_file(gem_bs, format!("{}.json", bcode), Some(format!("{}_call.json", bcode)), bcf_path);
+			let out = handle_file(gem_bs, format!("{}.bcf", bcode), None, bcf_path, AssetType::Derived);
+			let out1 = handle_file(gem_bs, format!("{}.json", bcode), Some(format!("{}_call.json", bcode)), bcf_path, AssetType::Derived);
 			let id = format!("single_bcf_call_{}", bcode);
 			let (lname, lpath) = assets::make_ext_asset(&id, bcf_path, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
