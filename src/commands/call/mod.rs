@@ -34,7 +34,7 @@ fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataV
 		let add_bcf_asset = |b: &str, p: &str, rf: &mut HashSet<usize>| {
 			if let Some(asset) = gem_bs.get_asset(format!("{}_{}.bcf", b, p).as_str()) { rf.insert(asset.idx()); }
 			else { return Err(format!("Unknown pool {}", p)); }
-			if let Some(asset) = gem_bs.get_asset(format!("{}_{}_call.bcf", b, p).as_str()) { rf.insert(asset.idx()); Ok(()) }
+			if let Some(asset) = gem_bs.get_asset(format!("{}_{}_call.json", b, p).as_str()) { rf.insert(asset.idx()); Ok(()) }
 			else { Err("Couldn't get pool JSON asset".to_string()) }
 		};
 		let add_pool_asset = |p: &str, rf: &mut HashSet<usize>| -> Result<(), String> {

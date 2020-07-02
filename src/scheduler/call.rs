@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
-use serde_json::Value;
 use std::io::{BufWriter, Write, BufReader};
 use regex::Regex;
 use lazy_static::lazy_static;
@@ -10,6 +9,7 @@ use crate::config::GemBS;
 use crate::common::assets::GetAsset;
 use crate::common::defs::{DataValue, Section, ContigInfo, ContigData, VarType};
 use crate::common::tasks::Task;
+use crate::common::json_map_stats::{MapJson, BaseCounts, Counts};
 use super::QPipe;
 
 fn check_inputs<'a>(gem_bs: &'a GemBS, task: &'a Task) -> (usize, &'a str) {
@@ -52,66 +52,33 @@ fn make_pool_file(gem_bs: &GemBS, barcode: &str, pool: Option<&str>, output: &Pa
 	} else { None }
 }
 
-#[derive(Debug)]
-struct BaseCounts {
-	read1: [usize; 4],
-	read2: [usize; 4],
-}
-
-impl BaseCounts {
-	fn new() -> Self { BaseCounts{read1: [0; 4], read2: [0; 4]}}
-}
-
-fn get_counts(val: &Value) -> Option<(usize, usize)> {
-	if let Value::Array(v) = val {
-		let mut cts = Vec::new();
-		for x in v.iter() {	if let Value::Number(y) = x { if let Some(i) = y.as_u64() { cts.push(i as usize) }}}
-		if cts.len() == 2 { Some((cts[0], cts[1])) }
-		else { None }
-	} else { None }
-}
-fn get_base_counts(map: &serde_json::map::Map<String, Value>, ct: &mut BaseCounts) {
-	let gct = |base, ix, ct: &mut BaseCounts| { if let Some((a, b)) = map.get(base).and_then(|x| get_counts(x)) { ct.read1[ix] += a; ct.read2[ix] += b; }};
-	gct("A", 0, ct);
-	gct("C", 1, ct);
-	gct("G", 2, ct);
-	gct("T", 3, ct);
-}
-fn add_conversion_counts(gem_bs: &GemBS, ix: usize, counts: &mut [BaseCounts; 2]) {
+fn add_conversion_counts(gem_bs: &GemBS, ix: usize, counts: &mut [BaseCounts<Counts>; 2]) {
 	let path = gem_bs.get_asset(ix).expect("Couldn't get JSON asset").path();
 	let file = match fs::File::open(path) {
 		Err(e) => panic!("Couldn't open {}: {}", path.to_string_lossy(), e),
 		Ok(f) => f,
 	};
 	let reader = Box::new(BufReader::new(file));
-	let obj: Value = serde_json::from_reader(reader).expect("Couldn't parse JSON file");
-	if let Value::Object(x) = obj {
-		if let Some(Value::Object(bc)) = x.get("BaseCounts") {
-			let gc = |name, bc: &serde_json::map::Map<_, _>, ct: &mut BaseCounts| {
-				if let Some(Value::Object(cts)) = bc.get(name) { get_base_counts(cts, ct) }};	
-			gc("UnderConversionControlC2T", bc, &mut counts[0]);
-			gc("UnderConversionControlG2A", bc, &mut counts[0]);
-			gc("OverConversionControlC2T", bc, &mut counts[1]);
-			gc("OverConversionControlG2A", bc, &mut counts[1]);
-		}
-	}
+	let json = MapJson::from_reader(reader).unwrap_or_else(|e| panic!("Couldn't parse JSON file {}: {}", path.to_string_lossy(), e));
+	let (ct1, ct2) = json.get_conversion_counts();
+	counts[0] += ct1;
+	counts[1] += ct2;
 }
-	
-fn calc_conversion(cts: &BaseCounts) -> Option<f64> {
-	let n1 = cts.read1[0] + cts.read1[2] + cts.read2[1] + cts.read2[3];
-	let n2 = cts.read1[1] + cts.read1[3] + cts.read2[0] + cts.read2[2];
+
+fn calc_conversion(cts: &BaseCounts<Counts>) -> Option<f64> {
+	let n1 = cts.a[0] + cts.g[0] + cts.c[1] + cts.t[1];
+	let n2 = cts.c[0] + cts.t[0] + cts.a[1] + cts.g[1];
 	if (n1 + n2) >= 10000 && n1 > 0 && n2 > 0 {
-		let z = ((cts.read1[0] + cts.read2[3]) as f64) / (n1 as f64);
-		let a = ((cts.read1[3] + cts.read2[0]) as f64) * (1.0 - z) - ((cts.read1[1] + cts.read2[2]) as f64) * z;
+		let z = ((cts.a[0] + cts.t[1]) as f64) / (n1 as f64);
+		let a = ((cts.t[0] + cts.a[1]) as f64) * (1.0 - z) - ((cts.c[0] + cts.g[1]) as f64) * z;
 		let b = (n2 as f64) * (1.0 - z);
 		Some(a / b)	
 	} else { None }
 }
-
 fn get_conversion_rate(gem_bs: &GemBS, barcode: &str) -> (f64, f64) {
 	let (mut under, mut over) = if gem_bs.get_config_bool(Section::Calling, "auto_conversion") {	
 		let json_files = gem_bs.get_mapping_json_files_for_barcode(barcode);
-		let mut counts = [BaseCounts::new(), BaseCounts::new()];
+		let mut counts = [BaseCounts::<Counts>::new(), BaseCounts::<Counts>::new()];
 		for f in json_files.iter() { add_conversion_counts(gem_bs, *f, &mut counts); }
 		// Do some sanity checking to avoid using crazy values.
 		let under = calc_conversion(&counts[0]).and_then(|z| {
