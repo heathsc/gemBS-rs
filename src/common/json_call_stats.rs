@@ -199,7 +199,7 @@ impl Coverage {
 		for (key, ct) in other.gc.iter() { add_assign_vec(self.gc.entry(*key).or_insert_with(Vec::new), ct, 0); }
 	}
 }
-fn add_assign_vec<T: Clone + Copy + AddAssign>(a: &mut Vec<T>, b: &[T], zero: T) {
+pub fn add_assign_vec<T: Clone + Copy + AddAssign>(a: &mut Vec<T>, b: &[T], zero: T) {
 	if b.len() > a.len() { a.resize(b.len(), zero); }
 	for (i, x) in b.iter().enumerate() { a[i] += *x }
 }
