@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
 use crate::config::GemBS;
-use crate::common::defs::{Section, Metadata, DataValue};
+use crate::common::defs::{Section, Metadata, DataValue, Command};
 use crate::common::assets::GetAsset;
 use crate::common::json_call_stats::CallJson;
 use super::{QPipe, QPipeCom};
@@ -14,15 +14,19 @@ use crate::common::utils;
 
 #[derive(Debug)]
 pub struct SampleJsonFiles {
-	barcode: String,
-	json_files: Vec<(String, PathBuf)>,
+	pub barcode: String,
+	pub bc_dir: Option<PathBuf>,
+	pub json_files: Vec<(String, PathBuf)>,
 }
 
 pub fn make_map_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 {
 	let task = &gem_bs.get_tasks()[job];
+	let (nc, _) = super::get_command_req(gem_bs, Command::MapReport);
+	let n_cores = { let x = (nc + 0.5) as usize; if x < 1 { 1 } else { x } };
 	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
 	let project = gem_bs.get_config_str(Section::Report, "project").map(|x| x.to_owned());
+	let mapq_thresh = gem_bs.get_config_int(Section::Report, "mapq_threshold").unwrap_or(20);
 	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get map-report output asset").path()); }
 	let href = gem_bs.get_sample_data_ref();	
 	let mut bcodes = HashMap::new();	
@@ -33,6 +37,8 @@ pub fn make_map_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	}
 	let mut json_files = Vec::new();
 	for(bc, dvec) in bcodes.iter() {
+		let bc_dir = gem_bs.get_asset(format!("{}_map_index.html", bc).as_str()).expect("Culdn't find map report asset")
+			.path().parent().expect("No parent dir found for map report file").to_owned();
 		let v = if dvec.len() == 1 {
 			let json = gem_bs.get_asset(format!("{}_map.json", bc).as_str()).expect("Culdn't find JSON map asset").path();
 			let dat = dvec[0].to_owned();
@@ -45,10 +51,10 @@ pub fn make_map_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 			}
 			v
 		};
-		json_files.push(SampleJsonFiles{barcode: bc.to_owned(), json_files: v});
+		json_files.push(SampleJsonFiles{barcode: bc.to_owned(), bc_dir: Some(bc_dir), json_files: v});
 	}
 
-	let com = QPipeCom::MapReport((project, json_files));
+	let com = QPipeCom::MapReport((project, mapq_thresh as usize, n_cores, json_files));
 	pipeline.add_com(com);
 	pipeline		
 }
@@ -64,7 +70,7 @@ pub fn make_merge_call_jsons_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 		pipeline.add_remove_file(asset.path());
 		(asset.id().to_owned(), asset.path().to_owned())
 	}).collect();
-	let com = QPipeCom::MergeCallJsons(SampleJsonFiles{barcode: bc.to_owned(), json_files});
+	let com = QPipeCom::MergeCallJsons(SampleJsonFiles{barcode: bc.to_owned(), bc_dir: None, json_files});
 	pipeline.add_com(com);
 	pipeline		
 }

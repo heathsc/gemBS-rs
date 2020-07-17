@@ -65,7 +65,7 @@ fn add_conversion_counts(gem_bs: &GemBS, ix: usize, counts: &mut [BaseCounts<Cou
 	counts[1] += ct2;
 }
 
-fn calc_conversion(cts: &BaseCounts<Counts>) -> Option<f64> {
+pub fn calc_conversion(cts: &BaseCounts<Counts>) -> Option<f64> {
 	let n1 = cts.a[0] + cts.g[0] + cts.c[1] + cts.t[1];
 	let n2 = cts.c[0] + cts.t[0] + cts.a[1] + cts.g[1];
 	if (n1 + n2) >= 10000 && n1 > 0 && n2 > 0 {

@@ -9,7 +9,7 @@ use super::json_call_stats::add_assign_vec;
 pub trait New { fn new() -> Self; }
 
 #[derive(Debug, Copy, Clone, Deserialize)]
-pub struct Counts([usize; 2]);
+pub struct Counts(pub [usize; 2]);
 
 impl AddAssign for Counts {
     fn add_assign(&mut self, other: Self) {
@@ -29,7 +29,7 @@ impl IndexMut<usize> for Counts {
 impl New for Counts { fn new() -> Self { Counts([0;2]) } }
 
 #[derive(Debug, Copy, Clone, Deserialize)]
-struct Count([usize; 1]);
+pub struct Count(pub [usize; 1]);
 impl Index<usize> for Count {
     type Output = usize;
     fn index(&self, index: usize) -> &Self::Output { &self.0[index] }
@@ -54,12 +54,12 @@ impl New for Count { fn new() -> Self { Count([0; 1])} }
 
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct Reads<T> {
-	general: T,
-	unmapped: T,
-	sequencing_control: Option<T>,
-	under_conversion_control: Option<T>,
-	over_conversion_control: Option<T>,
+pub struct Reads<T> {
+	pub general: T,
+	pub unmapped: T,
+	pub sequencing_control: Option<T>,
+	pub under_conversion_control: Option<T>,
+	pub over_conversion_control: Option<T>,
 }
 
 fn add_option<T: Add<Output = T>>(a: Option<T>, b: Option<T>) -> Option<T> 
@@ -68,6 +68,16 @@ fn add_option<T: Add<Output = T>>(a: Option<T>, b: Option<T>) -> Option<T>
 		if let Some(x) = a { Some(x + y) }
 		else { Some(y) }
 	} else { a }
+}
+
+impl<T: AddAssign + Copy + Add<Output = T>> Reads<T> {
+	pub fn get_total(&self) -> T {
+		let mut ct = self.general + self.unmapped;
+		if let Some(x) = self.sequencing_control { ct += x }
+		if let Some(x) = self.under_conversion_control { ct += x }
+		if let Some(x) = self.over_conversion_control { ct += x }
+		ct
+	}	
 }
 
 impl<T: AddAssign + Copy + Add<Output = T>> AddAssign for Reads<T> {
@@ -95,9 +105,9 @@ impl From<Reads<Count>> for Reads<Counts> {
 
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
-struct NumReadsBS<T> {
-	c2t: T,
-	g2a: T,
+pub struct NumReadsBS<T> {
+	pub c2t: T,
+	pub g2a: T,
 }
 
 impl From<NumReadsBS<Count>> for NumReadsBS<Counts> {
@@ -138,6 +148,10 @@ impl<T: Add<Output = T>> Add for BaseCounts<T> {
 impl<T: New> BaseCounts<T> {
 	pub fn new() -> Self { Self{ a: T::new(), c: T::new(), g: T::new(), t: T::new(), n: T::new() }}
 }
+impl<T: Copy + Add<Output = T>> BaseCounts<T> {
+	pub fn get_total(&self) -> T { self.a + self.c + self.g + self.t + self.n }	
+}
+
 
 impl From<Count> for Counts {
 	fn from(c: Count) -> Self { Counts([c[0], 0]) }
@@ -150,20 +164,20 @@ impl From<BaseCounts<Count>> for BaseCounts<Counts> {
 
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct BaseCountStats<T> {
-	overall: BaseCounts<T>,
+pub struct BaseCountStats<T> {
+	pub overall: BaseCounts<T>,
 	#[serde(rename = "GeneralC2T")]
-	general_c2t: Option<BaseCounts<T>>,
+	pub general_c2t: Option<BaseCounts<T>>,
 	#[serde(rename = "GeneralG2A")]
-	general_g2a: Option<BaseCounts<T>>,
+	pub general_g2a: Option<BaseCounts<T>>,
 	#[serde(rename = "UnderConversionControlC2T")]
-	under_conversion_control_c2t: Option<BaseCounts<T>>,
+	pub under_conversion_control_c2t: Option<BaseCounts<T>>,
 	#[serde(rename = "UnderConversionControlG2A")]
-	under_conversion_control_g2a: Option<BaseCounts<T>>,
+	pub under_conversion_control_g2a: Option<BaseCounts<T>>,
 	#[serde(rename = "OverConversionControlC2T")]
-	over_conversion_control_c2t: Option<BaseCounts<T>>,
+	pub over_conversion_control_c2t: Option<BaseCounts<T>>,
 	#[serde(rename = "OverConversionControlG2A")]
-	over_conversion_control_g2a: Option<BaseCounts<T>>,
+	pub over_conversion_control_g2a: Option<BaseCounts<T>>,
 }
 
 impl<T: AddAssign + Copy + Add<Output = T>> AddAssign for BaseCountStats<T> {
@@ -221,6 +235,13 @@ impl Paired {
 		}
 		for (key, ct) in other.hist_template_len.iter() { *(self.hist_template_len.entry(key.to_owned()).or_insert(0)) += ct; }
 	}
+	pub fn reads(&self) -> Reads<Counts> { self.reads }
+	pub fn bs_reads(&self) -> Option<NumReadsBS<Counts>> { self.num_reads_bs }
+	pub fn base_counts(&self) -> BaseCountStats<Counts> { self.base_counts }
+	pub fn correct_pairs(&self) -> usize { self.correct_pairs }
+	pub fn read_len(&self) -> &[HashMap<String, usize>; 2] { &self.hist_read_len }
+	pub fn mismatch(&self) -> &[HashMap<String, usize>; 2] { &self.hist_mismatch }
+	pub fn template_len(&self) -> &HashMap<String, usize> { &self.hist_template_len }
 }
 
 #[derive(Clone, Deserialize)]
@@ -246,6 +267,11 @@ impl Single {
 		for (key, ct) in other.hist_read_len[0].iter() { *(self.hist_read_len[0].entry(key.to_owned()).or_insert(0)) += ct; }
 		for (key, ct) in other.hist_mismatch[0].iter() { *(self.hist_mismatch[0].entry(key.to_owned()).or_insert(0)) += ct; }
 	}
+	pub fn reads(&self) -> Reads<Count> { self.reads }
+	pub fn bs_reads(&self) -> Option<NumReadsBS<Count>> { self.num_reads_bs }
+	pub fn base_counts(&self) -> BaseCountStats<Count> { self.base_counts }
+	pub fn read_len(&self) -> &HashMap<String, usize> { &self.hist_read_len[0] }
+	pub fn mismatch(&self) -> &HashMap<String, usize> { &self.hist_mismatch[0] }
 }
 
 #[derive(Clone, Copy)]
@@ -291,6 +317,19 @@ impl MapJson {
 			},
 		}
 		(ct1, ct2)
+	}
+	pub fn get_mapq_hist(&self) -> &Vec<usize> {
+		match self {
+			MapJson::Paired(s) | MapJson::Unknown(s) => &s.hist_mapq,
+			MapJson::Single(s) => &s.hist_mapq,
+		}
+	}
+	pub fn get_unique(&self, thresh: usize) -> (usize, usize) {
+		self.get_mapq_hist().iter().enumerate().fold((0, 0), |mut s, (q, x)| {
+			if q >= thresh { s.0 += x }
+			s.1 += x;
+			s
+		})		
 	}
 	pub fn merge(mut self, mut other: Self) -> Self {
 		let t1 = self.get_type();

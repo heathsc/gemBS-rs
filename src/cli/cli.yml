@@ -192,6 +192,7 @@ subcommands:
         args:
           - project: {short: p, long: project, value_name: NAME, takes_value: true, help: Output title for report (project name)}
           - output_dir: {short: o, long: output-dir, value_name: PATH, takes_value: true, help: Output directory for mapping report}
+          - mapq_threshold: {short: q, long: mapq-threshold, value_name: MAPQ_THRESHOLD, takes_value: true, help: Threshold for MAPQ scores}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
           - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}

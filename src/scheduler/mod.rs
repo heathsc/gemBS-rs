@@ -15,14 +15,16 @@ use crate::common::tasks::{TaskStatus, RunningTask};
 use crate::common::utils::{Pipeline, FileLock};
 use crate::common::utils;
 use crate::common::assets::{GetAsset};
+use crate::commands::report::make_map_report;
+
 use report::SampleJsonFiles;
 
 mod map;
 mod index;
 mod md5sum;
-mod call;
 mod extract;
-mod report;
+pub mod call;
+pub mod report;
 
 #[derive(Debug)]
 struct RunJob {
@@ -120,7 +122,7 @@ fn get_merge_bam_req(gem_bs: &GemBS) -> (f64, usize) {
 	(n, m)
 }
 
-fn get_command_req(gem_bs: &GemBS, com: Command) -> (f64, usize) {
+pub fn get_command_req(gem_bs: &GemBS, com: Command) -> (f64, usize) {
 	match com {
 		Command::Index => get_requirements(gem_bs, Section::Index, true),
 		Command::Map => get_requirements(gem_bs, Section::Mapping, true),
@@ -233,7 +235,7 @@ impl<'a> Scheduler<'a> {
 
 #[derive(Debug)]
 pub enum QPipeCom { 
-	MapReport((Option<String>, Vec<SampleJsonFiles>)), 
+	MapReport((Option<String>, usize, usize, Vec<SampleJsonFiles>)), 
 	CallReport((Option<String>, Vec<SampleJsonFiles>)),
 	MergeCallJsons(SampleJsonFiles),
 }
@@ -247,7 +249,6 @@ pub enum QPipeStage {
 
 #[derive(Debug)]
 pub struct QPipe {
-//	stages: Vec<(PathBuf, String)>,
 	stages: QPipeStage,
 	remove: Vec<PathBuf>,
 	outputs: Vec<PathBuf>,
@@ -285,7 +286,7 @@ fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: u
 	let task = &gem_bs.get_tasks()[job];
 	for p in task.outputs().map(|x| gem_bs.get_asset(*x).expect("Couldn't get output asset").path()) {
 		if let Some(par) = p.parent() {
-			fs::create_dir_all(par).expect("Could not create required output directories for map command");
+			fs::create_dir_all(par).expect("Could not create required output directories for command");
 		}
 	}
 	match task.command() {
@@ -323,10 +324,21 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 						pipeline.run(qpipe.sig)
 					},
 					QPipeStage::Internal(com) => {
-						match com {
+						let ret = match com {
 							QPipeCom::MergeCallJsons(x) => report::merge_call_jsons(Arc::clone(&qpipe.sig), &qpipe.outputs, &x),
+							QPipeCom::MapReport((prj, thresh, nc, x)) => make_map_report::make_map_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, thresh, nc, x),
 							_ => Ok(None),						
-						}
+						};
+						if ret.is_err() {
+							error!("Error returned from internal pipeline command");
+							for file in qpipe.outputs.iter() {
+								if file.exists() {
+									warn!("Removing output file {}", file.to_string_lossy());
+									let _ = fs::remove_file(file); 
+								}
+							}
+						} 
+						ret
 					},
 					QPipeStage::None => Err("No pipeline stages".to_string())
 				};
@@ -350,7 +362,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 					},
 					Err(e) => {
 						tx.send(-(idx + 1)).expect("Error sending message to parent");
-						debug!("Worker thread {} shutting down after error", idx);
+						debug!("Worker thread {} shutting down after error {}", idx, e);
 						return Err(e);
 					},
 				}			

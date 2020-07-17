@@ -5,6 +5,8 @@ use crate::common::defs::{Section, Command, DataValue};
 use crate::common::{dry_run, utils};
 use crate::scheduler;
 
+pub mod make_map_report;
+
 fn collect_assets(gem_bs: &GemBS, id: &str) -> Result<Vec<usize>, String> {
 	if let Some(t) = gem_bs.get_tasks().find_task(id) {
 		Ok(gem_bs.get_tasks()[t].outputs().copied().collect())

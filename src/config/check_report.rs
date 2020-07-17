@@ -25,7 +25,7 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	out_vec.push(handle_file(gem_bs, "map_report_style.css", "style.css", &report_dir));
 	for (bc, _) in samples.iter() { 
 		let bc_dir: PathBuf = [&report_dir, Path::new(bc)].iter().collect();
-		out_vec.push(handle_file(gem_bs, format!("{}_index.html", bc).as_str(), "index.html", &bc_dir));
+		out_vec.push(handle_file(gem_bs, format!("{}_map_index.html", bc).as_str(), "index.html", &bc_dir));
 		out_vec.push(handle_file(gem_bs, format!("{}_isize.png", bc).as_str(), format!("{}_isize.png", bc).as_str(), &bc_dir));
 		out_vec.push(handle_file(gem_bs, format!("{}_mapq.png", bc).as_str(), format!("{}_mapq.png", bc).as_str(), &bc_dir));
 		json_files.extend(gem_bs.get_mapping_json_files_for_barcode(bc)); 
