@@ -233,7 +233,7 @@ fn make_mapq_table(path: &Path) -> Result<Content, String> {
 	let mut table = HtmlTable::new("green");
 	table.add_header(vec!("Mapping Quality Histogram"));
 	let fname = path.file_name().expect("Missing filename").to_string_lossy();
-	table.add_row(vec!(format!("<img src=\"{}\" alt=\"{}\">", fname, fname)));	
+	table.add_row(vec!(format!("<img src=\"images/{}\" alt=\"{}\">", fname, fname)));	
 	Ok(Content::Table(table))
 }
 
@@ -241,7 +241,7 @@ fn make_isize_table(path: &Path) -> Result<Content, String> {
 	let mut table = HtmlTable::new("green");
 	table.add_header(vec!("Insert Size Histogram"));
 	let fname = path.file_name().expect("Missing filename").to_string_lossy();
-	table.add_row(vec!(format!("<img src=\"{}\" alt=\"{}\">", fname, fname)));	
+	table.add_row(vec!(format!("<img src=\"images/{}\" alt=\"{}\">", fname, fname)));	
 	Ok(Content::Table(table))
 }
 
@@ -261,8 +261,8 @@ fn create_mapq_hist(path: &Path, json: &MapJson) -> Result<(), Box<dyn std::erro
 
     chart
         .configure_mesh()
-        .disable_x_mesh()
-        .disable_y_mesh()
+//        .disable_x_mesh()
+//        .disable_y_mesh()
         .line_style_1(&WHITE.mix(0.3))
         .y_desc("Fragments")
         .x_desc("MapQ")
@@ -312,12 +312,10 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
         .y_label_area_size(60)
         .margin(5)
         .caption("Insert Size Histogram", ("sans-serif", 22.0).into_font())
-        .build_ranged(0..lim + 1, 0..max)?;
-
+        .build_ranged(0..*lim, 0..max)?;
+ 
     chart
         .configure_mesh()
-        .disable_x_mesh()
-        .disable_y_mesh()
         .line_style_1(&WHITE.mix(0.3))
         .y_desc("Fragments")
         .x_desc("Insert Size (bp)")
@@ -329,14 +327,18 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
 	Ok(())
 		
 }
-fn create_sample_body(project: &str, bc: &str, ds: &str, mapq_threshold: usize, dir: &Path, json: &MapJson) -> Result<HtmlElement, String> {
-	let mut mapq_hist_png = dir.to_owned();
-	mapq_hist_png.push(format!("{}_mapq.png", ds).as_str());
+fn create_sample_body(project: &str, bc: &str, ds: Option<&str>, mapq_threshold: usize, dir: &Path, json: &MapJson) -> Result<HtmlElement, String> {
+	let (name, sample_report) = if let Some(s) = ds { (s, false) } else { (bc, true) };
+	let mut img_dir = dir.to_owned();
+	img_dir.push("images");
+	let mut mapq_hist_png = img_dir.clone();
+	mapq_hist_png.push(format!("{}_mapq.png", name).as_str());
 	let mut isize_hist_png = None;
 	create_mapq_hist(&mapq_hist_png, json).map_err(|e| format!("{}", e))?;
 	let mut body = HtmlElement::new("BODY", None, true);
 	let mut path = HtmlElement::new("P", Some("id=\"path\""), true);
-	path.push_string(format!("/{}/{}/{}", project, bc, ds));
+	if sample_report { path.push_string(format!("/{}/{}", project, bc)); }
+	else { path.push_string(format!("/{}/{}/{}", project, bc, name)); }
 	body.push(Content::Element(path));
 	let mut back = HtmlElement::new("B", None, true);
 	back.push_str("BACK");
@@ -344,7 +346,8 @@ fn create_sample_body(project: &str, bc: &str, ds: &str, mapq_threshold: usize, 
 	back_link.push_element(back);
 	body.push_element(back_link);
 	body.push_element(HtmlElement::new("BR", None, false));
-	body.push_element(make_title(format!("SAMPLE {} LANE {}", bc, ds)));
+	if sample_report { body.push_element(make_title(format!("SAMPLE {}", bc))); }
+	else { body.push_element(make_title(format!("SAMPLE {} LANE {}", bc, name))); }
 	body.push_element(make_section("Mapping Stats (Reads)"));
 	body.push(make_reads_table(json)?);
 	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
@@ -362,8 +365,8 @@ fn create_sample_body(project: &str, bc: &str, ds: &str, mapq_threshold: usize, 
 			body.push_element(make_section("Correct Pairs"));
 			body.push(make_correct_pairs_table(x)?);	
 
-			let mut tp = dir.to_owned();
-			tp.push(format!("{}_isize.png", ds).as_str());
+			let mut tp = img_dir;
+			tp.push(format!("{}_isize.png", name).as_str());
 			create_isize_hist(&tp, x).map_err(|e| format!("{}", e))?;
 			isize_hist_png = Some(tp);
 		},
@@ -386,14 +389,15 @@ fn create_sample_body(project: &str, bc: &str, ds: &str, mapq_threshold: usize, 
 	Ok(body)
 }
 
-fn create_sample_html(project: &str, bc: &str, ds: &str, mapq_threshold: usize, dir: &Path, json: &MapJson) -> Result<(), String> {
+fn create_sample_html(project: &str, bc: &str, ds: Option<&str>, mapq_threshold: usize, dir: &Path, json: &MapJson) -> Result<(), String> {
 
 	let mut path = dir.to_owned();
-	path.push(format!("{}.html", ds).as_str());
+	let name = if let Some(s) = ds { s } else { bc };
+	path.push(format!("{}.html", name).as_str());
 	let mut html = HtmlPage::new(&path)?;
 	let mut head_element = HtmlElement::new("HEAD", None, true);
 	let mut style_element = HtmlElement::new("STYLE", Some("TYPE=\"text/css\""), true);
-	style_element.push_str("<!--\n@import url(\"style.css\");\n-->");
+	style_element.push_str("<!--\n@import url(\"../../css/style.css\");\n-->");
 	head_element.push_element(style_element);
 	html.push_element(head_element);
 	html.push_element(create_sample_body(project, bc, ds, mapq_threshold, dir, json)?);
@@ -406,6 +410,7 @@ fn create_sample_report(job: ReportJob) -> Result<(), String> {
 	debug!("Creating sample report for {}/{}", project, jfiles.barcode);
 	let bc_dir = jfiles.bc_dir.expect("No parent directory given for sample report output");
 	let mut mrg_json: Option<MapJson> = None;
+	let n_files = jfiles.json_files.len();
 	for (ds, path) in jfiles.json_files {
 		let file = match fs::File::open(path.clone()) {
 			Err(e) => panic!("Couldn't open {}: {}", path.to_string_lossy(), e),
@@ -413,11 +418,12 @@ fn create_sample_report(job: ReportJob) -> Result<(), String> {
 		};
 		let reader = Box::new(BufReader::new(file));
 		let json = MapJson::from_reader(reader).unwrap_or_else(|e| panic!("Couldn't parse JSON file {}: {}", path.to_string_lossy(), e));
-		create_sample_html(&project, &jfiles.barcode, &ds, job.mapq_threshold, &bc_dir, &json)?;
+		if n_files > 1 { create_sample_html(&project, &jfiles.barcode, Some(&ds), job.mapq_threshold, &bc_dir, &json)?; }
 		mrg_json = if let Some(j) = mrg_json {
 			Some(j.merge(json))
 		} else { Some(json) }
 	}
+	create_sample_html(&project, &jfiles.barcode, None, job.mapq_threshold, &bc_dir, &mrg_json.expect("No merged JSON struct"))?;
 	Ok(())
 }
 
@@ -446,8 +452,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<ReportJob>>,
 	Ok(())
 }
 
-pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, mapq_threshold
-: usize, n_cores: usize, mut svec: Vec<SampleJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
+pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, mapq_threshold: usize, n_cores: usize, mut svec: Vec<SampleJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
 	utils::check_signal(Arc::clone(&sig))?;
 	let output_dir = outputs.first().expect("No output files for map report").parent().expect("No parent directory found for map report");
 	println!("Make map report for {:?}, n_cores: {} in dir: {}", project, n_cores, output_dir.to_string_lossy());

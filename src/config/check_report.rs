@@ -2,6 +2,8 @@
 // Make asset list for BCFs, BED, BigWig etc. associated with map_report
 
 use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+
 use crate::common::defs::{Section, DataValue, Command, Metadata};
 use crate::common::assets::{AssetType, GetAsset};
 use super::GemBS;
@@ -25,22 +27,30 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	out_vec.push(handle_file(gem_bs, "map_report_style.css", "style.css", &report_dir));
 	for (bc, _) in samples.iter() { 
 		let bc_dir: PathBuf = [&report_dir, Path::new(bc)].iter().collect();
+		let img_dir: PathBuf = [&report_dir, Path::new(bc), Path::new("images")].iter().collect();
 		out_vec.push(handle_file(gem_bs, format!("{}_map_index.html", bc).as_str(), "index.html", &bc_dir));
-		out_vec.push(handle_file(gem_bs, format!("{}_isize.png", bc).as_str(), format!("{}_isize.png", bc).as_str(), &bc_dir));
-		out_vec.push(handle_file(gem_bs, format!("{}_mapq.png", bc).as_str(), format!("{}_mapq.png", bc).as_str(), &bc_dir));
+		out_vec.push(handle_file(gem_bs, format!("{}_isize.png", bc).as_str(), format!("{}_isize.png", bc).as_str(), &img_dir));
+		out_vec.push(handle_file(gem_bs, format!("{}_mapq.png", bc).as_str(), format!("{}_mapq.png", bc).as_str(), &img_dir));
 		json_files.extend(gem_bs.get_mapping_json_files_for_barcode(bc)); 
 	}
 	let mut dsets = Vec::new();
+	let mut bc_count = HashMap::new();
 	let href = gem_bs.get_sample_data_ref();	
 	for (dataset, href1) in href.iter() {
-		if let Some(DataValue::String(bc)) = href1.get(&Metadata::SampleBarcode) { dsets.push((bc.to_owned(), dataset.to_owned())) }
-		else { panic!("No barcode associated with dataset {}", dataset); }
+		if let Some(DataValue::String(bc)) = href1.get(&Metadata::SampleBarcode) { 
+			dsets.push((bc.to_owned(), dataset.to_owned()));
+			*(bc_count.entry(bc.to_owned()).or_insert(0)) += 1;
+
+		} else { panic!("No barcode associated with dataset {}", dataset); }
 	}
-	for (bc, dset) in dsets.iter() {		
-		let bc_dir: PathBuf = [&report_dir, Path::new(bc)].iter().collect();
-		out_vec.push(handle_file(gem_bs, format!("{}.html", dset).as_str(), format!("{}.html", dset).as_str(), &bc_dir));
-		out_vec.push(handle_file(gem_bs, format!("{}_isize.png", dset).as_str(), format!("{}_isize.png", dset).as_str(), &bc_dir));
-		out_vec.push(handle_file(gem_bs, format!("{}_mapq.png", dset).as_str(), format!("{}_mapq.png", dset).as_str(), &bc_dir));
+	for (bc, dset) in dsets.iter() {
+		if *bc_count.get(bc).expect("No count found for barcode") > 1 {
+			let bc_dir: PathBuf = [&report_dir, Path::new(bc)].iter().collect();
+			let img_dir: PathBuf = [&report_dir, Path::new(bc), Path::new("images")].iter().collect();
+			out_vec.push(handle_file(gem_bs, format!("{}.html", dset).as_str(), format!("{}.html", dset).as_str(), &bc_dir));
+			out_vec.push(handle_file(gem_bs, format!("{}_isize.png", dset).as_str(), format!("{}_isize.png", dset).as_str(), &img_dir));
+			out_vec.push(handle_file(gem_bs, format!("{}_mapq.png", dset).as_str(), format!("{}_mapq.png", dset).as_str(), &img_dir));
+		}
 	}	
 	let task = gem_bs.add_task("map_report", "Generate mapping report", Command::MapReport, "");
 	gem_bs.add_task_inputs(task, &json_files).add_outputs(&out_vec).add_cores(cores).add_memory(memory).add_time(time);
