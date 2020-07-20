@@ -241,6 +241,10 @@ impl GemBS {
 		let root = &self.fs.as_ref().unwrap().gem_bs_root;
 		[root, Path::new("etc"), Path::new("config_scripts")].iter().collect()
 	} 
+	pub fn get_css_path(&self) -> PathBuf {
+		let root = &self.fs.as_ref().unwrap().gem_bs_root;
+		[root, Path::new("etc"), Path::new("css")].iter().collect()
+	} 
 
 	pub fn get_samples(&self) -> Vec<(String, Option<String>)> {
 		let mut bc_set = HashMap::new();

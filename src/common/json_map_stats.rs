@@ -352,8 +352,7 @@ impl MapJson {
 			_ => self.merge_paired_types(&other),
 			
 		}
-		self
-		
+		self		
 	}
 	fn merge_single(&mut self, other: &Self) {
 		if let MapJson::Single(s1) = self {
@@ -371,12 +370,14 @@ impl MapJson {
 		} else {panic!("Invalid conversion")}
 			
 	}
-	fn to_unknown(self) -> Self {
+
+	fn to_unknown(&self) -> Self {
 		let t = self.get_type();
+		let mjson = self.clone();
 		match t {
-			MapJsonType::Single => self.single_to_unknown(),
-			MapJsonType::Paired => self.paired_to_unknown(),
-			_ => self,
+			MapJsonType::Single => mjson.single_to_unknown(),
+			MapJsonType::Paired => mjson.paired_to_unknown(),
+			_ => mjson,
 		}
 	}
 	fn single_to_unknown(self) -> Self {

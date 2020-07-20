@@ -28,13 +28,7 @@ pub struct Task {
 	args: String,
 }
 
-impl Task {
-/*	fn new(id: Rc<String>, desc: &str, idx: usize, command: Command, args: &str, inputs: Vec<usize>, outputs: Vec<usize>, log: Option<usize>) -> Self {
-		Task{id, desc: desc.to_owned(), barcode: None, idx,
-		inputs, outputs, parents: Vec::new(), log,
-		status: None, command, args: args.to_owned()}
-	} */
-	
+impl Task {	
 	fn new(id: Rc<String>, desc: &str, idx: usize, command: Command, args: &str) -> Self {
 		Task{id, desc: desc.to_owned(), barcode: None, idx,
 		cores: None, memory: None, time: None,

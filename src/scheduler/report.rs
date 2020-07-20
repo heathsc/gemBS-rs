@@ -15,7 +15,13 @@ use crate::common::utils;
 #[derive(Debug)]
 pub struct SampleJsonFiles {
 	pub barcode: String,
-	pub bc_dir: Option<PathBuf>,
+	pub bc_dir: PathBuf,
+	pub json_files: Vec<(String, PathBuf)>,
+}
+
+#[derive(Debug)]
+pub struct MergeJsonFiles {
+	pub barcode: String,
 	pub json_files: Vec<(String, PathBuf)>,
 }
 
@@ -51,10 +57,11 @@ pub fn make_map_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 			}
 			v
 		};
-		json_files.push(SampleJsonFiles{barcode: bc.to_owned(), bc_dir: Some(bc_dir), json_files: v});
+		json_files.push(SampleJsonFiles{barcode: bc.to_owned(), bc_dir, json_files: v});
 	}
-
-	let com = QPipeCom::MapReport((project, mapq_thresh as usize, n_cores, json_files));
+	let mut css_dir = gem_bs.get_css_path();
+	css_dir.push("style.css");
+	let com = QPipeCom::MapReport((project, css_dir, mapq_thresh as usize, n_cores, json_files));
 	pipeline.add_com(com);
 	pipeline		
 }
@@ -70,12 +77,12 @@ pub fn make_merge_call_jsons_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 		pipeline.add_remove_file(asset.path());
 		(asset.id().to_owned(), asset.path().to_owned())
 	}).collect();
-	let com = QPipeCom::MergeCallJsons(SampleJsonFiles{barcode: bc.to_owned(), bc_dir: None, json_files});
+	let com = QPipeCom::MergeCallJsons(MergeJsonFiles{barcode: bc.to_owned(), json_files});
 	pipeline.add_com(com);
 	pipeline		
 }
 
-pub fn merge_call_jsons(sig: Arc<AtomicUsize>, outputs: &[PathBuf], sfiles: &SampleJsonFiles) -> Result<Option<Box<dyn BufRead>>, String> {
+pub fn merge_call_jsons(sig: Arc<AtomicUsize>, outputs: &[PathBuf], sfiles: &MergeJsonFiles) -> Result<Option<Box<dyn BufRead>>, String> {
 	let mut combined_stats: Option<CallJson> = None;
 	for (_, path) in sfiles.json_files.iter() {
 		utils::check_signal(Arc::clone(&sig))?;

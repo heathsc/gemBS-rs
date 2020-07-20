@@ -12,6 +12,7 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Report, name ) { x } else { "gemBS_reports" } };
 	let rdir = Path::new(get_dir("report_dir"));
 	let report_dir: PathBuf = [rdir, Path::new("mapping")].iter().collect(); 
+	let css_dir: PathBuf = [rdir, Path::new("css")].iter().collect(); 
 	let cores = gem_bs.get_config_int(Section::Report, "cores").map(|x| x as usize).or_else(|| Some(2));
 	let memory = gem_bs.get_config_memsize(Section::Report, "memory");
 	let time = gem_bs.get_config_joblen(Section::Report, "time").or_else(|| Some(3600.into()));
@@ -24,11 +25,11 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let mut json_files = Vec::new();
 	let mut out_vec = Vec::new();
 	out_vec.push(handle_file(gem_bs, "map_report_index.html", "index.html", &report_dir));
-	out_vec.push(handle_file(gem_bs, "map_report_style.css", "style.css", &report_dir));
+	out_vec.push(handle_file(gem_bs, "style.css", "style.css", &css_dir));
 	for (bc, _) in samples.iter() { 
 		let bc_dir: PathBuf = [&report_dir, Path::new(bc)].iter().collect();
 		let img_dir: PathBuf = [&report_dir, Path::new(bc), Path::new("images")].iter().collect();
-		out_vec.push(handle_file(gem_bs, format!("{}_map_index.html", bc).as_str(), "index.html", &bc_dir));
+		out_vec.push(handle_file(gem_bs, format!("{}_map_index.html", bc).as_str(), format!("{}.html", bc).as_str(), &bc_dir));
 		out_vec.push(handle_file(gem_bs, format!("{}_isize.png", bc).as_str(), format!("{}_isize.png", bc).as_str(), &img_dir));
 		out_vec.push(handle_file(gem_bs, format!("{}_mapq.png", bc).as_str(), format!("{}_mapq.png", bc).as_str(), &img_dir));
 		json_files.extend(gem_bs.get_mapping_json_files_for_barcode(bc)); 

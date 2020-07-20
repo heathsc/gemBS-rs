@@ -17,7 +17,7 @@ use crate::common::utils;
 use crate::common::assets::{GetAsset};
 use crate::commands::report::make_map_report;
 
-use report::SampleJsonFiles;
+use report::{MergeJsonFiles, SampleJsonFiles};
 
 mod map;
 mod index;
@@ -235,9 +235,9 @@ impl<'a> Scheduler<'a> {
 
 #[derive(Debug)]
 pub enum QPipeCom { 
-	MapReport((Option<String>, usize, usize, Vec<SampleJsonFiles>)), 
+	MapReport((Option<String>, PathBuf, usize, usize, Vec<SampleJsonFiles>)), 
 	CallReport((Option<String>, Vec<SampleJsonFiles>)),
-	MergeCallJsons(SampleJsonFiles),
+	MergeCallJsons(MergeJsonFiles),
 }
 
 #[derive(Debug)]
@@ -326,7 +326,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 					QPipeStage::Internal(com) => {
 						let ret = match com {
 							QPipeCom::MergeCallJsons(x) => report::merge_call_jsons(Arc::clone(&qpipe.sig), &qpipe.outputs, &x),
-							QPipeCom::MapReport((prj, thresh, nc, x)) => make_map_report::make_map_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, thresh, nc, x),
+							QPipeCom::MapReport((prj, cdir, thresh, nc, x)) => make_map_report::make_map_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, &cdir, thresh, nc, x),
 							_ => Ok(None),						
 						};
 						if ret.is_err() {
