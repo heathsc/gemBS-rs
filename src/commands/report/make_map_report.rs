@@ -432,18 +432,20 @@ fn create_sample_body(project: &str, bc: &str, ds: &[&str], mapq_threshold: usiz
 	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
 	body.push_element(make_section("Bisulfite Conversion Rate"));
 	body.push(make_conversion_table(json)?);
+	let mut tp = img_dir;
+	tp.push(format!("{}_isize.png", name).as_str());
 	match json {
 		MapJson::Paired(x) | MapJson::Unknown(x) => {
 			body.push_element(HtmlElement::new("BR><BR><BR", None, false));
 			body.push_element(make_section("Correct Pairs"));
 			body.push(make_correct_pairs_table(x)?);	
-
-			let mut tp = img_dir;
-			tp.push(format!("{}_isize.png", name).as_str());
 			create_isize_hist(&tp, x).map_err(|e| format!("{}", e))?;
 			isize_hist_png = Some(tp);
 		},
-		_ => (),
+		_ => {
+			// Create a dummy zero byte file so the dependencies work OK
+			let _ = fs::File::create(&tp).map_err(|e| format!("{}", e))?;
+		},
 	}
 	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
 	body.push_element(make_section("Mapping Quality"));
