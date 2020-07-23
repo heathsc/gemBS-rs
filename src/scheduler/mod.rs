@@ -15,9 +15,9 @@ use crate::common::tasks::{TaskStatus, RunningTask};
 use crate::common::utils::{Pipeline, FileLock};
 use crate::common::utils;
 use crate::common::assets::{GetAsset};
-use crate::commands::report::make_map_report;
+use crate::commands::report::{make_map_report, make_call_report};
 
-use report::{MergeJsonFiles, SampleJsonFiles};
+use report::{MergeJsonFiles, SampleJsonFiles, CallJsonFiles};
 
 mod map;
 mod index;
@@ -236,7 +236,7 @@ impl<'a> Scheduler<'a> {
 #[derive(Debug)]
 pub enum QPipeCom { 
 	MapReport((Option<String>, PathBuf, usize, usize, Vec<SampleJsonFiles>)), 
-	CallReport((Option<String>, Vec<SampleJsonFiles>)),
+	CallReport((Option<String>, PathBuf, usize, Vec<CallJsonFiles>)),
 	MergeCallJsons(MergeJsonFiles),
 }
 
@@ -299,8 +299,8 @@ fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: u
 		Command::MD5Sum => Some(md5sum::make_md5sum_pipeline(gem_bs, job)),
 		Command::Extract => Some(extract::make_extract_pipeline(gem_bs, job)),
 		Command::MapReport => Some(report::make_map_report_pipeline(gem_bs, job)),
+		Command::CallReport => Some(report::make_call_report_pipeline(gem_bs, job)),
 		Command::MergeCallJsons => Some(report::make_merge_call_jsons_pipeline(gem_bs, job)),
-		_ => None, 
 	}
 }
 
@@ -327,6 +327,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 						let ret = match com {
 							QPipeCom::MergeCallJsons(x) => report::merge_call_jsons(Arc::clone(&qpipe.sig), &qpipe.outputs, &x),
 							QPipeCom::MapReport((prj, cdir, thresh, nc, x)) => make_map_report::make_map_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, &cdir, thresh, nc, x),
+							QPipeCom::CallReport((prj, cdir, nc, x)) => make_call_report::make_call_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, &cdir, nc, x),
 							_ => Ok(None),						
 						};
 						if ret.is_err() {

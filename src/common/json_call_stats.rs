@@ -37,9 +37,9 @@ impl Counts {
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct QCCounts {
-	non_variant: usize,
-	variant: usize,
+pub struct QCCounts {
+	pub non_variant: usize,
+	pub variant: usize,
 }
 
 impl AddAssign for QCCounts {
@@ -148,11 +148,11 @@ impl FSType {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct QCDist {
-	fisher_strand: HashMap<usize, usize>,	
-	quality_by_depth: HashMap<usize, QCCounts>,
+pub struct QCDist {
+	pub fisher_strand: HashMap<usize, usize>,	
+	pub quality_by_depth: HashMap<usize, QCCounts>,
 	#[serde(rename = "RMSMappingQuality")]
-	rms_mapping_quality: HashMap<usize, QCCounts>,
+	pub rms_mapping_quality: HashMap<usize, QCCounts>,
 }
 
 impl QCDist {
@@ -167,21 +167,21 @@ impl QCDist {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-struct Coverage {
+pub struct Coverage {
 	#[serde(rename = "All")]
-	all: HashMap<usize, usize>,	
+	pub all: HashMap<usize, usize>,	
 	#[serde(rename = "Variant")]
-	variant: HashMap<usize, usize>,	
+	pub variant: HashMap<usize, usize>,	
 	#[serde(rename = "RefCpG")]
-	ref_cpg: HashMap<usize, usize>,	
+	pub ref_cpg: HashMap<usize, usize>,	
 	#[serde(rename = "RefCpGInf")]
-	ref_cpg_inf: HashMap<usize, usize>,	
+	pub ref_cpg_inf: HashMap<usize, usize>,	
 	#[serde(rename = "NonRefCpG")]
-	non_ref_cpg: HashMap<usize, usize>,	
+	pub non_ref_cpg: HashMap<usize, usize>,	
 	#[serde(rename = "NonRefCpGInf")]
-	non_ref_cpg_inf: HashMap<usize, usize>,	
+	pub non_ref_cpg_inf: HashMap<usize, usize>,	
 	#[serde(rename = "GC")]
-	gc: HashMap<usize, Vec<usize>>,	
+	pub gc: HashMap<usize, Vec<usize>>,	
 }
 
 impl Coverage {
@@ -205,15 +205,15 @@ pub fn add_assign_vec<T: Clone + Copy + AddAssign>(a: &mut Vec<T>, b: &[T], zero
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-struct Quality {
+pub struct Quality {
 	#[serde(rename = "All")]
-	all: Vec<usize>,
+	pub all: Vec<usize>,
 	#[serde(rename = "Variant")]
-	variant: Vec<usize>,
+	pub variant: Vec<usize>,
 	#[serde(rename = "RefCpG")]
-	ref_cpg: Vec<usize>,
+	pub ref_cpg: Vec<usize>,
 	#[serde(rename = "NonRefCpG")]
-	non_ref_cpg: Vec<usize>,
+	pub non_ref_cpg: Vec<usize>,
 }
 
 impl Quality {
@@ -227,14 +227,14 @@ impl Quality {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct Methylation {
-	all_ref_cpg: Vec<f64>,
-	passed_ref_cpg: Vec<f64>,
-	all_non_ref_cpg: Vec<f64>,
-	passed_non_ref_cpg: Vec<f64>,
+pub struct Methylation {
+	pub all_ref_cpg: Vec<f64>,
+	pub passed_ref_cpg: Vec<f64>,
+	pub all_non_ref_cpg: Vec<f64>,
+	pub passed_non_ref_cpg: Vec<f64>,
 	#[serde(rename = "NonCpGreadProfile")]
     #[serde(skip_serializing_if = "Option::is_none")]
-	non_cpg_read_profile: Option<Vec<[usize; 4]>>,
+	pub non_cpg_read_profile: Option<Vec<[usize; 4]>>,
 }
 
 impl Methylation {
@@ -396,4 +396,7 @@ impl CallJson {
 		// Merge contig stats
 		for (ctg, ct) in other.contig_stats.iter() { *(self.contig_stats.entry(ctg.to_owned()).or_insert_with(CSType::new)) += *ct; }
 	}
-}
+	pub fn coverage(&self) -> &Coverage { &self.total_stats.coverage }
+	pub fn quality(&self) -> &Quality { &self.total_stats.quality }
+	pub fn qc_dist(&self) -> &QCDist { &self.total_stats.qc_distributions }
+	pub fn methylation(&self) -> &Methylation { &self.total_stats.methylation }}

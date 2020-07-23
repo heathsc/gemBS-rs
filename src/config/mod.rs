@@ -394,6 +394,7 @@ impl GemBS {
 		let ignore = self.ignore_status();
 		for i in assets {
 			let asset = asset_ref.get_asset(*i).unwrap(); 
+//			println!("{:?} {:?} {:?}", asset.id(), asset.path(), asset.status());
 			if let Some(j) = asset.creator() {
 				if asset.status() != AssetStatus::Present {
 					check_reqd(j, &mut reqd, &mut tlist, tasks, asset_ref, &com_set, ignore);

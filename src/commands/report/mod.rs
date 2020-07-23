@@ -6,11 +6,13 @@ use crate::common::{dry_run, utils};
 use crate::scheduler;
 
 pub mod make_map_report;
+pub mod make_call_report;
+pub mod report_utils;
 
 fn collect_assets(gem_bs: &GemBS, id: &str) -> Result<Vec<usize>, String> {
 	if let Some(t) = gem_bs.get_tasks().find_task(id) {
 		Ok(gem_bs.get_tasks()[t].outputs().copied().collect())
-	} else { Err("Couldn't find map-report task".to_string()) }
+	} else { Err(format!("Couldn't find report task {}", id)) }
 }
 
 pub fn map_report_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
@@ -41,7 +43,7 @@ pub fn call_report_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), Str
 	let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?; 
 	gem_bs.setup_assets_and_tasks(&flock)?;
 	let com_set = if gem_bs.all() { vec!(Command::Index, Command::Map, Command::MergeBams, Command::MergeCallJsons, Command::IndexBcf, Command::Call, Command::CallReport) } else { vec!(Command::CallReport, Command::MergeCallJsons) };
-	let assets = collect_assets(gem_bs, "variant_report")?;
+	let assets = collect_assets(gem_bs, "call_report")?;
 	
 	let task_list = gem_bs.get_required_tasks_from_asset_list(&assets, &com_set);
 	if options.contains_key("_dry_run") { dry_run::handle_dry_run(gem_bs, &options, &task_list) }

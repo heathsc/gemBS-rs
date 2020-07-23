@@ -49,8 +49,8 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
 			let bc_dir: PathBuf = [&report_dir, Path::new(bc)].iter().collect();
 			let img_dir: PathBuf = [&report_dir, Path::new(bc), Path::new("images")].iter().collect();
 			out_vec.push(handle_file(gem_bs, format!("{}.html", dset).as_str(), format!("{}.html", dset).as_str(), &bc_dir));
-			out_vec.push(handle_file(gem_bs, format!("{}_isize.png", dset).as_str(), format!("{}_isize.png", dset).as_str(), &img_dir));
 			out_vec.push(handle_file(gem_bs, format!("{}_mapq.png", dset).as_str(), format!("{}_mapq.png", dset).as_str(), &img_dir));
+			out_vec.push(handle_file(gem_bs, format!("{}_isize.png", dset).as_str(), format!("{}_isize.png", dset).as_str(), &img_dir));
 		}
 	}	
 	let task = gem_bs.add_task("map_report", "Generate mapping report", Command::MapReport, "");
@@ -63,7 +63,7 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
 pub fn check_call_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Report, name ) { x } else { "gemBS_reports" } };
 	let rdir = Path::new(get_dir("report_dir"));
-	let report_dir: PathBuf = [rdir, Path::new("variant_calling")].iter().collect(); 
+	let report_dir: PathBuf = [rdir, Path::new("calling")].iter().collect(); 
 	let cores = gem_bs.get_config_int(Section::Report, "cores").map(|x| x as usize).or_else(|| Some(2));
 	let memory = gem_bs.get_config_memsize(Section::Report, "memory");
 	let time = gem_bs.get_config_joblen(Section::Report, "time").or_else(|| Some(3600.into()));
@@ -75,19 +75,28 @@ pub fn check_call_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let samples = gem_bs.get_samples();
 	let mut json_files = Vec::new();
 	let mut out_vec = Vec::new();
-	out_vec.push(handle_file(gem_bs, "variant_report_index.html", "index.html", &report_dir));
-	out_vec.push(handle_file(gem_bs, "variant_report_style.css", "style.css", &report_dir));
+	out_vec.push(handle_file(gem_bs, "call_report_index.html", "index.html", &report_dir));
 	for (bc, _) in samples.iter() { 
 		let bc_dir: PathBuf = [&report_dir, Path::new(bc)].iter().collect();
+		let img_dir: PathBuf = [&report_dir, Path::new(bc), Path::new("images")].iter().collect();
 		let id = format!("{}_mapping.html", bc);
 		out_vec.push(handle_file(gem_bs, &id, &id, &bc_dir));
 		let id = format!("{}_methylation.html", bc);
 		out_vec.push(handle_file(gem_bs, &id, &id, &bc_dir));
 		let id = format!("{}_variants.html", bc);
 		out_vec.push(handle_file(gem_bs, &id, &id, &bc_dir));
-		json_files.push(gem_bs.get_asset(format!("{}_call.json", bc).as_str()).expect("Couldn't fine call JSON asset for call report").idx());
+		for name in &[
+			"coverage_all", "coverage_ref_cpg", "coverage_ref_cpg_inf", "coverage_non_ref_cpg", "coverage_non_ref_cpg_inf", "coverage_variants",
+			"quality_all", "quality_ref_cpg", "quality_non_ref_cpg","quality_variants", "qd_variant", "qd_nonvariant", 
+			"rmsmq_variant", "rmsmq_nonvariant", "fs_variant", "gc_coverage", "methylation_levels", "non_cpg_read_profile"
+		] {
+			let id = format!("{}_{}.png", bc, name);
+			out_vec.push(handle_file(gem_bs, &id, &id, &img_dir));
+			
+		}
+		json_files.push(gem_bs.get_asset(format!("{}_call.json", bc).as_str()).expect("Couldn't find call JSON asset for call report").idx());
 	}
-	let task = gem_bs.add_task("variant_report", "Generate variant report", Command::CallReport, "");
+	let task = gem_bs.add_task("call_report", "Generate call report", Command::CallReport, "");
 	gem_bs.add_task_inputs(task, &json_files).add_outputs(&out_vec).add_cores(cores).add_memory(memory).add_time(time);
 	out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &json_files));
 	

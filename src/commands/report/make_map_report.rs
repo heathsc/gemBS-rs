@@ -13,80 +13,7 @@ use crate::scheduler::call;
 use crate::common::utils;
 use crate::common::json_map_stats::{MapJson, Counts, Count, Paired, New};
 use crate::common::html_utils::*;
-
-struct Worker {
-	handle: thread::JoinHandle<Result<(), String>>,
-	tx: mpsc::Sender<Option<ReportJob>>,
-	ix: usize,
-}
-
-#[derive(PartialEq, Eq, Clone)]
-enum JobStatus {
-	Ready,
-	Running,
-	Completed,
-}
-
-struct SampleSummary {
-	barcode: String,
-	reads: usize,
-	fragments: usize,
-	unique: usize,
-	conversion: Option<f64>,
-	overconversion: Option<f64>,
-}
-
-#[derive(Clone)]
-struct DatasetJob {
-	dataset: String,
-	json_path: PathBuf,
-}
-
-impl DatasetJob {
-	fn new(dataset: &str, json_path: &Path) -> Self {
-		DatasetJob{dataset: dataset.to_owned(), json_path: json_path.to_owned() }
-	}
-}
-
-#[derive(Clone)]
-struct SampleJob {
-	datasets: Vec<(String, PathBuf)>,
-	depend: Vec<usize>,
-	summary: Arc<Mutex<Vec<SampleSummary>>>,
-}
-
-impl SampleJob {
-	fn new(summary: Arc<Mutex<Vec<SampleSummary>>>) -> Self {
-		SampleJob{datasets: Vec::new(), depend: Vec::new(), summary}
-	}
-	fn add_dataset(&mut self, dataset: &str, path: &Path) -> &mut Self {
-		self.datasets.push((dataset.to_owned(), path.to_owned()));
-		self
-	}
-}
-
-#[derive(Clone)]
-enum RepJob {
-	Dataset(DatasetJob),
-	Sample(SampleJob),	
-}
-
-#[derive(Clone)]
-struct ReportJob {
-	barcode: String,
-	bc_dir: PathBuf,
-	mapq_threshold: usize,
-	ix: usize,
-	status: JobStatus,
-	project: String,
-	job: RepJob, 	
-}
-
-impl ReportJob {
-	fn new(bc: &str, project: &str, bc_dir: &Path, mapq_threshold: usize, job: RepJob) -> Self {
-		ReportJob{barcode: bc.to_owned(), bc_dir: bc_dir.to_owned(), project: project.to_owned(), mapq_threshold, job, status: JobStatus::Ready, ix: 0}
-	}
-}
+use super::report_utils::*;
 
 fn make_title(title: String) -> HtmlElement {
 	let mut utitle = HtmlElement::new("U", None, true);
@@ -100,11 +27,6 @@ fn make_section(s: &str) -> HtmlElement {
 	let mut t = HtmlElement::new("H1", Some("id=\"section\""), true);
 	t.push_str(s);
 	t
-}
-
-fn pct(a: usize, b: usize) -> f64 {
-	if b > 0 { 100.0 * (a as f64) / (b as f64) }
-	else { 0.0 }	
 }
 
 fn make_paired_row(x: Counts, total: Counts, s: &str) -> Vec<String> {
@@ -443,8 +365,7 @@ fn create_sample_body(project: &str, bc: &str, ds: &[&str], mapq_threshold: usiz
 			isize_hist_png = Some(tp);
 		},
 		_ => {
-			// Create a dummy zero byte file so the dependencies work OK
-			let _ = fs::File::create(&tp).map_err(|e| format!("{}", e))?;
+			std::fs::File::create(&tp).map_err(|e| format!("{}",e))?;
 		},
 	}
 	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
@@ -530,11 +451,11 @@ fn create_sample_report(job: ReportJob) -> Result<(), String> {
 			}
 			match mrg_json {
 				Some(mjson) => {
-					let sample_sum = get_sample_sum(&job.barcode, job.mapq_threshold, &mjson);
+					let sample_sum = get_sample_sum(&job.barcode, v.mapq_threshold, &mjson);
 					if let Ok(mut sum_vec) = v.summary.lock() {
 						sum_vec.push(sample_sum);
 					} else { return Err("Couldn't obtain lock on sample summary".to_string()); }
-					create_sample_html(&job.project, &job.barcode, &dsets, job.mapq_threshold, &job.bc_dir, &mjson, true)
+					create_sample_html(&job.project, &job.barcode, &dsets, v.mapq_threshold, &job.bc_dir, &mjson, true)
 				},
 				None => Err(format!("No merged JSON structure for {}", &job.barcode))
 			}	
@@ -542,8 +463,9 @@ fn create_sample_report(job: ReportJob) -> Result<(), String> {
 		RepJob::Dataset(v) => {
 			let json = read_map_json(&v.json_path)?;
 			debug!("Creating dataset report for {}/{}/{}", job.project, job.barcode, v.dataset);
-			create_sample_html(&job.project, &job.barcode, &[&v.dataset], job.mapq_threshold, &job.bc_dir, &json, false) 
+			create_sample_html(&job.project, &job.barcode, &[&v.dataset], v.mapq_threshold, &job.bc_dir, &json, false) 
 		},
+		_ => Err("Invalid command".to_string())
 	}
 }
 
@@ -613,17 +535,17 @@ fn prepare_jobs(svec: &[SampleJsonFiles], project: &str, mapq_threshold: usize, 
 	let mut v = Vec::new();
 	for hr in svec.iter() {
 		// First push sample report job
-		let mut sjob = SampleJob::new(summary.clone());
+		let mut sjob = SampleJob::new(summary.clone(), mapq_threshold);
 		let l = hr.json_files.len();
 		for(ds, path) in hr.json_files.iter() {
 			if l > 1 {
 				sjob.depend.push(v.len());
-				let djob = DatasetJob::new(ds, path);
-				v.push(ReportJob::new(&hr.barcode, project, &hr.bc_dir, mapq_threshold, RepJob::Dataset(djob)));
+				let djob = DatasetJob::new(ds, path, mapq_threshold);
+				v.push(ReportJob::new(&hr.barcode, project, &hr.bc_dir, RepJob::Dataset(djob)));
 			}
 			sjob.add_dataset(ds, path);
 		}
-		let sample_job = ReportJob::new(&hr.barcode, project, &hr.bc_dir, mapq_threshold, RepJob::Sample(sjob));		
+		let sample_job = ReportJob::new(&hr.barcode, project, &hr.bc_dir, RepJob::Sample(sjob));		
 		v.push(sample_job);
 	}
 	for (ix, job) in v.iter_mut().enumerate() { job.ix = ix }
@@ -682,6 +604,7 @@ pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opti
 							} else { waiting = true; }
 							
 						},
+						_ => (),
 					}
 				}
 			}

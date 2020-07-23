@@ -20,6 +20,13 @@ pub struct SampleJsonFiles {
 }
 
 #[derive(Debug)]
+pub struct CallJsonFiles {
+	pub barcode: String,
+	pub bc_dir: PathBuf,
+	pub json_file: PathBuf,
+}
+
+#[derive(Debug)]
 pub struct MergeJsonFiles {
 	pub barcode: String,
 	pub json_files: Vec<(String, PathBuf)>,
@@ -62,6 +69,29 @@ pub fn make_map_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	let mut css_dir = gem_bs.get_css_path();
 	css_dir.push("style.css");
 	let com = QPipeCom::MapReport((project, css_dir, mapq_thresh as usize, n_cores, json_files));
+	pipeline.add_com(com);
+	pipeline		
+}
+
+pub fn make_call_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
+{
+	let task = &gem_bs.get_tasks()[job];
+	let (nc, _) = super::get_command_req(gem_bs, Command::MapReport);
+	let n_cores = { let x = (nc + 0.5) as usize; if x < 1 { 1 } else { x } };
+	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
+	let project = gem_bs.get_config_str(Section::Report, "project").map(|x| x.to_owned());
+	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get call-report output asset").path()); }
+	let mut json_files = Vec::new();
+	let samples = gem_bs.get_samples();
+	for (bc, _) in samples.iter() { 
+		let bc_dir = gem_bs.get_asset(format!("{}_mapping.html", bc).as_str()).expect("Couldn't find call report asset")
+			.path().parent().expect("No parent dir found for call report file").to_owned();
+		let json_file = gem_bs.get_asset(format!("{}_call.json", bc).as_str()).expect("Couldn't find call JSON asset for call report").path().to_owned();
+		json_files.push(CallJsonFiles{barcode: bc.to_owned(), bc_dir, json_file});
+	}
+	let mut css_dir = gem_bs.get_css_path();
+	css_dir.push("style.css");
+	let com = QPipeCom::CallReport((project, css_dir, n_cores, json_files));
 	pipeline.add_com(com);
 	pipeline		
 }
