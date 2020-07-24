@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::clone::Clone;
-use std::ops::{AddAssign, Add};
+use std::ops::{AddAssign, Add, Sub};
 use std::io::{Read, Write};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct Counts {
+pub struct Counts {
 	all: usize,
 	passed: usize,
 }
@@ -32,14 +32,16 @@ impl Add for Counts {
 }
 
 impl Counts {
-	fn new() -> Self { Self{all: 0, passed: 0} }
+	pub fn new() -> Self { Self{all: 0, passed: 0} }
+	pub fn all(&self) -> usize { self.all }
+	pub fn passed(&self) -> usize { self.passed } 
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct QCCounts {
-	pub non_variant: usize,
-	pub variant: usize,
+	non_variant: usize,
+	variant: usize,
 }
 
 impl AddAssign for QCCounts {
@@ -51,8 +53,33 @@ impl AddAssign for QCCounts {
     }
 }
 
+impl Add for QCCounts {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            non_variant: self.non_variant + other.non_variant,
+            variant: self.variant + other.variant,
+        }
+    }
+}
+
+impl Sub for QCCounts {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self {
+            non_variant: self.non_variant.saturating_sub(other.non_variant),
+            variant: self.variant.saturating_sub(other.variant),
+        }
+    }
+}
+
 impl QCCounts {
-	fn new() -> Self { Self{non_variant: 0, variant: 0} }
+	pub fn new() -> Self { Self{non_variant: 0, variant: 0} }
+	pub fn non_variant(&self) -> usize { self.non_variant }
+	pub fn variant(&self) -> usize { self.variant }
+	pub fn all(&self) -> usize {self.variant + self.non_variant}
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -83,7 +110,7 @@ impl MutCounts {
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct FSCounts {
+pub struct FSCounts {
 	reads: usize,
 	bases: usize,
 }
@@ -99,10 +126,12 @@ impl AddAssign for FSCounts {
 
 impl FSCounts {
 	fn new() -> Self { Self{reads: 0, bases: 0} }
+	pub fn reads(&self) -> usize { self.reads }
+	pub fn bases(&self) -> usize { self.bases }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-enum FSReadLevelType { 
+pub enum FSReadLevelType { 
 	Passed,
 	Unmapped,
 	#[serde(rename = "QC_Flags")]
@@ -121,8 +150,32 @@ enum FSReadLevelType {
 	PairNotFound,
 }
 
+impl FSReadLevelType {
+    pub fn iter() -> impl Iterator<Item = (FSReadLevelType, &'static str)> {
+        static GRAPHS: [(FSReadLevelType, &str); 15] = [
+			(FSReadLevelType::Passed, "Passed"),
+			(FSReadLevelType::LowMAPQ, "Low MAPQ"),
+			(FSReadLevelType::NotCorrectlyAligned, "Not Correctly Aligned"),
+			(FSReadLevelType::Unmapped, "Unmapped"),
+			(FSReadLevelType::Duplicate, "Duplicate"),
+			(FSReadLevelType::BadOrientation, "Bad Orientation"),
+			(FSReadLevelType::LargeInsertSize, "Large Insert Size"),
+			(FSReadLevelType::MisMatchContig, "Contigs Mismatched"),
+			(FSReadLevelType::MateUnmapped, "Mate Unmapped"),
+			(FSReadLevelType::QCFlags, "QC Flags"),
+			(FSReadLevelType::SecondaryAlignment, "Secondary Alignment"),
+			(FSReadLevelType::NoPosition, "No Position"),
+			(FSReadLevelType::NoSequence, "No Sequence"),
+			(FSReadLevelType::NoMatePosition, "No Mate Position"),
+			(FSReadLevelType::PairNotFound, "PairNotFound"),
+		];
+        GRAPHS.iter().copied()
+    }
+}
+
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-enum FSBaseLevelType { 
+pub enum FSBaseLevelType { 
 	Passed,
 	Trimmed,
 	Clipped,
@@ -130,9 +183,22 @@ enum FSBaseLevelType {
 	LowQuality,
 }
 
+impl FSBaseLevelType {
+    pub fn iter() -> impl Iterator<Item = (FSBaseLevelType, &'static str)> {
+        static GRAPHS: [(FSBaseLevelType, &str); 5] = [
+			(FSBaseLevelType::Passed, "Passed"),
+			(FSBaseLevelType::Overlapping, "Overlapping"),
+			(FSBaseLevelType::LowQuality, "Low Quality"),
+			(FSBaseLevelType::Trimmed, "Trimmed"),
+			(FSBaseLevelType::Clipped, "Clipped"),
+		];
+        GRAPHS.iter().copied()
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct FSType { 
+pub struct FSType { 
 	read_level: HashMap<FSReadLevelType, FSCounts>,
 	base_level: HashMap<FSBaseLevelType, usize>,
 }
@@ -143,6 +209,18 @@ impl FSType {
 		for (key, ct) in other.read_level.iter() { *(self.read_level.entry(*key).or_insert_with(FSCounts::new)) += *ct; }
 		// base level
 		for (key, ct) in other.base_level.iter() { *(self.base_level.entry(*key).or_insert(0)) += ct; }
+	}
+	pub fn read_level(&self) -> &HashMap<FSReadLevelType, FSCounts> { &self.read_level }
+	pub fn base_level(&self) -> &HashMap<FSBaseLevelType, usize> { &self.base_level }
+	pub fn read_level_totals(&self) -> FSCounts {
+		let mut t = FSCounts::new();
+		for x in self.read_level.values() { t += *x }
+		t
+	}
+	pub fn base_level_totals(&self) -> usize {
+		let mut t = 0;
+		for x in self.base_level.values() { t += *x }
+		t
 	}
 }
 
@@ -260,7 +338,7 @@ impl Methylation {
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
-struct BasicStats { 
+pub struct BasicStats { 
 	#[serde(rename = "SNPS")]
 	snps: Counts,
 	#[serde(rename = "Indels")]
@@ -277,6 +355,11 @@ impl BasicStats {
 	fn new() -> Self {
 		Self{ snps: Counts::new(), indels: Counts::new(), multiallelic: Counts::new(), ref_cpg: Counts::new(), non_ref_cpg: Counts::new() }
 	}
+	pub fn snps(&self) -> &Counts { &self.snps }
+	pub fn indels(&self) -> &Counts { &self.indels }
+	pub fn multiallelic(&self) -> &Counts { &self.multiallelic }
+	pub fn ref_cpg(&self) -> &Counts { &self.ref_cpg }
+	pub fn non_ref_cpg(&self) -> &Counts { &self.non_ref_cpg }
 }
 
 impl AddAssign for BasicStats {
@@ -399,4 +482,8 @@ impl CallJson {
 	pub fn coverage(&self) -> &Coverage { &self.total_stats.coverage }
 	pub fn quality(&self) -> &Quality { &self.total_stats.quality }
 	pub fn qc_dist(&self) -> &QCDist { &self.total_stats.qc_distributions }
-	pub fn methylation(&self) -> &Methylation { &self.total_stats.methylation }}
+	pub fn methylation(&self) -> &Methylation { &self.total_stats.methylation }
+	pub fn filter_stats(&self) -> &FSType { &self.filter_stats}
+	pub fn basic_stats(&self) -> &BasicStats { &self.total_stats.basic_stats }
+	pub fn vcf_filter_stats(&self) -> &HashMap<String, QCCounts> { &self.total_stats.vcf_filter_stats }
+}

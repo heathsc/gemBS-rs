@@ -78,14 +78,27 @@ impl fmt::Display for HtmlTable {
 			for s in self.header.iter() { write!(f, "<TH scope=\"col\">{}</TH>", s)? }
 			writeln!(f, "</TR>")?;
 		}
+		// Get number of rows
+		let mut n_rows = 0;
+		for r in self.rows.iter() {
+			if !r.is_empty() {
+				n_rows = r.len();
+				break;
+			}
+		}
 		// Other rows
 		let mut odd = false;
 		for r in self.rows.iter() {
-			if odd { writeln!(f, "<TR class=\"odd\">")? }
-			else { writeln!(f, "<TR>")? }
-			for s in r.iter() { write!(f, "<TD>{}</TD>", s)? }
+			if r.is_empty() {
+				writeln!(f, "<TR class=\"empty\">")?;
+				for _ in 0..n_rows { write!(f, "<TD></TD>")? }				
+			} else {
+				if odd { writeln!(f, "<TR class=\"odd\">")? }
+				else { writeln!(f, "<TR>")? }
+				for s in r.iter() { write!(f, "<TD>{}</TD>", s)? }
+				odd = !odd;
+			}
 			writeln!(f, "</TR>")?;
-			odd = !odd;
 		}
 		writeln!(f, "</TABLE>")?;
 		Ok(())

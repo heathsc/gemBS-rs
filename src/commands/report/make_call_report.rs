@@ -9,9 +9,12 @@ use std::str::FromStr;
 use plotters::prelude::*;
 
 use crate::common::{utils, compress};
-use crate::common::json_call_stats::{CallJson, Coverage};
+use crate::common::json_call_stats::{CallJson, Coverage, FSReadLevelType, FSBaseLevelType, FSCounts, Counts, QCCounts};
 use crate::scheduler::report::CallJsonFiles;
 use super::report_utils::*;
+use super::make_map_report;
+use super::make_map_report::{make_title, make_section};
+use crate::common::html_utils::*;
 
 enum CovType { All, NonRefCpg, NonRefCpgInf, RefCpg, RefCpgInf, Variant }
 enum QualType { All, RefCpg, NonRefCpg, Variant }
@@ -106,8 +109,8 @@ fn make_qc_dist_graph(bc: &str, dir: &Path, qual: QCDistType, call_json: &CallJs
 	};
 	let path: PathBuf = [dir, Path::new(format!("{}_{}.png", bc, name).as_str())].iter().collect();
 	let mut th = HashMap::new();
-	if variant { for(x,y) in qv.iter() { th.insert(*x, y.variant); }}
-	else { for(x,y) in qv.iter() { th.insert(*x, y.non_variant); }}	
+	if variant { for(x,y) in qv.iter() { th.insert(*x, y.variant()); }}
+	else { for(x,y) in qv.iter() { th.insert(*x, y.non_variant()); }}	
 	if th.is_empty() { th.insert(0, 0); }	
 	make_hist(&path, &th, title, xaxis, "# sites").map_err(|e| format!("{}", e))?;
 	Ok(())	
@@ -315,33 +318,203 @@ fn make_noncpg_read_profile(bc: &str, dir: &Path, call_json: &CallJson) -> Resul
 	}
 }
 
-fn make_call_graph(bc: &str, bc_dir: &Path, graph: MakeCallGraph) -> Result<(), String> {
-	let t = graph.call_json.read().expect("Couldn't obtain read lock on CallJson structure");
+fn make_read_level_table(json: &CallJson) -> Result<Content, String> {
+	let mut table = HtmlTable::new("hor-zebra");
+	table.add_header(vec!("Type", "# Reads", "%", "# Bases", "%"));
+	let fs = json.filter_stats();
+	let rl = fs.read_level();
+	let tot = fs.read_level_totals();
+	let f = |name: &str, x: FSCounts| {
+		let mut row = vec!(name.to_owned());
+		row.push(format!("{}", x.reads()));
+		row.push(format!("{:.2}", pct(x.reads(), tot.reads())));
+		row.push(format!("{}", x.bases()));
+		row.push(format!("{:.2}", pct(x.bases(), tot.bases())));		
+		row
+	};
+	table.add_row(f("Total", tot));
+	for(key, name) in FSReadLevelType::iter() {
+		if let Some(t) = rl.get(&key) { table.add_row(f(name, *t)); }
+	}
+	Ok(Content::Table(table))
+}
+
+fn make_base_level_table(json: &CallJson) -> Result<Content, String> {
+	let mut table = HtmlTable::new("green");
+	table.add_header(vec!("Bases", "#", "%"));
+	let fs = json.filter_stats();
+	let rl = fs.base_level();
+	let tot = fs.base_level_totals();
+	let f = |name: &str, x| {
+		let mut row = vec!(name.to_owned());
+		row.push(format!("{}", x));
+		row.push(format!("{:.2}", pct(x, tot)));
+		row	
+	};
+	table.add_row(f("Total", tot));
+	for(key, name) in FSBaseLevelType::iter() {
+		if let Some(t) = rl.get(&key) { table.add_row(f(name, *t)); }
+	}
+	Ok(Content::Table(table))
+}
+
+fn make_variant_count_table(json: &CallJson) -> Result<Content, String> {
+	let mut table = HtmlTable::new("green");
+	table.add_header(vec!("Type", "Total", "Passed", "% Passed"));
+	let bs = json.basic_stats();
+	let f = |s: &str, ct: &Counts, tab: &mut HtmlTable, opt: bool| {
+		if !opt || ct.all() > 0 {
+			tab.add_row(vec!(s.to_owned(), format!("{}", ct.all()), format!("{}", ct.passed()), format!("{:.2}", pct(ct.passed(), ct.all()))));
+		} 
+	};
+	f("SNPs", bs.snps(), &mut table, false);
+	f("Indels", bs.indels(), &mut table, true);
+	f("Multi-allelic", bs.multiallelic(), &mut table, true);	
+	Ok(Content::Table(table))	
+}
+
+fn make_vcf_filter_stats_table(json: &CallJson) -> Result<Content, String> {
+	let mut table = HtmlTable::new("hor-zebra");
+	table.add_header(vec!("Type", "# Sites", "%", "# Non-Variant Sites", "%", "# Variant Sites", "%"));
+	let mut v = Vec::new();
+	let mut pass = None;
+	let mut all = QCCounts::new();
+	for(k, ct) in json.vcf_filter_stats().iter() {
+		if k == "PASS" { pass = Some(ct); }
+		else { v.push((k, *ct)); }
+		all += *ct;
+	}
+	let pass = if let Some(x) = pass { *x } else { return Err("No passed variant information found".to_string()); };
+	v.sort_by(|(_, a), (_, b)| (*b).all().cmp(&(*a).all()));
+	let f = |s: &str, ct: QCCounts, tot: usize| vec!(
+		s.to_owned(),
+		format!("{}",ct.all()), format!("{:.2}", pct(ct.all(), tot)),
+		format!("{}",ct.non_variant()), format!("{:.2}", pct(ct.non_variant(), tot)),
+		format!("{}",ct.variant()), format!("{:.2}", pct(ct.variant(), tot))
+	);
+	table.add_row(f("All", all, all.all()));
+	table.add_row(Vec::new());
+	table.add_row(f("Passed", pass, all.all()));
+	let flt = all - pass;
+	table.add_row(f("Filtered", flt, all.all()));
+	table.add_row(Vec::new());
+	for(k, ct) in v.iter() { if ct.all() > 0 { table.add_row(f(k, *ct, flt.all())); }}
+	Ok(Content::Table(table))		
+}
+
+fn new_body(project: &str, bc: &str, tag: &str) -> HtmlElement {
+	let mut body = HtmlElement::new("BODY", None, true);
+	let mut path = HtmlElement::new("P", Some("id=\"path\""), true);
+	path.push_string(format!("/{}/{}/{}", project, bc, tag)); 
+	body.push(Content::Element(path));
+	let mut back = HtmlElement::new("B", None, true);
+	back.push_str("BACK");
+	let mut back_link = HtmlElement::new("a", Some("class=\"link\" href=\"../index.html\""), true);
+	back_link.push_element(back);
+	body.push_element(back_link);
+	body.push_element(make_title(format!("SAMPLE {}", bc)));
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	body
+}
+
+fn create_mapping_report_body(project: &str, bc: &str, dir: &Path, json: &CallJson) -> Result<HtmlElement, String> {
+	let mut img_dir = dir.to_owned();
+	img_dir.push("images");
+	let mut body = new_body(project, bc, "mapping_coverage");
+	body.push_element(make_section("Read Level Counts"));
+	body.push(make_read_level_table(json)?);
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	body.push_element(make_section("Base Level Counts"));
+	body.push(make_base_level_table(json)?);
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	body.push_element(make_section("Coverage and Quality"));
+	let get_path = |name: &str| {
+		let mut tp = img_dir.clone();
+		tp.push(format!("{}_{}.png", bc, name).as_str());
+		tp
+	};
+	let img_str = |p: &Path| {
+		let fname = p.file_name().expect("Missing filename").to_string_lossy();
+		format!("<img src=\"images/{}\" alt=\"{}\">", fname, fname)	
+	};
+	let mut table = HtmlTable::new("hor-zebra");
+	table.add_header(vec!("Coverage Distribution", "Quality Distribution"));
+	table.add_row(vec!(img_str(&get_path("coverage_all")), img_str(&get_path("quality_all"))));
+	body.push(Content::Table(table));
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	table = HtmlTable::new("green");
+	table.add_header(vec!("GC/Coverage heatmap", "% Non-Conversion at Non-CpG Sites"));
+	table.add_row(vec!(img_str(&get_path("gc_coverage")), img_str(&get_path("non_cpg_read_profile"))));
+	body.push(Content::Table(table));	
+	Ok(body)
+}
+
+fn create_variant_report_body(project: &str, bc: &str, dir: &Path, json: &CallJson) -> Result<HtmlElement, String> {
+	let mut img_dir = dir.to_owned();
+	img_dir.push("images");
+	let mut body = new_body(project, bc, "variants");
+	body.push_element(make_section("Variant Counts"));
+	body.push(make_variant_count_table(json)?);
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	body.push_element(make_section("VCF Filter Stats"));
+	body.push(make_vcf_filter_stats_table(json)?);
+	Ok(body)
+}
+
+fn new_page(path: &Path) -> Result<HtmlPage, String> {
+	let mut html = HtmlPage::new(path)?;
+	let mut head_element = HtmlElement::new("HEAD", None, true);
+	let mut style_element = HtmlElement::new("STYLE", Some("TYPE=\"text/css\""), true);
+	style_element.push_str("<!--\n@import url(\"../../css/style.css\");\n-->");
+	head_element.push_element(style_element);
+	html.push_element(head_element);
+	Ok(html)
+}
+
+fn create_mapping_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson) -> Result<(), String> {
+	let path: PathBuf = [dir, Path::new(format!("{}_mapping_coverage.html", bc).as_str())].iter().collect();
+	let mut html = new_page(&path)?;
+	html.push_element(create_mapping_report_body(project, bc, dir, call_json)?);	
+	Ok(())
+}
+
+fn create_variant_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson) -> Result<(), String> {
+	let path: PathBuf = [dir, Path::new(format!("{}_variants.html", bc).as_str())].iter().collect();
+	let mut html = new_page(&path)?;
+	html.push_element(create_variant_report_body(project, bc, dir, call_json)?);	
+	Ok(())
+}
+
+fn make_call_job(bc: &str, bc_dir: &Path, project: &str, job: MakeCallJob) -> Result<(), String> {
+	let t = job.call_json.read().expect("Couldn't obtain read lock on CallJson structure");
 	let cj = t.as_ref().expect("No CallJson struct found");
 	let mut img_dir = bc_dir.to_owned();
 	img_dir.push("images");
-	match graph.graph_type {
-		CallGraph::CoverageAll => make_coverage_graph(bc, &img_dir, CovType::All, cj),
-		CallGraph::CoverageRefCpg => make_coverage_graph(bc, &img_dir, CovType::RefCpg, cj),
-		CallGraph::CoverageRefCpgInf => make_coverage_graph(bc, &img_dir, CovType::RefCpgInf, cj),
-		CallGraph::CoverageNonRefCpg => make_coverage_graph(bc, &img_dir, CovType::NonRefCpg, cj),
-		CallGraph::CoverageNonRefCpgInf => make_coverage_graph(bc, &img_dir, CovType::NonRefCpgInf, cj),
-		CallGraph::CoverageVariant => make_coverage_graph(bc, &img_dir, CovType::Variant, cj),
-		CallGraph::QualityAll => make_quality_graph(bc, &img_dir, QualType::All, cj),
-		CallGraph::QualityRefCpg => make_quality_graph(bc, &img_dir, QualType::RefCpg, cj),
-		CallGraph::QualityNonRefCpg => make_quality_graph(bc, &img_dir, QualType::NonRefCpg, cj),
-		CallGraph::QualityVariant => make_quality_graph(bc, &img_dir, QualType::Variant, cj),
-		CallGraph::QdVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::QDVariant, cj),
-		CallGraph::QdNonVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::QDNonVariant, cj),
-		CallGraph::RmsMqVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::RMSVariant, cj),
-		CallGraph::RmsMqNonVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::RMSNonVariant, cj),
-		CallGraph::GCCoverage => make_gc_coverage_heatmap(bc, &img_dir, cj),
-		CallGraph::MethylationLevels => make_meth_level_chart(bc, &img_dir, cj),
-		CallGraph::NonCpgReadProfile => make_noncpg_read_profile(bc, &img_dir, cj),
-		CallGraph::FsVariants => {
+	match job.job_type {
+		CallJob::CoverageAll => make_coverage_graph(bc, &img_dir, CovType::All, cj),
+		CallJob::CoverageRefCpg => make_coverage_graph(bc, &img_dir, CovType::RefCpg, cj),
+		CallJob::CoverageRefCpgInf => make_coverage_graph(bc, &img_dir, CovType::RefCpgInf, cj),
+		CallJob::CoverageNonRefCpg => make_coverage_graph(bc, &img_dir, CovType::NonRefCpg, cj),
+		CallJob::CoverageNonRefCpgInf => make_coverage_graph(bc, &img_dir, CovType::NonRefCpgInf, cj),
+		CallJob::CoverageVariant => make_coverage_graph(bc, &img_dir, CovType::Variant, cj),
+		CallJob::QualityAll => make_quality_graph(bc, &img_dir, QualType::All, cj),
+		CallJob::QualityRefCpg => make_quality_graph(bc, &img_dir, QualType::RefCpg, cj),
+		CallJob::QualityNonRefCpg => make_quality_graph(bc, &img_dir, QualType::NonRefCpg, cj),
+		CallJob::QualityVariant => make_quality_graph(bc, &img_dir, QualType::Variant, cj),
+		CallJob::QdVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::QDVariant, cj),
+		CallJob::QdNonVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::QDNonVariant, cj),
+		CallJob::RmsMqVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::RMSVariant, cj),
+		CallJob::RmsMqNonVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::RMSNonVariant, cj),
+		CallJob::GCCoverage => make_gc_coverage_heatmap(bc, &img_dir, cj),
+		CallJob::MethylationLevels => make_meth_level_chart(bc, &img_dir, cj),
+		CallJob::NonCpgReadProfile => make_noncpg_read_profile(bc, &img_dir, cj),
+		CallJob::FsVariants => {
 			let path: PathBuf = [&img_dir, Path::new(format!("{}_fs_variant.png", bc).as_str())].iter().collect();
 			make_hist(&path, &cj.qc_dist().fisher_strand, "Fisher Strand Test", "Fisher Strand Phred Scale Probability", "# sites").map_err(|e| format!("{}", e))
 		},
+		CallJob::MappingReport => create_mapping_report(bc, bc_dir, project, cj),
+		CallJob::VariantReport => create_variant_report(bc, bc_dir, project, cj),
+		_ => Ok(()),
 	}
 }
 
@@ -350,8 +523,8 @@ fn handle_call_job(job: ReportJob) -> Result<(), String> {
 		RepJob::CallJson(v) => {
 			load_call_json(v)
 		},
-		RepJob::CallGraph(v) => {
-			make_call_graph(&job.barcode, &job.bc_dir, v)
+		RepJob::CallJob(v) => {
+			make_call_job(&job.barcode, &job.bc_dir, &job.project, v)
 		},
 		_ => Err("Invalid command".to_string())
 	}
@@ -390,9 +563,9 @@ fn prepare_jobs(svec: &[CallJsonFiles], project: &str) -> Vec<ReportJob> {
 		let load_json = LoadCallJson{path: cjson.json_file.clone(), call_json: call_json.clone()};
 		let ld_json_ix = v.len();
 		v.push(ReportJob::new(&cjson.barcode, project, &cjson.bc_dir, RepJob::CallJson(load_json)));
-		for graph_type in CallGraph::iter() {
-			let mk_graph = MakeCallGraph{graph_type, depend: ld_json_ix, call_json: call_json.clone()};
-			v.push(ReportJob::new(&cjson.barcode, project, &cjson.bc_dir, RepJob::CallGraph(mk_graph)));
+		for job_type in CallJob::iter() {
+			let mk_graph = MakeCallJob{job_type, depend: ld_json_ix, call_json: call_json.clone()};
+			v.push(ReportJob::new(&cjson.barcode, project, &cjson.bc_dir, RepJob::CallJob(mk_graph)));
 		}
 	}
 	for (ix, job) in v.iter_mut().enumerate() { job.ix = ix }
@@ -434,7 +607,7 @@ pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opt
 							waiting = false;
 							break;
 						},
-						RepJob::CallGraph(v) => {
+						RepJob::CallJob(v) => {
 							if job_vec[v.depend].status == JobStatus::Completed {
 								x = Some(ix);
 								waiting = false;
@@ -517,6 +690,8 @@ pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opt
 	}
 	if abort { Err("Map-report generation failed".to_string()) }
 	else {
+		make_map_report::copy_css(output_dir, css)?;
 		Ok(None) 
+
 	}
 }

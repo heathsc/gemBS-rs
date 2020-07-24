@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, mpsc, Mutex, RwLock};
 use std::thread;
-use std::slice::Iter;
 
 use crate::common::json_call_stats::CallJson;
 
@@ -50,7 +49,7 @@ pub struct LoadCallJson {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum CallGraph {
+pub enum CallJob {
 	CoverageAll,
 	CoverageNonRefCpg,
 	CoverageNonRefCpgInf,
@@ -69,37 +68,43 @@ pub enum CallGraph {
 	QualityVariant,
 	RmsMqVariant,
 	RmsMqNonVariant,
+	MappingReport,
+	MethylationReport,
+	VariantReport,
 }
 
-impl CallGraph {
-    pub fn iter() -> impl Iterator<Item = CallGraph> {
-        static GRAPHS: [CallGraph; 18] = [
-			CallGraph::CoverageAll,
-			CallGraph::CoverageNonRefCpg,
-			CallGraph::CoverageNonRefCpgInf,
-			CallGraph::CoverageRefCpg,
-			CallGraph::CoverageRefCpgInf,
-			CallGraph::CoverageVariant,
-			CallGraph::FsVariants,
-			CallGraph::GCCoverage,
-			CallGraph::MethylationLevels,
-			CallGraph::NonCpgReadProfile,
-			CallGraph::QdNonVariant,
-			CallGraph::QdVariant,
-			CallGraph::QualityAll,
-			CallGraph::QualityRefCpg,
-			CallGraph::QualityNonRefCpg,
-			CallGraph::QualityVariant,
-			CallGraph::RmsMqVariant,
-			CallGraph::RmsMqNonVariant,
+impl CallJob {
+    pub fn iter() -> impl Iterator<Item = CallJob> {
+        static GRAPHS: [CallJob; 21] = [
+			CallJob::CoverageAll,
+			CallJob::CoverageNonRefCpg,
+			CallJob::CoverageNonRefCpgInf,
+			CallJob::CoverageRefCpg,
+			CallJob::CoverageRefCpgInf,
+			CallJob::CoverageVariant,
+			CallJob::FsVariants,
+			CallJob::GCCoverage,
+			CallJob::MethylationLevels,
+			CallJob::NonCpgReadProfile,
+			CallJob::QdNonVariant,
+			CallJob::QdVariant,
+			CallJob::QualityAll,
+			CallJob::QualityRefCpg,
+			CallJob::QualityNonRefCpg,
+			CallJob::QualityVariant,
+			CallJob::RmsMqVariant,
+			CallJob::RmsMqNonVariant,
+			CallJob::MappingReport,
+			CallJob::MethylationReport,
+			CallJob::VariantReport,
 		];
         GRAPHS.iter().copied()
     }
 }
 
 #[derive(Clone)]
-pub struct MakeCallGraph {
-	pub graph_type: CallGraph,
+pub struct MakeCallJob {
+	pub job_type: CallJob,
 	pub depend: usize,
 	pub call_json: Arc<RwLock<Option<CallJson>>>,	
 }
@@ -109,7 +114,7 @@ pub enum RepJob {
 	Dataset(DatasetJob),
 	Sample(SampleJob),
 	CallJson(LoadCallJson),	
-	CallGraph(MakeCallGraph),
+	CallJob(MakeCallJob),
 }
 
 

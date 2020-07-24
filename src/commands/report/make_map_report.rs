@@ -15,7 +15,7 @@ use crate::common::json_map_stats::{MapJson, Counts, Count, Paired, New};
 use crate::common::html_utils::*;
 use super::report_utils::*;
 
-fn make_title(title: String) -> HtmlElement {
+pub fn make_title(title: String) -> HtmlElement {
 	let mut utitle = HtmlElement::new("U", None, true);
 	utitle.push_string(title);
 	let mut t = HtmlElement::new("H1", Some("id=\"title\""), true);
@@ -23,7 +23,7 @@ fn make_title(title: String) -> HtmlElement {
 	t
 }
 
-fn make_section(s: &str) -> HtmlElement {
+pub fn make_section(s: &str) -> HtmlElement {
 	let mut t = HtmlElement::new("H1", Some("id=\"section\""), true);
 	t.push_str(s);
 	t
@@ -552,6 +552,13 @@ fn prepare_jobs(svec: &[SampleJsonFiles], project: &str, mapq_threshold: usize, 
 	v
 }
 
+pub fn copy_css(output_dir: &Path, css: &Path) -> Result<(), String> {
+	let t = output_dir.parent().unwrap_or_else(|| Path::new("."));		
+	let out_css: PathBuf = [t, Path::new("css"), Path::new("style.css")].iter().collect();
+	fs::copy(css, out_css).map_err(|e| format!("Error copying css file: {}", e))?;
+	Ok(())
+}
+
 pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, mapq_threshold: usize, n_cores: usize, svec: Vec<SampleJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
 	utils::check_signal(Arc::clone(&sig))?;
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
@@ -680,9 +687,7 @@ pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opti
 	if abort { Err("Map-report generation failed".to_string()) }
 	else {
 		create_summary(output_dir, &project, summary)?; 
-		let t = output_dir.parent().unwrap_or_else(|| Path::new("."));		
-		let out_css: PathBuf = [t, Path::new("css"), Path::new("style.css")].iter().collect();
-		fs::copy(css, out_css).map_err(|e| format!("Error copying css file: {}", e))?;
-		Ok(None) 
+		copy_css(output_dir, css)?;
+		Ok(None)
 	}
 }
