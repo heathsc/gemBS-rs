@@ -84,7 +84,7 @@ impl QCCounts {
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct MutCounts {
+pub struct MutCounts {
 	all: usize,
 	passed: usize,
 	#[serde(rename = "dbSNPAll")]
@@ -104,8 +104,25 @@ impl AddAssign for MutCounts {
     }
 }
 
+impl Add for MutCounts {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            all: self.all + other.all,
+            passed: self.passed + other.passed,
+			dbsnp_all: self.dbsnp_all + other.dbsnp_all,
+			dbsnp_passed: self.dbsnp_passed + other.dbsnp_passed,
+        }
+    }
+}
+
 impl MutCounts {
-	fn new() -> Self { Self{all: 0, passed: 0, dbsnp_all: 0, dbsnp_passed: 0} }
+	pub fn new() -> Self { Self{all: 0, passed: 0, dbsnp_all: 0, dbsnp_passed: 0} }
+	pub fn all(&self) -> usize {self.all}
+	pub fn passed(&self) -> usize {self.passed}
+	pub fn dbsnp_all(&self) -> usize {self.dbsnp_all}
+	pub fn dbsnp_passed(&self) -> usize {self.dbsnp_passed}
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -486,4 +503,5 @@ impl CallJson {
 	pub fn filter_stats(&self) -> &FSType { &self.filter_stats}
 	pub fn basic_stats(&self) -> &BasicStats { &self.total_stats.basic_stats }
 	pub fn vcf_filter_stats(&self) -> &HashMap<String, QCCounts> { &self.total_stats.vcf_filter_stats }
+	pub fn mutations(&self) -> &HashMap<String, MutCounts> { &self.total_stats.mutations }
 }

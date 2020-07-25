@@ -1,15 +1,14 @@
 use std::path::{Path, PathBuf};
-use std::io::{BufRead, BufReader};
+use std::io::BufRead;
 use std::sync::atomic::AtomicUsize;
-use std::sync::{Arc, mpsc, RwLock};
-use std::{fs, thread, time};
-use std::collections::HashMap;
-use std::str::FromStr;
+use std::sync::{Arc, mpsc, Mutex, RwLock};
+use std::{thread, time};
+use std::collections::{HashMap, HashSet};
 
 use plotters::prelude::*;
 
 use crate::common::{utils, compress};
-use crate::common::json_call_stats::{CallJson, Coverage, FSReadLevelType, FSBaseLevelType, FSCounts, Counts, QCCounts};
+use crate::common::json_call_stats::{CallJson, FSReadLevelType, FSBaseLevelType, FSCounts, Counts, QCCounts, MutCounts};
 use crate::scheduler::report::CallJsonFiles;
 use super::report_utils::*;
 use super::make_map_report;
@@ -20,10 +19,7 @@ enum CovType { All, NonRefCpg, NonRefCpgInf, RefCpg, RefCpgInf, Variant }
 enum QualType { All, RefCpg, NonRefCpg, Variant }
 enum QCDistType { QDVariant, QDNonVariant, RMSVariant, RMSNonVariant }
 
-fn make_hist(path: &Path, ch: &HashMap<usize, usize>, title: &str, xlabel: &str, ylabel: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let root = BitMapBackend::new(&path, (640, 480)).into_drawing_area();
-	root.fill(&WHITE)?;
-	
+fn prep_hist_vec(ch: &HashMap<usize, usize>) -> (Vec<(usize, usize)>, usize, usize) {
 	let mut total = 0;
 	let mut m = 0;
 	let mut t = Vec::new();
@@ -32,13 +28,20 @@ fn make_hist(path: &Path, ch: &HashMap<usize, usize>, title: &str, xlabel: &str,
 		if *y > m { m = *y; }
 		t.push((*x,*y));
 	}
-	let lim_y = 0.99 * (total as f64);
 	t.sort_by(|a,b| a.0.cmp(&b.0));
+	(t, total, m)	
+}
+fn make_hist(path: &Path, ch: &HashMap<usize, usize>, title: &str, xlabel: &str, ylabel: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let root = BitMapBackend::new(&path, (640, 480)).into_drawing_area();
+	root.fill(&WHITE)?;
+	
+	let(t, total, m) = prep_hist_vec(ch);
+	let lim_y = 0.99 * (total as f64);
 	let mut lim_x = t[0].0;
-	total = 0;
+	let mut tot = 0;
 	for(x, y) in t.iter() {
-		total += y;
-		if (total as f64) >= lim_y { break; }
+		tot += y;
+		if (tot as f64) >= lim_y { break; }
 		lim_x = *x; 
 	}
 	let max = (m + 1) as f64;
@@ -102,10 +105,10 @@ fn make_quality_graph(bc: &str, dir: &Path, qual: QualType, call_json: &CallJson
 fn make_qc_dist_graph(bc: &str, dir: &Path, qual: QCDistType, call_json: &CallJson) -> Result<(), String> {
 	let qc_dist = call_json.qc_dist();
 	let (name, title, xaxis, variant, qv) = match qual {
-		QCDistType::QDVariant => ("qd_variant", "Allele specific variant call normalized by coverage for variant allele", "Quality by Depth", true, &qc_dist.quality_by_depth),
-		QCDistType::QDNonVariant => ("qd_nonvariant", "Allele specific variant call normalized by coverage for non-variant allele", "Quality by Depth", false, &qc_dist.quality_by_depth),
-		QCDistType::RMSVariant => ("rmsmq_variant", "RMS MapQ of reads support variant allele", "RMS MapQ", true, &qc_dist.rms_mapping_quality),
-		QCDistType::RMSNonVariant => ("rmsmq_nonvariant", "RMS MapQ of reads support non-variant allele", "RMS MapQ", false, &qc_dist.rms_mapping_quality),
+		QCDistType::QDVariant => ("qd_variant", "Quality by depth for variant allele", "Quality by Depth", true, &qc_dist.quality_by_depth),
+		QCDistType::QDNonVariant => ("qd_nonvariant", "Quality by depth for non-variant allele", "Quality by Depth", false, &qc_dist.quality_by_depth),
+		QCDistType::RMSVariant => ("rmsmq_variant", "RMS MapQ of variant allele reads", "RMS MapQ", true, &qc_dist.rms_mapping_quality),
+		QCDistType::RMSNonVariant => ("rmsmq_nonvariant", "RMS MapQ of non-variant allele reads", "RMS MapQ", false, &qc_dist.rms_mapping_quality),
 	};
 	let path: PathBuf = [dir, Path::new(format!("{}_{}.png", bc, name).as_str())].iter().collect();
 	let mut th = HashMap::new();
@@ -196,9 +199,7 @@ fn make_heatmap(path: &Path, ch: &[(usize, &Vec<usize>)], title: &str, xlabel: &
 	Ok(())
 }
 
-fn make_gc_coverage_heatmap(bc: &str, dir: &Path, call_json: &CallJson) -> Result<(), String> {
-	let path: PathBuf = [dir, Path::new(format!("{}_gc_coverage.png", bc).as_str())].iter().collect();
-	let rf = &call_json.coverage().gc;
+fn prep_gc_vec(rf: &HashMap<usize, Vec<usize>>) -> (Vec<(usize, &Vec<usize>)>, Option<usize>) {
 	let mut total = 0;
 	let mut tv = Vec::new();
 	for (x, v) in rf.iter() {
@@ -209,19 +210,29 @@ fn make_gc_coverage_heatmap(bc: &str, dir: &Path, call_json: &CallJson) -> Resul
 	tv.sort_by(|a,b| a.0.cmp(&b.0));
 	let lim = 0.99 * (total as f64);
 	total = 0;
-	let mut max = 0;
-	let mut lim_cov = None;
+	let mut lim_x = None;
 	for (x, v) in tv.iter() {
 		let t: usize = v.iter().sum();
-		let m = v.iter().max().unwrap();
-		if *m > max { max = *m }
 		total += t;
 		if total as f64 >= lim {
-			lim_cov = Some(*x);
+			lim_x = Some(*x);
 			break;
 		}
-	}
+	}	
+	(tv, lim_x)
+}
+
+fn make_gc_coverage_heatmap(bc: &str, dir: &Path, call_json: &CallJson) -> Result<(), String> {
+	let path: PathBuf = [dir, Path::new(format!("{}_gc_coverage.png", bc).as_str())].iter().collect();
+	let rf = &call_json.coverage().gc;
+	let(tv, lim_cov) = prep_gc_vec(rf);
 	let lim_cov = lim_cov.expect("No content found in GC distribution");
+	let mut max = 0;
+	for (x, v) in tv.iter() {
+		if *x > lim_cov { break; }
+		let m = v.iter().max().unwrap();
+		if *m > max { max = *m }
+	}
 	make_heatmap(&path, &tv, "GC vs Coverage", "GC %", "Coverage", lim_cov, max).map_err(|e| format!("{}", e))	
 }
 
@@ -242,8 +253,6 @@ fn make_meth_level_plot(path: &Path, vrf: &[&Vec<f64>; 4], title: &str, xlabel: 
         .line_style_1(&WHITE.mix(0.3))
         .y_desc(ylabel)
         .x_desc(xlabel)
-//        .disable_x_mesh()
-//        .disable_y_mesh()
 		.y_label_formatter(&|x| format!("{:.2}", x))
 		.x_label_formatter(&|x| format!("{:.0}", x))
         .axis_desc_style(("sans-serif", 15).into_font())
@@ -318,7 +327,30 @@ fn make_noncpg_read_profile(bc: &str, dir: &Path, call_json: &CallJson) -> Resul
 	}
 }
 
-fn make_read_level_table(json: &CallJson) -> Result<Content, String> {
+fn calc_gc_corr(json: &CallJson) -> f64 {
+	// Calc gc/depth_correlation
+	let(tv, lim_cov) = prep_gc_vec(&json.coverage().gc);
+	let lim_cov = lim_cov.expect("No content in gc histogram");
+	let (mut n, mut sx, mut sy, mut sx2, mut sy2, mut sxy) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+	for (x, v) in tv.iter() {
+		if *x > lim_cov { break; }
+		let cov = *x as f64;
+		for (ix, y) in v.iter().enumerate() {
+			let gc = (ix as f64) * 0.01;
+			let z = *y as f64;
+			n += z;
+			sx += z * gc;
+			sx2 += z * gc * gc;
+			sy += z * cov;
+			sy2 += z * cov * cov;
+			sxy += z * gc * cov;		
+		}
+	}
+	let tz = (n * sx2 - sx * sx) * (n * sy2 - sy * sy);
+	if tz > 0.0 { (n * sxy - sx * sy) / tz.sqrt() } else { 0.0 }
+}
+
+fn make_read_level_table(json: &CallJson, msumm: &mut MapSummary) -> Result<Content, String> {
 	let mut table = HtmlTable::new("hor-zebra");
 	table.add_header(vec!("Type", "# Reads", "%", "# Bases", "%"));
 	let fs = json.filter_stats();
@@ -331,11 +363,15 @@ fn make_read_level_table(json: &CallJson) -> Result<Content, String> {
 		row.push(format!("{}", x.bases()));
 		row.push(format!("{:.2}", pct(x.bases(), tot.bases())));		
 		row
-	};
+	};	
 	table.add_row(f("Total", tot));
 	for(key, name) in FSReadLevelType::iter() {
 		if let Some(t) = rl.get(&key) { table.add_row(f(name, *t)); }
 	}
+	msumm.aligned = tot.bases();
+	msumm.unique = tot.bases() - rl.get(&FSReadLevelType::LowMAPQ).map(|x| x.bases()).unwrap_or(0);
+	msumm.passed =  rl.get(&FSReadLevelType::Passed).map(|x| x.bases()).unwrap_or(0);
+	msumm.gc_correlation = calc_gc_corr(json);
 	Ok(Content::Table(table))
 }
 
@@ -359,7 +395,7 @@ fn make_base_level_table(json: &CallJson) -> Result<Content, String> {
 }
 
 fn make_variant_count_table(json: &CallJson) -> Result<Content, String> {
-	let mut table = HtmlTable::new("green");
+	let mut table = HtmlTable::new("hor-zebra");
 	table.add_header(vec!("Type", "Total", "Passed", "% Passed"));
 	let bs = json.basic_stats();
 	let f = |s: &str, ct: &Counts, tab: &mut HtmlTable, opt: bool| {
@@ -373,8 +409,119 @@ fn make_variant_count_table(json: &CallJson) -> Result<Content, String> {
 	Ok(Content::Table(table))	
 }
 
-fn make_vcf_filter_stats_table(json: &CallJson) -> Result<Content, String> {
+fn make_cpg_count_table(json: &CallJson, msumm: &mut MethSummary) -> Result<Content, String> {
 	let mut table = HtmlTable::new("hor-zebra");
+	table.add_header(vec!("Type", "Total", "Passed", "% Passed"));
+	let bs = json.basic_stats();
+	let f = |s: &str, ct: &Counts, tab: &mut HtmlTable, opt: bool| {
+		if !opt || ct.all() > 0 {
+			tab.add_row(vec!(s.to_owned(), format!("{}", ct.all()), format!("{}", ct.passed()), format!("{:.2}", pct(ct.passed(), ct.all()))));
+		} 
+	};
+	f("Reference Cpgs", bs.ref_cpg(), &mut table, false);
+	f("Non Reference Cpgs", bs.non_ref_cpg(), &mut table, true);
+	msumm.passed_cpgs = bs.ref_cpg().passed() + bs.non_ref_cpg().passed();
+	Ok(Content::Table(table))	
+}
+
+fn make_cpg_meth_profile_table(json: &CallJson, msumm: &mut MethSummary) -> Result<Content, String> {
+	let mut table = HtmlTable::new("green");
+	table.add_header(vec!("Type", "All Reference CpGs", "%", "Passed Reference CpGs", "%", "All Non Reference CpGs", "%", "Passed Non Reference CpGs", "%"));
+	let rf = &json.methylation();
+	let vrf = [&rf.all_ref_cpg, &rf.passed_ref_cpg, &rf.all_non_ref_cpg, &rf.passed_non_ref_cpg];
+	let mut stats = Vec::new();
+	for v in vrf.iter() {
+		let z: f64 = v.iter().sum();
+		let mut y = 0.0;
+		let mut median = None;
+		let mut sums = [0.0, 0.0, 0.0];
+		for (ix, x) in v.iter().enumerate() {
+			y += x;
+			if median.is_none() && y / z >= 0.5 { median = Some((ix as f64) * 0.01); }
+			if ix < 30 { sums[0] += *x; }
+			else if ix < 70 { sums[1] += *x; }
+			else { sums[2] += *x; }
+		}
+		stats.push((median.expect("No median found!"), z, sums[0], sums[1], sums[2]));
+	}
+	let f = |a, b| { if b > 0.0 { 100.0 * a / b } else { 0.0 } };
+	table.add_row(vec!(
+		"Low methylation (m < 0.3)".to_string(), format!("{:.0}",stats[0].2), format!("{:.2}", f(stats[0].2, stats[0].1)),
+		format!("{:.0}",stats[1].2), format!("{:.2}", f(stats[1].2, stats[1].1)), format!("{:.0}",stats[2].2), 
+		format!("{:.2}", f(stats[2].2, stats[2].1)), format!("{:.0}",stats[3].2), format!("{:.2}", f(stats[3].2, stats[3].1))));
+	table.add_row(vec!(
+		"Medium methylation (0.3 <= m < 0.7)".to_string(), format!("{:.0}",stats[0].3), format!("{:.2}", f(stats[0].3, stats[0].1)),
+		format!("{:.0}",stats[1].3), format!("{:.2}", f(stats[1].3, stats[1].1)), format!("{:.0}",stats[2].3), 
+		format!("{:.2}", f(stats[2].3, stats[2].1)), format!("{:.0}",stats[3].3), format!("{:.2}", f(stats[3].3, stats[3].1))));
+	table.add_row(vec!(
+		"High methylation (m >= 0.7)".to_string(), format!("{:.0}",stats[0].4), format!("{:.2}", f(stats[0].4, stats[0].1)),
+		format!("{:.0}",stats[1].4), format!("{:.2}", f(stats[1].4, stats[1].1)), format!("{:.0}",stats[2].4), 
+		format!("{:.2}", f(stats[2].4, stats[2].1)), format!("{:.0}",stats[3].4), format!("{:.2}", f(stats[3].4, stats[3].1))));
+	table.add_row(Vec::new());
+	table.add_row(vec!(
+		"Median".to_string(), format!("{:0}", stats[0].0), String::new(), format!("{:0}", stats[1].0), String::new(), 
+		format!("{:0}", stats[2].0), String::new(), format!("{:0}", stats[3].0), String::new()));
+	msumm.med_cpg_meth = stats[0].0;
+	Ok(Content::Table(table))	
+}
+fn make_variant_type_tables(json: &CallJson, vsumm: &mut VarSummary) -> Result<(Content, Content), String> {
+	let mut table = HtmlTable::new("green");
+	let mutations = json.mutations();
+	let mut ct_ti = MutCounts::new();
+	let mut ct_tv = MutCounts::new();
+	let mut transitions = HashSet::new();
+	for k in &["A>G", "G>A", "T>C", "C>T"] { transitions.insert(k); }
+	let mut transversions = HashSet::new();
+	for k in &["A>C", "A>T", "C>A", "C>G", "G>C", "G>T", "T>A", "T>G"] { transversions.insert(k); }
+	let mut v_ti = Vec::new();
+	let mut v_tv = Vec::new();
+	for(k, c) in mutations.iter() {
+		if transitions.contains(&(k.as_str())) { 
+			v_ti.push((k, *c));
+			ct_ti += *c; 
+		} else if transversions.contains(&(k.as_str())) { 
+			v_tv.push((k, *c));
+			ct_tv += *c;
+		} else { return Err(format!("Unknown variant type {} from CallJson file", k)); }
+	}
+	let ct = ct_ti + ct_tv;
+	let dbsnp = ct.dbsnp_all() > 0;
+	let mut hdr = vec!("Mutation", "Type", "# All", "%", "# Passed", "%");
+	if dbsnp {	hdr.extend(&["dbSNP All", "%", "dbSNP Passed", "%"]); } 
+	table.add_header(hdr);
+	v_ti.sort_by(|(a, _), (b, _)| a.cmp(b));
+	v_tv.sort_by(|(a, _), (b, _)| a.cmp(b));
+	let f = |k: &String, c: &MutCounts, s: &str| {
+		let mut row = vec!(
+			k.to_owned(), s.to_string(), 
+			format!("{}", c.all()), format!("{:.2}", pct(c.all(), ct.all())),
+			format!("{}", c.passed()), format!("{:.2}", pct(c.passed(), ct.passed())),
+		);
+		if dbsnp {	row.extend(vec!(
+			format!("{}", c.dbsnp_all()), format!("{:.2}", pct(c.dbsnp_all(), ct.dbsnp_all())),
+			format!("{}", c.dbsnp_passed()), format!("{:.2}", pct(c.dbsnp_passed(), ct.dbsnp_passed())),				
+		));} 
+		row
+	};
+	for (k, c) in v_ti.iter() { table.add_row(f(*k, c, "Transition")); }
+	table.add_row(Vec::new());
+	for (k, c) in v_tv.iter() { table.add_row(f(*k, c, "Transversion")); }
+	let mut table1 = HtmlTable::new("hor-zebra");
+	table1.add_header(vec!("Status", "Ratio", "Transitions", "Transversions"));
+	let ratio = |a, b| if b > 0 { (a as f64) / (b as f64) } else { 0.0 };
+	let g = |a, b, s: &str| vec!(s.to_owned(), format!("{:.2}", ratio(a, b)), format!("{}", a), format!("{}", b));
+	table1.add_row(g(ct_ti.all(), ct_tv.all(), "All"));
+	table1.add_row(g(ct_ti.passed(), ct_tv.passed(), "Passed"));
+	vsumm.ti_tv_ratio = ratio(ct_ti.passed(), ct_tv.passed());
+	if dbsnp {
+		table1.add_row(g(ct_ti.dbsnp_all(), ct_tv.dbsnp_all(), "dbSNP All"));
+		table1.add_row(g(ct_ti.dbsnp_passed(), ct_tv.dbsnp_passed(), "dbSNP Passed"));
+	}
+	Ok((Content::Table(table), Content::Table(table1)))	
+}
+
+fn make_vcf_filter_stats_table(json: &CallJson, vsumm: &mut VarSummary) -> Result<Content, String> {
+	let mut table = HtmlTable::new("green");
 	table.add_header(vec!("Type", "# Sites", "%", "# Non-Variant Sites", "%", "# Variant Sites", "%"));
 	let mut v = Vec::new();
 	let mut pass = None;
@@ -399,6 +546,8 @@ fn make_vcf_filter_stats_table(json: &CallJson) -> Result<Content, String> {
 	table.add_row(f("Filtered", flt, all.all()));
 	table.add_row(Vec::new());
 	for(k, ct) in v.iter() { if ct.all() > 0 { table.add_row(f(k, *ct, flt.all())); }}
+	vsumm.variants = all.all();
+	vsumm.variants_passed = pass.all();
 	Ok(Content::Table(table))		
 }
 
@@ -417,12 +566,12 @@ fn new_body(project: &str, bc: &str, tag: &str) -> HtmlElement {
 	body
 }
 
-fn create_mapping_report_body(project: &str, bc: &str, dir: &Path, json: &CallJson) -> Result<HtmlElement, String> {
+fn create_mapping_report_body(project: &str, bc: &str, dir: &Path, json: &CallJson, msumm: &mut MapSummary) -> Result<HtmlElement, String> {
 	let mut img_dir = dir.to_owned();
 	img_dir.push("images");
 	let mut body = new_body(project, bc, "mapping_coverage");
 	body.push_element(make_section("Read Level Counts"));
-	body.push(make_read_level_table(json)?);
+	body.push(make_read_level_table(json, msumm)?);
 	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
 	body.push_element(make_section("Base Level Counts"));
 	body.push(make_base_level_table(json)?);
@@ -449,7 +598,7 @@ fn create_mapping_report_body(project: &str, bc: &str, dir: &Path, json: &CallJs
 	Ok(body)
 }
 
-fn create_variant_report_body(project: &str, bc: &str, dir: &Path, json: &CallJson) -> Result<HtmlElement, String> {
+fn create_variant_report_body(project: &str, bc: &str, dir: &Path, json: &CallJson, vsumm: &mut VarSummary) -> Result<HtmlElement, String> {
 	let mut img_dir = dir.to_owned();
 	img_dir.push("images");
 	let mut body = new_body(project, bc, "variants");
@@ -457,7 +606,101 @@ fn create_variant_report_body(project: &str, bc: &str, dir: &Path, json: &CallJs
 	body.push(make_variant_count_table(json)?);
 	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
 	body.push_element(make_section("VCF Filter Stats"));
-	body.push(make_vcf_filter_stats_table(json)?);
+	body.push(make_vcf_filter_stats_table(json, vsumm)?);
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	body.push_element(make_section("Coverage and Quality"));
+	let get_path = |name: &str| {
+		let mut tp = img_dir.clone();
+		tp.push(format!("{}_{}.png", bc, name).as_str());
+		tp
+	};
+	let img_str = |p: &Path| {
+		let fname = p.file_name().expect("Missing filename").to_string_lossy();
+		format!("<img src=\"images/{}\" alt=\"{}\">", fname, fname)	
+	};
+	let mut table = HtmlTable::new("green");
+	table.add_header(vec!("Coverage Distribution for Variant Sites", "Quality Distribution for Variant Sites"));
+	table.add_row(vec!(img_str(&get_path("coverage_variants")), img_str(&get_path("quality_variants"))));
+	body.push(Content::Table(table));
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	body.push_element(make_section("Distributions of Filter Criteria"));
+	table = HtmlTable::new("hor-zebra");
+	table.add_header(vec!("Phred scale strand bias estimated by Fisher's Exact Test"));
+	table.add_row(vec!(img_str(&get_path("fs_variant"))));
+	body.push(Content::Table(table));
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	table = HtmlTable::new("green");
+	table.add_header(vec!("Quality by Depth for Variant Alleles", "Quality by Depth for Non-Variant Alleles"));
+	table.add_row(vec!(img_str(&get_path("qd_variant")), img_str(&get_path("qd_nonvariant"))));
+	body.push(Content::Table(table));
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	table = HtmlTable::new("hor-zebra");
+	table.add_header(vec!("RMS Mapping Quality for Variant Alleles", "RMS Mapping Qality for Non-Variant Alleles"));
+	table.add_row(vec!(img_str(&get_path("rmsmq_variant")), img_str(&get_path("rmsmq_nonvariant"))));
+	body.push(Content::Table(table));
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	body.push_element(make_section("Variant Types"));
+	let (t1, t2) = make_variant_type_tables(json, vsumm)?;
+	body.push(t1);
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	body.push_element(make_section("Ti / Tv Ratio"));
+	body.push(t2);	
+	let(t, total, _) = prep_hist_vec(&json.coverage().variant);
+	let mut tmp = 0;
+	for(ix, x) in t.iter() {
+		tmp += *x;
+		if tmp >= total >> 1 { 
+			vsumm.med_cov_var_passed = *ix;
+			break;
+		}
+	}
+	Ok(body)
+}
+
+fn create_meth_report_body(project: &str, bc: &str, dir: &Path, json: &CallJson, msumm: &mut MethSummary) -> Result<HtmlElement, String> {
+	let mut img_dir = dir.to_owned();
+	img_dir.push("images");
+	let mut body = new_body(project, bc, "methylation");
+	body.push_element(make_section("CpG Counts"));
+	body.push(make_cpg_count_table(json, msumm)?);
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	body.push_element(make_section("CpG Coverage"));
+	let get_path = |name: &str| {
+		let mut tp = img_dir.clone();
+		tp.push(format!("{}_{}.png", bc, name).as_str());
+		tp
+	};
+	let img_str = |p: &Path| {
+		let fname = p.file_name().expect("Missing filename").to_string_lossy();
+		format!("<img src=\"images/{}\" alt=\"{}\">", fname, fname)	
+	};
+	let mut table = HtmlTable::new("green");
+	table.add_header(vec!("Coverage Distribution for Reference CpGs", "Informative Read Distribution for Reference CpGs"));
+	table.add_row(vec!(img_str(&get_path("coverage_ref_cpg")), img_str(&get_path("coverage_ref_cpg_inf"))));
+	body.push(Content::Table(table));
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	table = HtmlTable::new("hor-zebra");
+	table.add_header(vec!("Quality Distribution for Reference CpGs", "Quality Distribution for Non Reference CpGs"));
+	table.add_row(vec!(img_str(&get_path("quality_ref_cpg")), img_str(&get_path("quality_non_ref_cpg"))));
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	body.push_element(make_section("CpG Methylation Distribution"));
+	body.push(Content::Table(table));
+	table = HtmlTable::new("green");
+	table.add_header(vec!("CpG Methylation Distribution"));
+	table.add_row(vec!(img_str(&get_path("methylation_levels"))));
+	body.push(Content::Table(table));
+	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
+	body.push_element(make_section("CpG Methylation Profiles"));
+	body.push(make_cpg_meth_profile_table(json, msumm)?);
+	let(t, total, _) = prep_hist_vec(&json.coverage().ref_cpg);
+	let mut tmp = 0;
+	for(ix, x) in t.iter() {
+		tmp += *x;
+		if tmp >= total >> 1 { 
+			msumm.med_cpg_cov = *ix;
+			break;
+		}
+	}
 	Ok(body)
 }
 
@@ -471,17 +714,87 @@ fn new_page(path: &Path) -> Result<HtmlPage, String> {
 	Ok(html)
 }
 
-fn create_mapping_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson) -> Result<(), String> {
+fn create_mapping_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>) -> Result<(), String> {
 	let path: PathBuf = [dir, Path::new(format!("{}_mapping_coverage.html", bc).as_str())].iter().collect();
 	let mut html = new_page(&path)?;
-	html.push_element(create_mapping_report_body(project, bc, dir, call_json)?);	
+	let mut map_summ = MapSummary::new();
+	html.push_element(create_mapping_report_body(project, bc, dir, call_json, &mut map_summ)?);	
+	let mut shash = summary.lock().expect("Couldn't lock CallSummary");
+	shash.get_mut(&bc.to_owned()).expect("Couldn't find CallSummary for sample").map = Some(map_summ);
 	Ok(())
 }
 
-fn create_variant_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson) -> Result<(), String> {
+fn create_variant_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>) -> Result<(), String> {
 	let path: PathBuf = [dir, Path::new(format!("{}_variants.html", bc).as_str())].iter().collect();
+	let mut var_summ = VarSummary::new();
 	let mut html = new_page(&path)?;
-	html.push_element(create_variant_report_body(project, bc, dir, call_json)?);	
+	html.push_element(create_variant_report_body(project, bc, dir, call_json, &mut var_summ)?);	
+	let mut shash = summary.lock().expect("Couldn't lock CallSummary");
+	shash.get_mut(&bc.to_owned()).expect("Couldn't find CallSummary for sample").var = Some(var_summ);
+	Ok(())
+}
+
+fn create_meth_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>) -> Result<(), String> {
+	let path: PathBuf = [dir, Path::new(format!("{}_methylation.html", bc).as_str())].iter().collect();
+	let mut html = new_page(&path)?;
+	let mut meth_summ = MethSummary::new();
+	html.push_element(create_meth_report_body(project, bc, dir, call_json, &mut meth_summ)?);	
+	let mut shash = summary.lock().expect("Couldn't lock CallSummary");
+	shash.get_mut(&bc.to_owned()).expect("Couldn't find CallSummary for sample").meth = Some(meth_summ);
+	Ok(())
+}
+
+fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<HashMap<String, CallSummary>>>) -> Result<(), String> {
+	let mut path = dir.to_owned();
+	path.push("index.html");
+	let mut html = HtmlPage::new(&path)?;
+	let mut head_element = HtmlElement::new("HEAD", None, true);
+	let mut style_element = HtmlElement::new("STYLE", Some("TYPE=\"text/css\""), true);
+	style_element.push_str("<!--\n@import url(\"../css/style.css\");\n-->");
+	head_element.push_element(style_element);
+	html.push_element(head_element);
+	let mut body = HtmlElement::new("BODY", None, true);
+	body.push_element(make_title(format!("bs_call Report: Project {}", project)));
+	let mut table = HtmlTable::new("hor-zebra");
+	let f = |x| {
+		if x > 1_000_000_000 { format!("{:.2} Tb", (x as f64) / 1_000_000_000.0)}
+		else if x > 1_000_000 { format!("{:.2} Mb", (x as f64) / 1_000_000.0)}
+		else if x > 1_000 { format!("{:.2} Kb", (x as f64) / 1_000.0)}
+		else {format!("{}", x)}
+	};
+	table.add_header(vec!(
+		"Sample", "Aligned", "Uniquely Aligned", "Passed", "GC Depth corr.", "Variants", "Passed Variants", "Med. Cov. Passed Variants",
+		"Ti/Tv Ratio", "Med. CpG Meth.", "Med. CpG Cov.", "Passed CpGs", "Reports"));
+	if let Ok(sum_vec) = summary.lock() {
+		for (bc, s) in sum_vec.iter() {
+			let mut row = Vec::new();
+			let  map_summ = s.map.as_ref().expect("Empty Map Summary");
+			let  var_summ = s.var.as_ref().expect("Empty Variant Summary");
+			let  meth_summ = s.meth.as_ref().expect("Empty Meth Summary");
+			row.push(bc.to_string());
+			row.push(f(map_summ.aligned));
+			row.push(format!("{} ({:.2} %)", f(map_summ.unique), pct(map_summ.unique, map_summ.aligned)));
+			row.push(format!("{} ({:.2} %)", f(map_summ.passed), pct(map_summ.passed, map_summ.aligned)));
+			row.push(format!("{:.2}", map_summ.gc_correlation));
+			row.push(format!("{:.3e}", var_summ.variants));
+			row.push(format!("{:.3e} ({:.2} %)", var_summ.variants_passed, pct(var_summ.variants_passed, var_summ.variants)));
+			row.push(format!("{}x", var_summ.med_cov_var_passed));
+			row.push(format!("{:.2}", var_summ.ti_tv_ratio));
+			row.push(format!("{:.2}", meth_summ.med_cpg_meth));
+			row.push(format!("{}x", meth_summ.med_cpg_cov));
+			row.push(format!("{:.3e}", meth_summ.passed_cpgs));
+			let mut link1 = HtmlElement::new("a", Some(format!("class=\"link\" href=\"{}/{}_mapping_coverage.html\"", bc, bc).as_str()), true);
+			link1.push_str("&#187 Alignments & Coverage");
+			let mut link2 = HtmlElement::new("a", Some(format!("class=\"link\" href=\"{}/{}_variants.html\"", bc, bc).as_str()), true);
+			link2.push_str("&#187 Variants");
+			let mut link3 = HtmlElement::new("a", Some(format!("class=\"link\" href=\"{}/{}_methylation.html\"", bc, bc).as_str()), true);
+			link3.push_str("&#187 Methylation");
+			row.push(format!("{}<BR>{}<BR>{}<BR>", link1, link2, link3));
+			table.add_row(row);
+		}
+	} else { return Err("Couldn't obtain lock on sample summary".to_string()); }
+	body.push(Content::Table(table));
+	html.push_element(body);	
 	Ok(())
 }
 
@@ -512,9 +825,9 @@ fn make_call_job(bc: &str, bc_dir: &Path, project: &str, job: MakeCallJob) -> Re
 			let path: PathBuf = [&img_dir, Path::new(format!("{}_fs_variant.png", bc).as_str())].iter().collect();
 			make_hist(&path, &cj.qc_dist().fisher_strand, "Fisher Strand Test", "Fisher Strand Phred Scale Probability", "# sites").map_err(|e| format!("{}", e))
 		},
-		CallJob::MappingReport => create_mapping_report(bc, bc_dir, project, cj),
-		CallJob::VariantReport => create_variant_report(bc, bc_dir, project, cj),
-		_ => Ok(()),
+		CallJob::MappingReport => create_mapping_report(bc, bc_dir, project, cj, job.summary),
+		CallJob::VariantReport => create_variant_report(bc, bc_dir, project, cj, job.summary),
+		CallJob::MethylationReport => create_meth_report(bc, bc_dir, project, cj, job.summary),
 	}
 }
 
@@ -556,7 +869,7 @@ fn worker_thread(tx: mpsc::Sender<(isize, usize)>, rx: mpsc::Receiver<Option<Rep
 	Ok(())
 }
 
-fn prepare_jobs(svec: &[CallJsonFiles], project: &str) -> Vec<ReportJob> {
+fn prepare_jobs(svec: &[CallJsonFiles], project: &str, summary: Arc<Mutex<HashMap<String, CallSummary>>>) -> Vec<ReportJob> {
 	let mut v = Vec::new();
 	for cjson in svec.iter() {
 		let call_json = Arc::new(RwLock::new(None));
@@ -564,7 +877,7 @@ fn prepare_jobs(svec: &[CallJsonFiles], project: &str) -> Vec<ReportJob> {
 		let ld_json_ix = v.len();
 		v.push(ReportJob::new(&cjson.barcode, project, &cjson.bc_dir, RepJob::CallJson(load_json)));
 		for job_type in CallJob::iter() {
-			let mk_graph = MakeCallJob{job_type, depend: ld_json_ix, call_json: call_json.clone()};
+			let mk_graph = MakeCallJob{job_type, depend: ld_json_ix, call_json: call_json.clone(), summary: summary.clone()};
 			v.push(ReportJob::new(&cjson.barcode, project, &cjson.bc_dir, RepJob::CallJob(mk_graph)));
 		}
 	}
@@ -580,7 +893,10 @@ pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opt
 	// Maximum parallel jobs that we could do if there were enough cores is 18 * the number of samples (18 images per sample)
 	let n_dsets = svec.len() * 18;
 	let n_workers = if n_cores > n_dsets { n_dsets } else { n_cores };
-	let mut job_vec = prepare_jobs(&svec, &project);
+	let mut shash = HashMap::new();
+	for cjson in svec.iter() { shash.insert(cjson.barcode.clone(), CallSummary::new()); }
+	let summary = Arc::new(Mutex::new(shash));
+	let mut job_vec = prepare_jobs(&svec, &project, summary.clone());
 	let (ctr_tx, ctr_rx) = mpsc::channel();
 	let mut avail = Vec::new();
 	let mut workers = Vec::new();
@@ -690,6 +1006,7 @@ pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opt
 	}
 	if abort { Err("Map-report generation failed".to_string()) }
 	else {
+		create_summary(output_dir, &project, summary)?; 
 		make_map_report::copy_css(output_dir, css)?;
 		Ok(None) 
 

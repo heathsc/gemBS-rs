@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, mpsc, Mutex, RwLock};
 use std::thread;
+use std::collections::HashMap;
 
 use crate::common::json_call_stats::CallJson;
 
@@ -107,6 +108,8 @@ pub struct MakeCallJob {
 	pub job_type: CallJob,
 	pub depend: usize,
 	pub call_json: Arc<RwLock<Option<CallJson>>>,	
+	pub summary: Arc<Mutex<HashMap<String, CallSummary>>>,
+
 }
 
 #[derive(Clone)]
@@ -149,6 +152,51 @@ pub struct SampleSummary {
 	pub overconversion: Option<f64>,
 }
 
+#[derive(Debug)]
+pub struct MapSummary {
+	pub aligned: usize,
+	pub unique: usize,
+	pub passed: usize,
+	pub gc_correlation: f64,	
+}
+
+impl MapSummary {
+	pub fn new() -> Self { MapSummary{aligned: 0, unique: 0, passed: 0, gc_correlation: 0.0} }
+}
+
+#[derive(Debug)]
+pub struct VarSummary {
+	pub variants: usize,
+	pub variants_passed: usize,
+	pub med_cov_var_passed: usize,
+	pub ti_tv_ratio: f64,		
+}
+
+impl VarSummary {
+	pub fn new() -> Self { VarSummary{variants: 0, variants_passed: 0, med_cov_var_passed: 0, ti_tv_ratio: 0.0}}
+}
+
+#[derive(Debug)]
+pub struct MethSummary {
+	pub med_cpg_meth: f64,
+	pub med_cpg_cov: usize,
+	pub passed_cpgs: usize,	
+}
+
+impl MethSummary {
+	pub fn new() -> Self {MethSummary{med_cpg_meth: 0.0, med_cpg_cov: 0, passed_cpgs: 0}}
+}
+
+#[derive(Debug)]
+pub struct CallSummary {
+	pub map: Option<MapSummary>,
+	pub var: Option<VarSummary>,
+	pub meth: Option<MethSummary>,
+}
+
+impl CallSummary {
+	pub fn new() -> Self { CallSummary{map: None, var: None, meth: None }}
+}
 
 pub fn pct(a: usize, b: usize) -> f64 {
 	if b > 0 { 100.0 * (a as f64) / (b as f64) }
