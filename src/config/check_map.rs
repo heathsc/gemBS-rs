@@ -60,7 +60,7 @@ fn collect_samples(gem_bs: &GemBS) -> Result<Vec<Sample>, String> {
 }
 
 fn check_file_match(path: &Path) -> Option<Metadata> {
-	lazy_static! { static ref RE: Regex = Regex::new(r"([12])?.fastq").unwrap(); }
+	lazy_static! { static ref RE: Regex = Regex::new(r"^.*?([12])?[.]fastq").unwrap(); }
 	if let Some(s) = path.as_os_str().to_str() {
 		if let Some(cap) = RE.captures(s) {
 			if let Some(r) = cap.get(1) {
