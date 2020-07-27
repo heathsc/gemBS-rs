@@ -70,7 +70,7 @@ impl SampleData {
 				if let Some(ftype) = href.get(&Metadata::FileType) {
 					if let DataValue::FileType(ft) = ftype {
 						if *ft == FileType::Interleaved || *ft == FileType::Single {
-							return Err(format!("Error with dataset {}: Interleaved file type incompatible with two input files", dataset)); 
+							return Err(format!("Error with dataset {}: Interleaved or Single file type incompatible with two input files", dataset)); 
 						} 
 					}
 				} else { href.insert(Metadata::FileType, DataValue::FileType(FileType::Paired)); }

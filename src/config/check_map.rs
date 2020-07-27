@@ -129,14 +129,17 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 			}
 			// If no data files specified, look for files based on Dataset or AltDataset
 			if in_vec.is_empty() {
-				println!("Checking seq_dir {} sdir {}", seq_dir, sdir);
 				let mut thash = HashMap::new();
 				let mut dsets = vec!(dat);
 				if let Some(d) = alt_dataset { dsets.push(d); }
 				for dt in dsets {
 					for mat in glob(format!("{}/*{}*fastq*", sdir, dt).as_str()).expect("Failed to read glob pattern") {
 						match mat {
-							Ok(p) => if let Some(md) = check_file_match(&p) { thash.insert(md, p); },
+							Ok(p) => if let Some(md) = check_file_match(&p) { 
+								if let Some(old_val) = thash.insert(md, p.clone()) {
+									if old_val != p { return Err(format!("Inconsistent data for dataset {} item {:?}", dat, md)); }
+								}
+							},
 							Err(e) => return Err(format!("Error when searching for datafiles: {}", e)),
 						}
 					}
