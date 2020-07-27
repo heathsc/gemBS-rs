@@ -2,7 +2,11 @@
 // Make asset list for FASTQs, BAMs etc. associated with mapping
 use std::path::Path;
 use std::collections::HashMap;
-use crate::common::defs::{Metadata, Section, DataValue, Command};
+use glob::glob;
+use regex::Regex;
+use lazy_static::lazy_static;
+
+use crate::common::defs::{Metadata, Section, DataValue, Command, FileType};
 use crate::common::assets;
 use crate::common::assets::{AssetType, GetAsset};
 use super::GemBS;
@@ -55,6 +59,17 @@ fn collect_samples(gem_bs: &GemBS) -> Result<Vec<Sample>, String> {
 	Ok(samples)
 }
 
+fn check_file_match(path: &Path) -> Option<Metadata> {
+	lazy_static! { static ref RE: Regex = Regex::new(r"([12])?.fastq").unwrap(); }
+	if let Some(s) = path.as_os_str().to_str() {
+		if let Some(cap) = RE.captures(s) {
+			if let Some(r) = cap.get(1) {
+				if r.as_str() == "1" { Some(Metadata::FilePath1) } else { Some(Metadata::FilePath2) }
+			} else { Some(Metadata::FilePath) }
+		} else { None }
+	} else { None } 
+}
+
 pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Mapping, name ) { x } else { "." } };
 	let seq_dir = get_dir("sequence_dir").to_owned();
@@ -84,7 +99,7 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 	}; 
 	for sample in samples.iter() {
 		let replace_meta_var = |s: &str| {
-			if let Some(sm) = &sample.name {	s.replace("@BARCODE", &sample.barcode).replace("@SAMPLE", sm.as_str()) } else { s.replace("@BARCODE", &sample.barcode) }
+			if let Some(sm) = &sample.name { s.replace("@BARCODE", &sample.barcode).replace("@SAMPLE", sm.as_str()) } else { s.replace("@BARCODE", &sample.barcode) }
 		};
 		let bdir = replace_meta_var(&bam_dir);
 		let bpath = Path::new(&bdir);
@@ -98,14 +113,56 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 			} else { panic!("Lost dataset information {}", dat) };
 			let mut bisulfite = true;
 			let mut in_vec = Vec::new();
+			let mut alt_dataset = None;
+			let mut file_type = None;
 			for(md, val) in dvec.iter() {
 				let asset = AssetType::Supplied;
 				match md {
 					Metadata::FilePath => if let DataValue::String(s) = val { in_vec.push(handle_file(gem_bs, dat, s, "_read", &spath, asset)) },
 					Metadata::FilePath1 => if let DataValue::String(s) = val { in_vec.push(handle_file(gem_bs, dat, s, "_read1", &spath, asset)) },
 					Metadata::FilePath2 => if let DataValue::String(s) = val { in_vec.push(handle_file(gem_bs, dat, s, "_read2", &spath, asset)) },
+					Metadata::AltDataset => if let DataValue::String(s) = val { alt_dataset = Some(s) }
+					Metadata::FileType => if let DataValue::FileType(t) = val { file_type = Some(t) }
 					Metadata::Bisulfite => if let DataValue::Bool(x) = val { if !*x { bisulfite = false; }},
 					_ => (),
+				}
+			}
+			// If no data files specified, look for files based on Dataset or AltDataset
+			if in_vec.is_empty() {
+				println!("Checking seq_dir {} sdir {}", seq_dir, sdir);
+				let mut thash = HashMap::new();
+				let mut dsets = vec!(dat);
+				if let Some(d) = alt_dataset { dsets.push(d); }
+				for dt in dsets {
+					for mat in glob(format!("{}/*{}*fastq*", sdir, dt).as_str()).expect("Failed to read glob pattern") {
+						match mat {
+							Ok(p) => if let Some(md) = check_file_match(&p) { thash.insert(md, p); },
+							Err(e) => return Err(format!("Error when searching for datafiles: {}", e)),
+						}
+					}
+					if !thash.is_empty() { break; }
+				}
+				// Check that the files we found are compatible iwth themselves and other information
+				if thash.contains_key(&Metadata::FilePath1) || thash.contains_key(&Metadata::FilePath2) {
+					if thash.contains_key(&Metadata::FilePath) { return Err(format!("Mixture of paired and single sequence files found for dataset {} in {}", dat, sdir)); }
+					if thash.contains_key(&Metadata::FilePath1) && thash.contains_key(&Metadata::FilePath2) {
+						if let Some(ft) = file_type {
+							if *ft == FileType::Interleaved || *ft == FileType::Single {
+								return Err(format!("Error with dataset {}: Interleaved or Single file type incompatible with multiple sequence files", dat)); 
+							} 					
+						} else { gem_bs.set_sample_data(dat, Metadata::FileType, DataValue::FileType(FileType::Paired)) }	
+					}
+				}
+				// Everything OK, so insert assets
+				for(md, p) in thash.iter() {
+					let ext = match md {
+						Metadata::FilePath => "read",
+						Metadata::FilePath1 => "read1",
+						Metadata::FilePath2 => "read2",
+						_ => panic!("Unexpected metadata type"),
+					};
+					gem_bs.set_sample_data(dat, *md, DataValue::String(format!("{}", p.display())));
+					in_vec.push(gem_bs.insert_asset(format!("{}_{}", dat, ext).as_str(), &p, AssetType::Supplied));		
 				}
 			}
 			if in_vec.is_empty() { return Err(format!("No datafiles for dataset {}", dat)); }
