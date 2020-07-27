@@ -79,7 +79,7 @@ pub fn check_call_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	for (bc, _) in samples.iter() { 
 		let bc_dir: PathBuf = [&report_dir, Path::new(bc)].iter().collect();
 		let img_dir: PathBuf = [&report_dir, Path::new(bc), Path::new("images")].iter().collect();
-		let id = format!("{}_mapping.html", bc);
+		let id = format!("{}_mapping_coverage.html", bc);
 		out_vec.push(handle_file(gem_bs, &id, &id, &bc_dir));
 		let id = format!("{}_methylation.html", bc);
 		out_vec.push(handle_file(gem_bs, &id, &id, &bc_dir));

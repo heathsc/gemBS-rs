@@ -22,6 +22,6 @@ blake2 = "0.8"
 itertools = "0.9"
 hostname = "^0.3"
 custom_error = "1.7.1"
-plotters = "^0.2.15"
+plotters = {version = "^0.2.15", default_features = false, features = ["image_encoder", "line_series"]}
 regex = "1"
 

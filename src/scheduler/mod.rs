@@ -327,8 +327,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 						let ret = match com {
 							QPipeCom::MergeCallJsons(x) => report::merge_call_jsons(Arc::clone(&qpipe.sig), &qpipe.outputs, &x),
 							QPipeCom::MapReport((prj, cdir, thresh, nc, x)) => make_map_report::make_map_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, &cdir, thresh, nc, x),
-							QPipeCom::CallReport((prj, cdir, nc, x)) => make_call_report::make_call_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, &cdir, nc, x),
-							_ => Ok(None),						
+							QPipeCom::CallReport((prj, cdir, nc, x)) => make_call_report::make_call_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, &cdir, nc, x),					
 						};
 						if ret.is_err() {
 							error!("Error returned from internal pipeline command");

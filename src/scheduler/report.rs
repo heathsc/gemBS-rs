@@ -84,7 +84,7 @@ pub fn make_call_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	let mut json_files = Vec::new();
 	let samples = gem_bs.get_samples();
 	for (bc, _) in samples.iter() { 
-		let bc_dir = gem_bs.get_asset(format!("{}_mapping.html", bc).as_str()).expect("Couldn't find call report asset")
+		let bc_dir = gem_bs.get_asset(format!("{}_mapping_coverage.html", bc).as_str()).expect("Couldn't find call report asset")
 			.path().parent().expect("No parent dir found for call report file").to_owned();
 		let json_file = gem_bs.get_asset(format!("{}_call.json", bc).as_str()).expect("Couldn't find call JSON asset for call report").path().to_owned();
 		json_files.push(CallJsonFiles{barcode: bc.to_owned(), bc_dir, json_file});

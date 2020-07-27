@@ -394,7 +394,7 @@ impl GemBS {
 		let ignore = self.ignore_status();
 		for i in assets {
 			let asset = asset_ref.get_asset(*i).unwrap(); 
-//			println!("{:?} {:?} {:?}", asset.id(), asset.path(), asset.status());
+			println!("{:?} {:?} {:?}", asset.id(), asset.path(), asset.status());
 			if let Some(j) = asset.creator() {
 				if asset.status() != AssetStatus::Present {
 					check_reqd(j, &mut reqd, &mut tlist, tasks, asset_ref, &com_set, ignore);
@@ -422,26 +422,6 @@ impl GemBS {
 				}
 			}
 		} else { panic!("Couldn't find map tasks for barcode"); }
-		json_files
-	}
-	pub fn get_calling_json_files_for_barcode(&self, barcode: &str) -> Vec<usize> {
-		let mut json_files = Vec::new();
-		if let Some(t) = self.tasks.find_task(format!("single_bcf_call_{}", barcode).as_str()) {
-			for i in self.tasks[t].outputs() {
-				let asset = self.get_asset(*i).expect("Couldn't get asset");
-				if asset.id().ends_with(".json") { json_files.push(asset.idx()) }
-			}		
-		} else if let Some(t) = self.tasks.find_task(format!("bcf_mergecall_{}", barcode).as_str()) {
-			for ix in self.tasks[t].parents() {
-				let task = &self.tasks[*ix];
-				if task.id().starts_with("bcf_call_") {
-					for i in task.outputs() {
-						let asset = self.get_asset(*i).expect("Couldn't get asset");
-						if asset.id().ends_with(".json") { json_files.push(asset.idx()) }
-					}		
-				}
-			}
-		} else { panic!("Couldn't find bcf call tasks for barcode"); }
 		json_files
 	}
 }
