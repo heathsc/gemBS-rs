@@ -8,6 +8,8 @@ use crate::config::GemBS;
 	
 mod lex;
 mod find_var;
+mod gembs_json;
+
 use lex::{Lexer, LexToken};
 use find_var::{find_var, Segment};
 
@@ -21,7 +23,7 @@ struct PrepConfigVar {
 }
 
 #[derive(Debug)]
-struct KnownVar {
+pub struct KnownVar {
 	vtype: VarType,
 	sections: Vec<Section>
 }
@@ -30,10 +32,11 @@ impl KnownVar {
 	fn new(vtype: VarType, sections: Vec<Section>) -> Self {
 		KnownVar {vtype, sections}
 	}
+
 }
 
 #[derive(Debug)]
-struct KnownVarList {
+pub struct KnownVarList {
 	known_var: HashMap<&'static str, KnownVar>
 }
 
@@ -46,7 +49,7 @@ impl KnownVarList {
 		v.push(Section::Default);
 		self.known_var.insert(name, KnownVar::new(vtype, v));
 	}
-	fn check_vtype(&self, name: &str, section: Section) -> Option<VarType> {
+	pub fn check_vtype(&self, name: &str, section: Section) -> Option<VarType> {
 		let tstr = name.to_lowercase();
 		self.known_var.get(&tstr.as_str()).and_then(|v| if v.sections.contains(&section) { Some(v.vtype) } else { None })			
 	}
@@ -356,5 +359,6 @@ pub fn process_config_file(file_name: &str, gem_bs: &mut GemBS) -> Result<(), St
 	let mut prep_config = PrepConfig::new(&gem_bs.get_config_script_path());
 	prep_config.start_parse(file_name)?;
 	prep_config.parse(gem_bs)?;
+	gembs_json::check_gembs_json(gem_bs, &prep_config.kv_list)?;
 	Ok(())
 }

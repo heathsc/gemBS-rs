@@ -117,6 +117,14 @@ impl GemBS {
 		}
 		None
 	}
+	pub fn get_config_strict(&self, section: Section, name: &str) -> Option<&DataValue> {
+		if let GemBSHash::Config(href) = &self.var[0] {
+			if let Some(h) = href.get(&section) { 
+				if let Some(s) = h.get(name) { return Some(s); } 
+			}		
+		}
+		None
+	}
 	pub fn get_config_bool(&self, section: Section, name: &str) -> bool {
 		if let Some(DataValue::Bool(x)) = self.get_config(section, name) { *x } else { false }
 	}	

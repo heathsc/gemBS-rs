@@ -8,6 +8,7 @@ use crate::common::utils::Pipeline;
 use crate::common::{assets, compress};
 use crate::common::assets::{AssetType, GetAsset};
 
+use std::str::FromStr;
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::{BufRead, BufWriter, Write};
@@ -66,54 +67,41 @@ fn check_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 	let mut infer_idx_dir = None;
 	let mut missing_nonbs_index = false;
 	let mut missing_index = false;
-	if need_nonbs_index {
-		if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::Index, "nonbs_index") { 
-			// The file itself does not have to exist, but the parent directory should exist
-			let tpath = Path::new(idx);
-			let par = if let Some(d) = tpath.parent() {
-				if !d.exists() { return Err(format!("Parent directory of non BS index file {} not accessible", idx)); }
-				d
-			} else { Path::new(".") };
-			if gem_bs.get_config(Section::Index, "index_dir").is_none() {
-				infer_idx_dir = Some(par.to_str().unwrap().to_string());
-			}
-		} else { missing_nonbs_index = true; }	 		
-	}
-	if need_bs_index {
-		if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::Index, "index") { 
-			// The file itself does not have to exist, but the parent directory should exist
-			let tpath = Path::new(idx);
-			let par = if let Some(d) = tpath.parent() {
-				if !d.exists() { return Err(format!("Parent directory of index file {} not accessible", idx)); }
-				d
-			} else { Path::new(".") };
-			if gem_bs.get_config(Section::Index, "index_dir").is_none() {
-				infer_idx_dir = Some(par.to_str().unwrap().to_string());
-			}
-		} else { missing_index = true; }	 
-	}
-	if missing_index || missing_nonbs_index {	
-		// If we have no index_dir, we put the indices in the current directory
-		let idx_dir = if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Index, "index_dir") { x } else { 
-			infer_idx_dir = Some(".".to_string());
-			"." 
-		};
+	let infer_parent = |s: String| {
+		let tpath = Path::new(&s);
+		let tp = if let Some(d) = tpath.parent() {
+			if d.as_os_str().is_empty() { None }
+			else { Some(d) }
+		} else { None };
+		if let Some(d) = tp { d.to_owned() } else { PathBuf::from_str(".").unwrap() }
+	}; 
+	if need_nonbs_index && gem_bs.get_config(Section::Index, "nonbs_index").is_none() { missing_nonbs_index = true; }
+	if need_bs_index && gem_bs.get_config(Section::Index, "bs_index").is_none() { missing_index = true; }
+
+	if missing_index || missing_nonbs_index {			
+		// Check for index_dir
+		let idx_dir = if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Index, "index_dir") { PathBuf::from(x) }
+		else {
+			if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Index, "bs_index")	{ infer_idx_dir = Some(infer_parent(x.clone())); }	
+			else if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Index, "nonbs_index")	{ infer_idx_dir = Some(infer_parent(x.clone())); }	
+			else { infer_idx_dir = Some(PathBuf::from_str(".").unwrap()) };
+			infer_idx_dir.clone().unwrap()			
+		};	
 		// Check directory exists
-		let tpath = Path::new(idx_dir);
-		if !tpath.is_dir() { 
-			if let Err(e) = fs::create_dir(tpath) {
-				return Err(format!("Could not create index_dir directory {}: {}", idx_dir, e)); 
+		if !idx_dir.is_dir() { 
+			if let Err(e) = fs::create_dir(&idx_dir) {
+				return Err(format!("Could not create index_dir directory {}: {}", idx_dir.display(), e)); 
 			}
 		} 
 		if missing_index {
 			let tpath = Path::new(Path::new(reference).file_stem().unwrap()).with_extension("BS.gem");	
-			let mut idx = PathBuf::from(idx_dir);
+			let mut idx = idx_dir.clone();
 			idx.push(tpath);		
 			infer_idx = Some(idx.to_str().unwrap().to_string());
 		}
 		if missing_nonbs_index {
 			let tpath = Path::new(Path::new(reference).file_stem().unwrap()).with_extension("gem");	
-			let mut idx = PathBuf::from(idx_dir);
+			let mut idx = idx_dir;
 			idx.push(tpath);		
 			infer_nonbs_idx = Some(idx.to_str().unwrap().to_string());
 		}
@@ -126,7 +114,7 @@ fn check_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 		gem_bs.set_config(Section::Index, "nonbs_index", DataValue::String(x));
 	}
 	if let Some(x) = infer_idx_dir {
-		gem_bs.set_config(Section::Index, "index_dir", DataValue::String(x));
+		gem_bs.set_config(Section::Index, "index_dir", DataValue::String(format!("{}", x.display())));
 	}
 	gem_bs.set_config(Section::Index, "need_bs_index", DataValue::Bool(need_bs_index));
 	gem_bs.set_config(Section::Index, "need_nonbs_index", DataValue::Bool(need_nonbs_index));
@@ -161,7 +149,7 @@ fn make_dbsnp_tasks(gem_bs: &mut GemBS, dbsnp_files: Vec<PathBuf>) {
 	let index_task = gem_bs.add_task(id, desc, command, args);
 	let cores = gem_bs.get_config_int(Section::Index, "cores").map(|x| x as usize);
 	let memory = gem_bs.get_config_memsize(Section::Index, "memory");
-	let time = gem_bs.get_config_joblen(Section::Index, "time").or(Some(21600.into()));
+	let time = gem_bs.get_config_joblen(Section::Index, "time").or_else(|| Some(21600.into()));
 	gem_bs.add_task_inputs(index_task, &in_vec).add_outputs(&[index]).set_log(Some(log_index))
 		.add_cores(cores).add_memory(memory).add_time(time);
 	gem_bs.get_asset_mut(index).unwrap().set_creator(index_task, &in_vec);	

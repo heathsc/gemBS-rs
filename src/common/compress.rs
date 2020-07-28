@@ -85,39 +85,3 @@ pub fn open_bufwriter(path: &Path) -> Result<Box<dyn Write>> {
 	Ok(Box::new(BufWriter::new(file)))
 }
 
-pub fn get_reader(name: Option<&str>) -> Result<Box<dyn BufRead>> {
-    match name {
-        Some(file) => open_bufreader(Path::new(file)),
-        None => Ok(Box::new(BufReader::new(stdin()))),
-    }
-}
-
-pub fn get_writer(name: Option<&str>, filter: Option<&str>) -> Result<Box<dyn Write>> {
-    let open_file = | x: &str | {
-        let path = Path::new(x);
-        match File::create(&path) {
-            Err(why) => panic!("couldn't open {}: {}", path.display(), why),
-            Ok(file) => file,        
-        }
-    };
-        
-    let pipe: Box<dyn Write> = match filter {
-        Some(prog) => {
-            let child = match name {
-                Some(file) => {
-                    Command::new(prog).stdin(Stdio::piped()).stdout(Stdio::from(open_file(file))).spawn()
-                },
-                None =>  Command::new(prog).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn()
-            };
-            match child {
-                Err(why) => panic!("couldn't spawn {}: {}", prog, why),
-                Ok(mut process) => Box::new(BufWriter::new(process.stdin.take().unwrap()))
-            }
-        },
-        None => match name {
-            Some(file) => Box::new(BufWriter::new(open_file(file))),
-            None => Box::new(BufWriter::new(stdout()))
-        },
-    };
-    Ok(pipe)
-}
