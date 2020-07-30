@@ -29,13 +29,13 @@ pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
 		VarType::FileType => m.value_of(opt).and_then(|x| <FileType>::from_str(x).ok().map(DataValue::FileType)),
 		VarType::JobLen => m.value_of(opt).and_then(|x| <JobLen>::from_str(x).ok().map(DataValue::JobLen)),
 		VarType::MemSize => m.value_of(opt).and_then(|x| <MemSize>::from_str(x).ok().map(DataValue::MemSize)),
-		VarType::FloatVec => m.values_of(opt).and_then(|v| {			
+		VarType::FloatVec => m.values_of(opt).map(|v| {			
 			let vec:Vec<_> = v.map(|x| <f64>::from_str(x).ok().unwrap()).collect();
-			Some(DataValue::FloatVec(vec))
+			DataValue::FloatVec(vec)
 		}),
-		VarType::StringVec => m.values_of(opt).and_then(|v| {
+		VarType::StringVec => m.values_of(opt).map(|v| {
 			let args: Vec<String> = v.map(|x| x.to_owned()).collect();
-			Some(DataValue::StringVec(args))
+			DataValue::StringVec(args)
 		}),
 
 		_ => None,
@@ -139,6 +139,8 @@ lazy_static! {
 	  	m.push(("dbsnp_files", OptionType::Global("dbsnp_files", VarType::StringVec)));
       	m.push(("dry_run", OptionType::Special("_dry_run", VarType::Bool)));
       	m.push(("json", OptionType::Special("_json", VarType::String)));
+	  	m.push(("project", OptionType::Global("project", VarType::String)));
+	  	m.push(("report_dir", OptionType::Global("report_dir", VarType::String)));
         m
     };
 }

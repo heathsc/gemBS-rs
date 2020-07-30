@@ -11,8 +11,9 @@ use plotters::prelude::*;
 use crate::scheduler::report::SampleJsonFiles;
 use crate::scheduler::call;
 use crate::common::utils;
-use crate::common::json_map_stats::{MapJson, Counts, Count, Paired, New};
+use crate::common::json_map_stats::{MapJson, MapJsonType, Counts, Count, Paired, New};
 use crate::common::html_utils::*;
+use crate::common::latex_utils::*;
 use super::report_utils::*;
 
 pub fn make_title(title: String) -> HtmlElement {
@@ -47,70 +48,92 @@ fn make_single_row(x: Count, total: Count, s: &str) -> Vec<String> {
 	row
 }
 
-fn make_reads_table(json: &MapJson) -> Result<Content, String> {
-	let mut table = HtmlTable::new("hor-zebra");
+fn make_reads_tab<T: Table>(table: &mut T, json: &MapJson) -> Result<(), String> {
 	let mut hdr = vec!("Concept", "Total Reads", "%");
 	match json {
 		MapJson::Paired(x) | MapJson::Unknown(x) => {
-			hdr.extend(&["Pair One Reads", "%", "Pair Two Reads", "%"]);
+			hdr.extend(&["Pair One", "%", "Pair Two", "%"]);
 			let reads = x.reads();
 			let total = reads.get_total();
-			table.add_row(make_paired_row(total, total, "Sequenced Reads"));
-			table.add_row(make_paired_row(reads.general, total, "General Reads"));
-			if let Some(ct) = reads.sequencing_control { table.add_row(make_paired_row(ct, total, "Control Sequence Reads")); }
-			if let Some(ct) = reads.under_conversion_control { table.add_row(make_paired_row(ct, total, "Underconversion Control Sequence Reads")); }
-			if let Some(ct) = reads.over_conversion_control { table.add_row(make_paired_row(ct, total, "Overconversion Control Sequence Reads")); }
-			table.add_row(make_paired_row(reads.unmapped, total, "Unmapped Reads"));
+			table.add_row(make_paired_row(total, total, "Sequenced"));
+			table.add_row(make_paired_row(reads.general, total, "General"));
+			if let Some(ct) = reads.sequencing_control { table.add_row(make_paired_row(ct, total, "Control Seq.")); }
+			if let Some(ct) = reads.under_conversion_control { table.add_row(make_paired_row(ct, total, "Underconv. Seq.")); }
+			if let Some(ct) = reads.over_conversion_control { table.add_row(make_paired_row(ct, total, "Overconv. Seq.")); }
+			table.add_row(make_paired_row(reads.unmapped, total, "Unmapped"));
 			if let Some(bs_reads) = x.bs_reads() {
-				table.add_row(make_paired_row(bs_reads.c2t, total, "Bisulfite Reads C2T"));
-				table.add_row(make_paired_row(bs_reads.g2a, total, "Bisulfite Reads G2A"));
+				table.add_row(make_paired_row(bs_reads.c2t, total, "Bisulfite C2T"));
+				table.add_row(make_paired_row(bs_reads.g2a, total, "Bisulfite G2A"));
 			}
 		},
 		MapJson::Single(x) => {
 			let reads = x.reads();
 			let total = reads.get_total();
-			table.add_row(make_single_row(reads.get_total(), total, "Sequenced Reads"));		
-			table.add_row(make_single_row(reads.general, total, "General Reads"));
-			if let Some(ct) = reads.sequencing_control { table.add_row(make_single_row(ct, total, "Control Sequence Reads")); }
-			if let Some(ct) = reads.under_conversion_control { table.add_row(make_single_row(ct, total, "Underconversion Control Sequence Reads")); }
-			if let Some(ct) = reads.over_conversion_control { table.add_row(make_single_row(ct, total, "Overconversion Control Sequence Reads")); }
-			table.add_row(make_single_row(reads.unmapped, total, "Unmapped Reads"));
+			table.add_row(make_single_row(reads.get_total(), total, "Sequenced"));		
+			table.add_row(make_single_row(reads.general, total, "General"));
+			if let Some(ct) = reads.sequencing_control { table.add_row(make_single_row(ct, total, "Control Seq.")); }
+			if let Some(ct) = reads.under_conversion_control { table.add_row(make_single_row(ct, total, "Underconv. Seq.")); }
+			if let Some(ct) = reads.over_conversion_control { table.add_row(make_single_row(ct, total, "Overconv. Seq.")); }
+			table.add_row(make_single_row(reads.unmapped, total, "Unmapped"));
 			if let Some(bs_reads) = x.bs_reads() {
-				table.add_row(make_single_row(bs_reads.c2t, total, "Bisulfite Reads C2T"));
-				table.add_row(make_single_row(bs_reads.g2a, total, "Bisulfite Reads G2A"));
+				table.add_row(make_single_row(bs_reads.c2t, total, "Bisulfite C2T"));
+				table.add_row(make_single_row(bs_reads.g2a, total, "Bisulfite G2A"));
 			}
 		},
 	}
 	table.add_header(hdr);
+	Ok(())
+}
+
+fn make_reads_table(json: &MapJson) -> Result<Content, String> {
+	let mut table = HtmlTable::new("hor-zebra");
+	make_reads_tab(&mut table, json)?;
 	Ok(Content::Table(table))
+}
+
+fn make_reads_latex_tab(json: &MapJson) -> Result<LatexContent, String> {
+	let mut table = LatexTable::new();
+	make_reads_tab(&mut table, json)?;
+	Ok(LatexContent::Table(table))
+}
+
+fn make_bases_tab<T: Table>(table: &mut T, json: &MapJson) -> Result<(), String> {
+	let mut hdr = vec!("Base", "Total Bases", "%");
+	match json {
+		MapJson::Paired(x) | MapJson::Unknown(x) => {
+			hdr.extend(&["Pair One", "%", "Pair Two", "%"]);
+			let bc = x.base_counts().overall;
+			let total = bc.get_total();
+			table.add_row(make_paired_row(bc.a, total, "A"));
+			table.add_row(make_paired_row(bc.c, total, "C"));
+			table.add_row(make_paired_row(bc.g, total, "G"));
+			table.add_row(make_paired_row(bc.t, total, "T"));
+			table.add_row(make_paired_row(bc.n, total, "N"));
+		},
+		MapJson::Single(x) => {
+			let bc = x.base_counts().overall;
+			let total = bc.get_total();
+			table.add_row(make_single_row(bc.a, total, "A"));
+			table.add_row(make_single_row(bc.c, total, "C"));
+			table.add_row(make_single_row(bc.g, total, "G"));
+			table.add_row(make_single_row(bc.t, total, "T"));
+			table.add_row(make_single_row(bc.n, total, "N"));
+		},
+	}
+	table.add_header(hdr);
+	Ok(())
 }
 
 fn make_bases_table(json: &MapJson) -> Result<Content, String> {
 	let mut table = HtmlTable::new("hor-zebra");
-	let mut hdr = vec!("Concept", "Total Bases", "%");
-	match json {
-		MapJson::Paired(x) | MapJson::Unknown(x) => {
-			hdr.extend(&["Pair One Bases", "%", "Pair Two Bases", "%"]);
-			let bc = x.base_counts().overall;
-			let total = bc.get_total();
-			table.add_row(make_paired_row(bc.a, total, "Base Counts Overall A"));
-			table.add_row(make_paired_row(bc.c, total, "Base Counts Overall C"));
-			table.add_row(make_paired_row(bc.g, total, "Base Counts Overall G"));
-			table.add_row(make_paired_row(bc.t, total, "Base Counts Overall T"));
-			table.add_row(make_paired_row(bc.n, total, "Base Counts Overall N"));
-		},
-		MapJson::Single(x) => {
-			let bc = x.base_counts().overall;
-			let total = bc.get_total();
-			table.add_row(make_single_row(bc.a, total, "Base Counts Overall A"));
-			table.add_row(make_single_row(bc.c, total, "Base Counts Overall C"));
-			table.add_row(make_single_row(bc.g, total, "Base Counts Overall G"));
-			table.add_row(make_single_row(bc.t, total, "Base Counts Overall T"));
-			table.add_row(make_single_row(bc.n, total, "Base Counts Overall N"));
-		},
-	}
-	table.add_header(hdr);
+	make_bases_tab(&mut table, json)?;
 	Ok(Content::Table(table))
+}
+
+fn make_bases_latex_tab(json: &MapJson) -> Result<LatexContent, String> {
+	let mut table = LatexTable::new();
+	make_bases_tab(&mut table, json)?;
+	Ok(LatexContent::Table(table))
 }
 
 fn trans_paired_hash(hr: &[HashMap<String, usize>; 2]) -> Result<(Vec<(usize, Counts)>, Counts), String> {
@@ -145,8 +168,7 @@ fn trans_single_hash(hr: &HashMap<String, usize>) -> Result<(Vec<(usize, Count)>
 	Ok((rl, total))
 }
 
-fn make_read_length_table(json: &MapJson) -> Result<Content, String> {
-	let mut table = HtmlTable::new("hor-zebra");
+fn make_read_length_tab<T: Table>(table: &mut T, json: &MapJson) -> Result<(), String> {
 	let mut hdr = vec!("Read Length", "Total Reads", "%");
 	match json {
 		MapJson::Paired(x) | MapJson::Unknown(x) => {
@@ -160,11 +182,22 @@ fn make_read_length_table(json: &MapJson) -> Result<Content, String> {
 		},
 	}
 	table.add_header(hdr);
+	Ok(())
+}
+
+fn make_read_length_table(json: &MapJson) -> Result<Content, String> {
+	let mut table = HtmlTable::new("hor-zebra");
+	make_read_length_tab(&mut table, json)?;
 	Ok(Content::Table(table))
 }
 
-fn make_mismatch_table(json: &MapJson) -> Result<Content, String> {
-	let mut table = HtmlTable::new("green");
+fn make_read_length_latex_tab(json: &MapJson) -> Result<LatexContent, String> {
+	let mut table = LatexTable::new();
+	make_read_length_tab(&mut table, json)?;
+	Ok(LatexContent::Table(table))
+}
+
+fn make_mismatch_tab<T: Table>(table: &mut T, json: &MapJson) -> Result<(), String> {
 	let mut hdr = vec!("Number of Mismatches", "Total Reads", "%");
 	match json {
 		MapJson::Paired(x) | MapJson::Unknown(x) => {
@@ -178,11 +211,22 @@ fn make_mismatch_table(json: &MapJson) -> Result<Content, String> {
 		},
 	}
 	table.add_header(hdr);
+	Ok(())
+}
+
+fn make_mismatch_table(json: &MapJson) -> Result<Content, String> {
+	let mut table = HtmlTable::new("green");
+	make_mismatch_tab(&mut table, json)?;
 	Ok(Content::Table(table))
 }
 
-fn make_unique_table(mapq_threshold: usize, json: &MapJson) -> Result<Content, String> {
-	let mut table = HtmlTable::new("green");
+fn make_mismatch_length_latex_tab(json: &MapJson) -> Result<LatexContent, String> {
+	let mut table = LatexTable::new();
+	make_mismatch_tab(&mut table, json)?;
+	Ok(LatexContent::Table(table))
+}
+
+fn make_unique_tab<T: Table>(table: &mut T, mapq_threshold: usize, json: &MapJson) -> Result<(), String> {
 	table.add_header(vec!("Concept", "Value"));
 	let (ct, tot) = json.get_unique(mapq_threshold);
 	let mut row = vec!("Unique Fragments".to_string());
@@ -191,18 +235,41 @@ fn make_unique_table(mapq_threshold: usize, json: &MapJson) -> Result<Content, S
 	let mut row = vec!("% Unique".to_string());
 	row.push(format!("{:.2} %", pct(ct, tot)));
 	table.add_row(row);	
+	Ok(())
+}
+
+fn make_unique_table(mapq_threshold: usize, json: &MapJson) -> Result<Content, String> {
+	let mut table = HtmlTable::new("green");
+	make_unique_tab(&mut table, mapq_threshold, json)?;
 	Ok(Content::Table(table))
 }
 
-fn make_conversion_table(json: &MapJson) -> Result<Content, String> {
-	let mut table = HtmlTable::new("green");
+fn make_unique_latex_tab(mapq_threshold: usize, json: &MapJson) -> Result<LatexContent, String> {
+	let mut table = LatexTable::new();
+	make_unique_tab(&mut table, mapq_threshold, json)?;
+	Ok(LatexContent::Table(table))
+}
+
+fn make_conversion_tab<T: Table>(table: &mut T, json: &MapJson) -> Result<(), String> {
 	table.add_header(vec!("Bisulfite Conversion Type", "Conversion Rate"));
 	let (ct1, ct2) = json.get_conversion_counts();	
 	let conv = if let Some(x) = call::calc_conversion(&ct1) { format!("{:.4}", x) } else { "NA".to_string() };
 	table.add_row(vec!("Conversion Rate of non-methylated Cytosines".to_string(), conv));
 	let conv = if let Some(x) = call::calc_conversion(&ct2) { format!("{:.4}", x) } else { "NA".to_string() };
 	table.add_row(vec!("Conversion Rate of methylated Cytosines".to_string(), conv));
+	Ok(())
+}
+
+fn make_conversion_table(json: &MapJson) -> Result<Content, String> {
+	let mut table = HtmlTable::new("green");
+	make_conversion_tab(&mut table, json)?;
 	Ok(Content::Table(table))
+}
+
+fn make_conversion_latex_tab(json: &MapJson) -> Result<LatexContent, String> {
+	let mut table = LatexTable::new();
+	make_conversion_tab(&mut table, json)?;
+	Ok(LatexContent::Table(table))
 }
 
 fn make_correct_pairs_table(paired: &Paired) -> Result<Content, String> {
@@ -255,8 +322,6 @@ fn create_mapq_hist(path: &Path, json: &MapJson) -> Result<(), Box<dyn std::erro
 
     chart
         .configure_mesh()
-//        .disable_x_mesh()
-//        .disable_y_mesh()
         .line_style_1(&WHITE.mix(0.3))
         .y_desc("Fragments")
         .x_desc("MapQ")
@@ -276,7 +341,7 @@ fn create_mapq_hist(path: &Path, json: &MapJson) -> Result<(), Box<dyn std::erro
 
 fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::error::Error>> {
 	let tlen = paired.template_len();
-	// Get the bottom 99.9% of read lengths
+	// Get the bottom 99% of read lengths
 	// Put length histogram in a vector
 	let mut tl = Vec::new();
 	let mut total = 0;
@@ -287,7 +352,7 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
 	tl.sort_by(|a, b| a.0.cmp(&b.0));
 	let mut tmp = 0;
 	let mut max = 0;
-	let thresh = (total as f64) * 0.999;
+	let thresh = (total as f64) * 0.99;
 	let mut t = None;
 	for (ix, y) in &tl {
 		tmp += y;
@@ -305,7 +370,7 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
         .x_label_area_size(35)
         .y_label_area_size(60)
         .margin(5)
-        .caption("Insert Size Histogram", ("sans-serif", 22.0).into_font())
+        .caption("Insert Size Distribution", ("sans-serif", 22.0).into_font())
         .build_ranged(0..*lim, 0..max)?;
  
     chart
@@ -316,8 +381,9 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
 		.y_label_formatter(&|y| format!("{:e}", *y as f64))
         .axis_desc_style(("sans-serif", 15).into_font())
         .draw()?;
-
-    chart.draw_series(LineSeries::new(tl.iter().map(|(x, y)| (*x, *y)), &RED).point_size(3))?;
+	
+	chart.draw_series(LineSeries::new(tl.iter().map(|(x, y)| (*x, *y)), Into::<ShapeStyle>::into(&RED).stroke_width(3)))?;
+//    chart.draw_series(LineSeries::new(tl.iter().map(|(x, y)| (*x, *y)), &RED).point_size(3))?;
 	Ok(())
 		
 }
@@ -391,7 +457,6 @@ fn create_sample_body(project: &str, bc: &str, ds: &[&str], mapq_threshold: usiz
 }
 
 fn create_sample_html(project: &str, bc: &str, ds: &[&str], mapq_threshold: usize, dir: &Path, json: &MapJson, sample_report: bool) -> Result<(), String> {
-
 	let l = ds.len();
 	if l == 0 { return Err("No datasets supplied for map report".to_string() )}
 	else if l > 1 && !sample_report { return Err("Multiple datasets supplied for dataset map report".to_string())}
@@ -435,30 +500,72 @@ fn read_map_json(json_path: &Path) -> Result<MapJson, String> {
 	Ok(MapJson::from_reader(reader).map_err(|e| format!("Couldn't parse JSON file {}: {}", json_path.to_string_lossy(), e))?)
 }
 
+fn make_latex_sec(bc: &str, ds: Option<&str>, mapq_threshold: usize, json: &MapJson, sample_report: bool) -> Result<LatexSection, String> {
+	let mut img_dir = PathBuf::from_str(bc).expect("Couldn't get Path from barcode");
+	img_dir.push("images");
+	let (name, stype, desc) = if sample_report { (bc, "section", "Sample") } else { (ds.expect("No dataset name supplied"), "subsection", "Dataset") };
+	let mut stype1 = "sub".to_string();
+	stype1.push_str(stype);
+	let mut sec = LatexSection::new(name);
+	if sample_report { sec.push_str("\\newpage"); }
+	sec.push_string(format!("\\{} {{{} {}}}", stype, desc, latex_escape_str(name)));
+	sec.push_string(format!("\\{}{{Mapping Stats (Reads)}}", stype1));
+	sec.push(make_reads_latex_tab(json)?);
+	sec.push_string(format!("\\{}{{Uniqueness}}", stype1));
+	sec.push(make_unique_latex_tab(mapq_threshold, json)?);
+	sec.push_string(format!("\\{}{{Mapping Stats (Bases)}}", stype1));
+	sec.push(make_bases_latex_tab(json)?);
+	sec.push_string(format!("\\{}{{Bisulfite Conversion Rate}}", stype1));
+	sec.push(make_conversion_latex_tab(json)?);
+	sec.push_string(format!("\\{}{{Mapping Quality Histogram}}", stype1));
+	sec.push_string(format!("\\includegraphics[width=\\textwidth]{{{}}}", img_dir.join(format!("{}_mapq", name).as_str()).display()));
+	sec.push_string(format!("\\{}{{Read Lengths}}", stype1));
+	sec.push(make_read_length_latex_tab(json)?);
+	sec.push_string(format!("\\{}{{Mismatch distribution}}", stype1));
+	sec.push(make_mismatch_length_latex_tab(json)?);
+	if json.get_type() != MapJsonType::Single {
+		sec.push_string(format!("\\{}{{Insert Size}}", stype1));
+		sec.push_string(format!("\\includegraphics[width=\\textwidth]{{{}}}", img_dir.join(format!("{}_isize", name).as_str()).display()));	
+	}
+	Ok(sec)	
+}
+
 fn create_sample_report(job: ReportJob) -> Result<(), String> {
 	match job.job {
 		RepJob::Sample(v) => {
 			debug!("Creating sample report for {}/{}", job.project, job.barcode);
+//			latex_sec.push_string(format!("\\section{{Sample {}}}", LatexEscapeStr(&job.barcode)));
+			let mut dataset_secs = if v.datasets.len() > 1 { Some(SectionArray::new()) } else { None };
 			let mut mrg_json: Option<MapJson> = None;
 			let mut dsets: Vec<&str> = Vec::new();
 			for (ds, json_path) in v.datasets.iter() {
 				let json = read_map_json(&json_path)?;
+				if let Some(ref mut sa) = dataset_secs {
+					let ds_sec = make_latex_sec(&job.barcode, Some(ds), v.mapq_threshold, &json, false)?;
+					sa.push(ds_sec); 
+				}
 				mrg_json = match mrg_json {
 					Some(j) => Some(j.merge(json)),
 					None => Some(json),
 				};	
 				dsets.push(ds);
 			}
+			dsets.sort();
 			match mrg_json {
 				Some(mjson) => {
 					let sample_sum = get_sample_sum(&job.barcode, v.mapq_threshold, &mjson);
 					if let Ok(mut sum_vec) = v.summary.lock() {
 						sum_vec.push(sample_sum);
 					} else { return Err("Couldn't obtain lock on sample summary".to_string()); }
+					let mut latex_sec = make_latex_sec(&job.barcode, None, v.mapq_threshold, &mjson, true)?;
+					if let Some(sa) = dataset_secs { latex_sec.push(LatexContent::SecArray(sa)); }
+					if let Ok(mut ldoc) = v.latex_doc.lock() { 
+						ldoc.push_section(latex_sec);
+					} else { return Err("Couldn't obtain lock on latex doc".to_string()); }
 					create_sample_html(&job.project, &job.barcode, &dsets, v.mapq_threshold, &job.bc_dir, &mjson, true)
 				},
 				None => Err(format!("No merged JSON structure for {}", &job.barcode))
-			}	
+			}
 		},
 		RepJob::Dataset(v) => {
 			let json = read_map_json(&v.json_path)?;
@@ -469,7 +576,7 @@ fn create_sample_report(job: ReportJob) -> Result<(), String> {
 	}
 }
 
-fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<Vec<SampleSummary>>>) -> Result<(), String> {
+fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<Vec<SampleSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Result<(), String> {
 	let mut path = dir.to_owned();
 	path.push("index.html");
 	let mut html = HtmlPage::new(&path)?;
@@ -481,28 +588,41 @@ fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<Vec<SampleSummar
 	let mut body = HtmlElement::new("BODY", None, true);
 	body.push_element(make_title(format!("Methylation Pipeline Report: Project {}", project)));
 	let mut table = HtmlTable::new("hor-zebra");
-	
-	table.add_header(vec!("Sample", "Total Reads", "Total Fragments", "Uniquely Mapped", "Unique %", "Conversion Rate", "Over Conversion Rate"));
-	if let Ok(sum_vec) = summary.lock() {
+	let mut ltable = LatexTable::new();
+	table.add_header(vec!("Sample", "Reads", "Fragments", "Unique (%)", "Conv. Rate", "Over Conv. Rate"));
+	ltable.add_header(vec!("Sample", "Reads", "Fragments", "Unique (%)", "Conv. Rate", "Over Conv. Rate"));
+	if let Ok(mut sum_vec) = summary.lock() {
+		sum_vec.sort_by(|a, b| a.barcode.cmp(&b.barcode));
 		for s in sum_vec.iter() {
 			let mut row = Vec::new();
+			let mut lrow = Vec::new();
 			let mut link = HtmlElement::new("a", Some(format!("class=\"link\" href=\"{}/{}.html\"", s.barcode, s.barcode).as_str()), true);
 			link.push_str(s.barcode.as_str());
 			row.push(format!("{}", link));
+			lrow.push(s.barcode.clone());
 			row.push(format!("{}", s.reads));
+			lrow.push(format!("{}", s.reads));
 			row.push(format!("{}", s.fragments));
-			row.push(format!("{}", s.unique));
-			row.push(format!("{:.2} %", pct(s.unique, s.fragments)));
+			lrow.push(format!("{}", s.fragments));
+			row.push(format!("{} ({:.2} %)", s.unique, pct(s.unique, s.fragments)));
+			lrow.push(format!("{} ({:.2} %)", s.unique, pct(s.unique, s.fragments)));
 			let conv = if let Some(x) = s.conversion { format!("{:.4}", x) } else { "NA".to_string() };
-			row.push(conv);
+			row.push(conv.clone());
+			lrow.push(conv);
 			let conv = if let Some(x) = s.overconversion { format!("{:.4}", x) } else { "NA".to_string() };
-			row.push(conv);
+			row.push(conv.clone());
+			lrow.push(conv);
 			table.add_row(row);
+			ltable.add_row(lrow);
 		}
 	} else { return Err("Couldn't obtain lock on sample summary".to_string()); }
 	body.push(Content::Table(table));
 	html.push_element(body);	
-	Ok(())
+	if let Ok(mut ldoc) = latex_doc.lock() { 
+		ldoc.push(LatexContent::Text("\\section{{Sample Summary Statistics}}".to_string()));
+		ldoc.push(LatexContent::Table(ltable));
+		Ok(())
+	} else { Err("Couldn't obtain lock on latex doc".to_string()) }
 }
 
 fn worker_thread(tx: mpsc::Sender<(isize, usize)>, rx: mpsc::Receiver<Option<ReportJob>>, idx: isize) -> Result<(), String> {
@@ -531,11 +651,12 @@ fn worker_thread(tx: mpsc::Sender<(isize, usize)>, rx: mpsc::Receiver<Option<Rep
 	Ok(())
 }
 
-fn prepare_jobs(svec: &[SampleJsonFiles], project: &str, mapq_threshold: usize, summary: Arc<Mutex<Vec<SampleSummary>>>) -> Vec<ReportJob> {
+fn prepare_jobs(svec: &[SampleJsonFiles], project: &str, mapq_threshold: usize, 
+	summary: Arc<Mutex<Vec<SampleSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Vec<ReportJob> {
 	let mut v = Vec::new();
 	for hr in svec.iter() {
 		// First push sample report job
-		let mut sjob = SampleJob::new(summary.clone(), mapq_threshold);
+		let mut sjob = SampleJob::new(summary.clone(), latex_doc.clone(), mapq_threshold);
 		let l = hr.json_files.len();
 		for(ds, path) in hr.json_files.iter() {
 			if l > 1 {
@@ -562,7 +683,8 @@ pub fn copy_css(output_dir: &Path, css: &Path) -> Result<(), String> {
 pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, mapq_threshold: usize, n_cores: usize, svec: Vec<SampleJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
 	utils::check_signal(Arc::clone(&sig))?;
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
-	let output_dir = outputs.first().expect("No output files for map report").parent().expect("No parent directory found for map report");
+	let report_tex_path = outputs.first().expect("No output files for map report");
+	let output_dir = report_tex_path.parent().expect("No parent directory found for map report");
 	// Set up worker threads	
 	// Maximum parallel jobs that we could do if there were enough cores is the nmber of datasets
 	let n_dsets = svec.iter().fold(0, |sum, x| sum + x.json_files.len());
@@ -580,7 +702,9 @@ pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opti
 	}
 	// Prepare jobs
 	let summary = Arc::new(Mutex::new(Vec::new()));
-	let mut job_vec = prepare_jobs(&svec, &project, mapq_threshold, summary.clone());
+	let latex_doc = Arc::new(Mutex::new(LatexDoc::new(&report_tex_path, PageSize::A4, format!("Mapping Report for Project {}", project).as_str(), "gemBS")?));
+	
+	let mut job_vec = prepare_jobs(&svec, &project, mapq_threshold, summary.clone(), latex_doc.clone());
 	let mut abort = false;
 	loop {
 		utils::check_signal(Arc::clone(&sig))?;
@@ -686,7 +810,7 @@ pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opti
 	}
 	if abort { Err("Map-report generation failed".to_string()) }
 	else {
-		create_summary(output_dir, &project, summary)?; 
+		create_summary(output_dir, &project, summary, latex_doc)?; 
 		copy_css(output_dir, css)?;
 		Ok(None)
 	}

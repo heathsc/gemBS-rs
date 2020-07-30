@@ -2,6 +2,11 @@ use std::path::Path;
 use std::io::{Write, BufWriter};
 use std::{fs, fmt};
 
+pub trait Table {
+	fn add_header(&mut self, hdr: Vec<&'static str>) -> &mut Self;
+	fn add_row(&mut self, row: Vec<String>) -> &mut Self;	
+}
+
 pub enum Content {
 	Text(String),
 	Element(HtmlElement),
@@ -41,7 +46,7 @@ impl fmt::Display for HtmlElement {
 impl HtmlElement {
 	pub fn new(tag: &'static str, opt: Option<&str>, close: bool) -> Self { 
 		let options = if let Some(s) = opt { Some(s.to_owned()) } else { None };
-		HtmlElement{ tag, options: options, close, content: Vec::new() }
+		HtmlElement{ tag, options, close, content: Vec::new() }
 	}
 	pub fn push(&mut self, content: Content) { self.content.push(content) }	
 	pub fn push_str(&mut self, s: &str) { self.content.push(Content::Text(s.to_string())) }
@@ -59,11 +64,14 @@ impl HtmlTable {
 	pub fn new(id: &'static str) -> Self {
 		HtmlTable{id, header: Vec::new(), rows: Vec::new() }
 	}
-	pub fn add_header(&mut self, hdr: Vec<&'static str>) -> &mut Self {
+}
+
+impl Table for HtmlTable {
+	fn add_header(&mut self, hdr: Vec<&'static str>) -> &mut Self {
 		self.header = hdr;
 		self
 	}
-	pub fn add_row(&mut self, row: Vec<String>) -> &mut Self {
+	fn add_row(&mut self, row: Vec<String>) -> &mut Self {
 		self.rows.push(row);
 		self
 	}
@@ -119,7 +127,6 @@ impl HtmlPage {
 		let writer = Box::new(BufWriter::new(ofile));
 		Ok(HtmlPage{ content: Vec::new(), writer })
 	}
-	pub fn push(&mut self, content: Content) { self.content.push(content); }
 	pub fn push_element(&mut self, e: HtmlElement) { self.content.push(Content::Element(e)) }
 
 }

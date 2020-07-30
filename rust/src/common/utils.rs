@@ -81,8 +81,7 @@ where
 		self.log = Some(file);
 		self
 	}
-	pub fn get_log_file(&self) -> &Option<PathBuf> { &self.log }
-	
+
 	// Get output of pipeline to file
 	pub fn in_file(&mut self, file: &'a Path) -> &mut Pipeline<'a, I, S> {
 		self.input = PipelineInput::File(file);

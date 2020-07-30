@@ -1,5 +1,3 @@
-use serde_json::{Value, Map};
-use std::str::FromStr;
 use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
@@ -58,11 +56,9 @@ fn process_gembs_json_file(gem_bs: &mut GemBS, kv_list: &KnownVarList, path: &Pa
 	let rdr = compress::open_bufreader(path).map_err(|e| format!("Could not open gemBS JSON file {}: {}", path.display(), e))?;
 	let json_data: GemBSJson = serde_json::from_reader(rdr).map_err(|e| format!("Could not parse JSON metadata file {}: {}", path.display(), e))?;
 	for (section, data) in json_data.0.iter() {
-		println!("Section {:?} found", section);
 		for(k, dat) in data.iter() {
 			if let Some(vt) = kv_list.check_vtype(k, *section) {
 				check_and_assign_var(gem_bs, k, vt, *section, dat, path)?;
-				println!("{} {:?} {:?}",k, vt, dat);
 			} else { warn!("Unknown key {} for section {:?} in gemBS JSON file {}", k, section, path.display()); }	
 		}
 	}

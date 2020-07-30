@@ -4,6 +4,7 @@ use std::thread;
 use std::collections::HashMap;
 
 use crate::common::json_call_stats::CallJson;
+use crate::common::latex_utils::LatexDoc;
 
 #[derive(PartialEq, Eq, Clone)]
 pub enum JobStatus {
@@ -30,12 +31,13 @@ pub struct SampleJob {
 	pub datasets: Vec<(String, PathBuf)>,
 	pub depend: Vec<usize>,
 	pub summary: Arc<Mutex<Vec<SampleSummary>>>,
+	pub latex_doc: Arc<Mutex<LatexDoc>>,
 	pub mapq_threshold: usize,
 }
 
 impl SampleJob {
-	pub fn new(summary: Arc<Mutex<Vec<SampleSummary>>>, mapq_threshold:usize) -> Self {
-		SampleJob{datasets: Vec::new(), depend: Vec::new(), summary, mapq_threshold}
+	pub fn new(summary: Arc<Mutex<Vec<SampleSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>, mapq_threshold:usize) -> Self {
+		SampleJob{datasets: Vec::new(), depend: Vec::new(), summary, mapq_threshold, latex_doc}
 	}
 	pub fn add_dataset(&mut self, dataset: &str, path: &Path) -> &mut Self {
 		self.datasets.push((dataset.to_owned(), path.to_owned()));

@@ -274,8 +274,8 @@ impl Single {
 	pub fn mismatch(&self) -> &HashMap<String, usize> { &self.hist_mismatch[0] }
 }
 
-#[derive(Clone, Copy)]
-enum MapJsonType { Paired, Unknown, Single }
+#[derive(Clone, Copy, PartialEq)]
+pub enum MapJsonType { Paired, Unknown, Single }
 
 #[derive(Clone, Deserialize)]
 #[serde(tag = "MapperType", rename_all = "PascalCase")]
@@ -286,7 +286,7 @@ pub enum MapJson {
 } 
 
 impl MapJson {
-	fn get_type(&self) -> MapJsonType {
+	pub fn get_type(&self) -> MapJsonType {
 		match self {
 			MapJson::Paired(_) => MapJsonType::Paired,
 			MapJson::Single(_) => MapJsonType::Single,

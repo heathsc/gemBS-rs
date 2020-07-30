@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::env;
+use std::{env,option_env};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Serialize, Deserialize};
@@ -71,9 +71,6 @@ impl GemBS {
 	pub fn get_signal_clone(&self) -> Arc<AtomicUsize> { Arc::clone(&self.signal) }
 	pub fn get_signal(&self) -> usize {
 		self.signal.load(Ordering::Relaxed)
-	}
-	pub fn set_signal(&self, s: usize) -> usize {
-		self.signal.swap(s, Ordering::Relaxed)
 	}
 	pub fn check_signal(&self) -> Result<(), String> {
 		match self.get_signal() {
@@ -168,7 +165,6 @@ impl GemBS {
 	pub fn get_tasks_iter(&self) -> slice::Iter<'_, Task> { self.tasks.iter() }
 	pub fn get_tasks(&self) -> &TaskList { &self.tasks }
 	pub fn get_assets(&self) -> &AssetList { &self.assets }
-	pub fn get_tasks_mut(&mut self) -> &mut TaskList { &mut self.tasks }
 	pub fn add_parent_child(&mut self, child: usize, parent: usize) {
 		self.tasks.get_idx(child).add_parent(parent);
 	}	
@@ -198,13 +194,11 @@ impl GemBS {
 		let json_file = if let Some(DataValue::String(x)) = self.get_config(Section::Default, "json_file") { PathBuf::from(x) } else { 
 			[cdir, "gemBS.json"].iter().collect()
 		};
-		let gem_bs_root = if let Some(DataValue::String(x)) = self.get_config(Section::Default, "gembs_root") { 
-			PathBuf::from(x) 
-		} else if let Ok(x) = env::var("GEMBS_ROOT") { 
-			PathBuf::from(x) 
-		} else { 
-			PathBuf::from("/usr/local/lib/gemBS")	
-		};
+		let compile_root: Option<&'static str> = option_env!("GEMBS_INSTALL_ROOT");
+		let gem_bs_root = if let Some(DataValue::String(x)) = self.get_config(Section::Default, "gembs_root") { PathBuf::from(x) } 
+		else if let Ok(x) = env::var("GEMBS_ROOT") { PathBuf::from(x) } 
+		else if let Some(x) = compile_root { PathBuf::from(x) } 
+		else { PathBuf::from("/usr/local/lib/gemBS") };
 		if !check_root(&gem_bs_root) {
 			return Err(format!("Could not find (installation) root directory for gemBS at {:?}.  Use root-dir option or set GEMBS_ROOT environment variable", gem_bs_root));
 		}
@@ -402,7 +396,7 @@ impl GemBS {
 		let ignore = self.ignore_status();
 		for i in assets {
 			let asset = asset_ref.get_asset(*i).unwrap(); 
-			println!("{:?} {:?} {:?}", asset.id(), asset.path(), asset.status());
+			debug!("Asset check: {:?} {:?} {:?}", asset.id(), asset.path(), asset.status());
 			if let Some(j) = asset.creator() {
 				if asset.status() != AssetStatus::Present {
 					check_reqd(j, &mut reqd, &mut tlist, tasks, asset_ref, &com_set, ignore);

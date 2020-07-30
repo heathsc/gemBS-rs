@@ -24,6 +24,7 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let samples = gem_bs.get_samples();
 	let mut json_files = Vec::new();
 	let mut out_vec = Vec::new();
+	out_vec.push(handle_file(gem_bs, "map_report_report.tex", "map_report.tex", &report_dir));
 	out_vec.push(handle_file(gem_bs, "map_report_index.html", "index.html", &report_dir));
 	out_vec.push(handle_file(gem_bs, "style.css", "style.css", &css_dir));
 	for (bc, _) in samples.iter() { 
@@ -75,6 +76,7 @@ pub fn check_call_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let samples = gem_bs.get_samples();
 	let mut json_files = Vec::new();
 	let mut out_vec = Vec::new();
+	out_vec.push(handle_file(gem_bs, "call_report_report.tex", "call_report.tex", &report_dir));
 	out_vec.push(handle_file(gem_bs, "call_report_index.html", "index.html", &report_dir));
 	for (bc, _) in samples.iter() { 
 		let bc_dir: PathBuf = [&report_dir, Path::new(bc)].iter().collect();

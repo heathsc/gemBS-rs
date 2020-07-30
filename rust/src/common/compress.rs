@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::prelude::*;
-use std::io::{BufReader, BufWriter, Error, ErrorKind, stdin, stdout, Result};
+use std::io::{BufReader, BufWriter, Error, ErrorKind, Result};
 use std::process::{Command, Stdio, ChildStdout};
 use std::path::Path;
 
