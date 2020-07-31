@@ -518,14 +518,14 @@ fn make_latex_sec(bc: &str, ds: Option<&str>, mapq_threshold: usize, json: &MapJ
 	sec.push_string(format!("\\{}{{Bisulfite Conversion Rate}}", stype1));
 	sec.push(make_conversion_latex_tab(json)?);
 	sec.push_string(format!("\\{}{{Mapping Quality Histogram}}", stype1));
-	sec.push_string(format!("\\includegraphics[width=\\textwidth]{{{}}}", img_dir.join(format!("{}_mapq", name).as_str()).display()));
+	sec.push_string(format!("\\includegraphics[width=12cm]{{{}}}", img_dir.join(format!("{}_mapq", name).as_str()).display()));
 	sec.push_string(format!("\\{}{{Read Lengths}}", stype1));
 	sec.push(make_read_length_latex_tab(json)?);
 	sec.push_string(format!("\\{}{{Mismatch distribution}}", stype1));
 	sec.push(make_mismatch_length_latex_tab(json)?);
 	if json.get_type() != MapJsonType::Single {
 		sec.push_string(format!("\\{}{{Insert Size}}", stype1));
-		sec.push_string(format!("\\includegraphics[width=\\textwidth]{{{}}}", img_dir.join(format!("{}_isize", name).as_str()).display()));	
+		sec.push_string(format!("\\includegraphics[width=12cm]{{{}}}", img_dir.join(format!("{}_isize", name).as_str()).display()));	
 	}
 	Ok(sec)	
 }
@@ -560,7 +560,7 @@ fn create_sample_report(job: ReportJob) -> Result<(), String> {
 					let mut latex_sec = make_latex_sec(&job.barcode, None, v.mapq_threshold, &mjson, true)?;
 					if let Some(sa) = dataset_secs { latex_sec.push(LatexContent::SecArray(sa)); }
 					if let Ok(mut ldoc) = v.latex_doc.lock() { 
-						ldoc.push_section(latex_sec);
+						ldoc.push_section(latex_sec)?;
 					} else { return Err("Couldn't obtain lock on latex doc".to_string()); }
 					create_sample_html(&job.project, &job.barcode, &dsets, v.mapq_threshold, &job.bc_dir, &mjson, true)
 				},

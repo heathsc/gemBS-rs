@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::io::{Write, BufWriter};
 use std::{fs, fmt};
+use std::collections::HashMap;
 use regex::{Regex, Captures};
 use lazy_static::lazy_static;
 
@@ -9,7 +10,7 @@ use super::html_utils::Table;
 pub fn latex_escape_str(s: &str) -> String {
 	lazy_static! { 
 		static ref RE1: Regex = Regex::new(r"([\\])").unwrap(); 
-		static ref RE2: Regex = Regex::new(r"([#&$_{}])").unwrap(); 
+		static ref RE2: Regex = Regex::new(r"([&$_{}])").unwrap(); 
 	}
 	let s = RE1.replace_all(s, "\\textbackslash ");
 	RE2.replace_all(&s, |caps: &Captures| { format!("\\{}", &caps[1]) }).into_owned()
@@ -24,9 +25,9 @@ pub enum LatexContent {
 
 impl fmt::Display for LatexContent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		lazy_static! { static ref RE: Regex = Regex::new(r"([%])").unwrap(); }
+		lazy_static! { static ref RE: Regex = Regex::new(r"([%#])").unwrap(); }
 		match self {
-			LatexContent::Text(s) => writeln!(f, "{}", RE.replace_all(s, "\\%")),
+			LatexContent::Text(s) => writeln!(f, "{}", RE.replace_all(s, |caps: &Captures| { format!("\\{}", &caps[1]) }).into_owned()),
 			LatexContent::Env(s) => writeln!(f, "{}", s),
 			LatexContent::SecArray(s) => writeln!(f, "{}", s),
 			LatexContent::Table(s) => writeln!(f, "{}", s),
@@ -89,7 +90,7 @@ impl Table for LatexTable {
 
 impl fmt::Display for LatexTable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		lazy_static! { static ref RE: Regex = Regex::new(r"([%])").unwrap(); }
+		lazy_static! { static ref RE: Regex = Regex::new(r"([%#])").unwrap(); }
 		let mut ncol = 1;
 		if self.header.len() > ncol { ncol = self.header.len() }
 		for r in self.rows.iter() { 
@@ -103,7 +104,7 @@ impl fmt::Display for LatexTable {
 			let mut first = true;
 			for s in self.header.iter() {
 				if first { first = false } else { write!(f, " & ")? } 
-				write!(f, "{}", RE.replace_all(s, "\\%"))?
+				write!(f, "{{\\small {}}}", RE.replace_all(s, |caps: &Captures| { format!("\\{}", &caps[1]) }).into_owned())?;
 			}
 			writeln!(f, "\\\\\n\\hline")?;
 		}
@@ -112,10 +113,10 @@ impl fmt::Display for LatexTable {
 				let mut first = true;
 				for s in r.iter() {
 					if first { first = false } else { write!(f, " & ")? } 
-					write!(f, "{{\\small {}}}", RE.replace_all(s, "\\%"))?
+					write!(f, "{{\\small {}}}", RE.replace_all(s, |caps: &Captures| { format!("\\{}", &caps[1]) }).into_owned())?;
 				}
+				writeln!(f, "\\\\")?;
 			}
-			writeln!(f, "\\\\")?;
 		}
 		writeln!(f, "\\hline\n\\end{{tabular}}")?;		
 		Ok(())
@@ -142,6 +143,7 @@ impl LatexSection {
 	pub fn push(&mut self, content: LatexContent) { self.content.push(content) }	
 	pub fn push_str(&mut self, s: &str) { self.content.push(LatexContent::Text(s.to_string())) }
 	pub fn push_string(&mut self, s: String) { self.content.push(LatexContent::Text(s)) }
+	pub fn content(&mut self) -> &mut Vec<LatexContent> { &mut self.content }
 }
 
 pub struct SectionArray(Vec<LatexSection>);
@@ -149,6 +151,7 @@ pub struct SectionArray(Vec<LatexSection>);
 impl SectionArray {
 	pub fn new() -> Self { SectionArray(Vec::new()) }
 	pub fn push(&mut self, s: LatexSection) { self.0.push(s) }
+	pub fn len(&self) -> usize { self.0.len() }
 }
 
 impl fmt::Display for SectionArray {
@@ -169,14 +172,29 @@ pub struct LatexDoc {
 	body: Vec<LatexContent>,
 	sections: SectionArray,
 	path: PathBuf,
+	sec_hash: HashMap<String, usize>,
 //	writer: Box<dyn Write>,
 }
 
 impl LatexDoc {
 	pub fn new(path: &Path, page_size: PageSize, title: &str, author: &str) -> Result<Self, String> { 
-		Ok(LatexDoc{ title: latex_escape_str(title), author: author.to_owned(), page_size, sections: SectionArray::new(), body: Vec::new(), path: path.to_owned() })
+		Ok(LatexDoc{ title: latex_escape_str(title), author: author.to_owned(), page_size, sections: SectionArray::new(), 
+			body: Vec::new(), path: path.to_owned(), sec_hash: HashMap::new() })
 	}
-	pub fn push_section(&mut self, s: LatexSection) { self.sections.push(s) }
+	pub fn push_section(&mut self, s: LatexSection) -> Result<(), String> { 
+		if self.sec_hash.contains_key(&s.sort_tag) { Err(format!("Error inserting LatexSection: tag {} already exists", s.sort_tag)) } 
+		else {
+			self.sec_hash.insert(s.sort_tag.clone(), self.sections.len());
+			self.sections.push(s);
+			Ok(())
+		} 
+	}
+	pub fn find_section(&mut self, tag: &str) -> Option<&mut LatexSection> {
+		match self.sec_hash.get(tag) {
+			None => None,
+			Some(x) => Some(&mut self.sections.0[*x]),
+		}
+	}
 	pub fn push(&mut self, c: LatexContent) { self.body.push(c) }
 }
 
@@ -189,6 +207,7 @@ impl Drop for LatexDoc {
 				PageSize::Letter => "letter",
 			};
 			let _ = writeln!(writer, "\\documentclass[12pt]{{article}}");
+			let _ = writeln!(writer, "\\usepackage[T1]{{fontenc}}");
 			let _ = writeln!(writer, "\\usepackage{{geometry}}\n\\geometry{{{}, left=15mm, top=20mm}}", sz);
 			let _ = writeln!(writer, "\\usepackage{{graphicx}}");
 			let _ = writeln!(writer, "\\usepackage{{hyperref}}\n\\hypersetup{{colorlinks=true}}");

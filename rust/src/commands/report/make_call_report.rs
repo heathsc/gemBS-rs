@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::io::BufRead;
+use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, mpsc, Mutex, RwLock};
 use std::{thread, time};
@@ -14,6 +15,7 @@ use super::report_utils::*;
 use super::make_map_report;
 use super::make_map_report::{make_title, make_section};
 use crate::common::html_utils::*;
+use crate::common::latex_utils::*;
 
 enum CovType { All, NonRefCpg, NonRefCpgInf, RefCpg, RefCpgInf, Variant }
 enum QualType { All, RefCpg, NonRefCpg, Variant }
@@ -350,8 +352,7 @@ fn calc_gc_corr(json: &CallJson) -> f64 {
 	if tz > 0.0 { (n * sxy - sx * sy) / tz.sqrt() } else { 0.0 }
 }
 
-fn make_read_level_table(json: &CallJson, msumm: &mut MapSummary) -> Result<Content, String> {
-	let mut table = HtmlTable::new("hor-zebra");
+fn make_read_level_tab<T: Table>(table: &mut T, json: &CallJson, ms: Option<&mut MapSummary>) -> Result<(), String> {
 	table.add_header(vec!("Type", "# Reads", "%", "# Bases", "%"));
 	let fs = json.filter_stats();
 	let rl = fs.read_level();
@@ -368,15 +369,28 @@ fn make_read_level_table(json: &CallJson, msumm: &mut MapSummary) -> Result<Cont
 	for(key, name) in FSReadLevelType::iter() {
 		if let Some(t) = rl.get(&key) { table.add_row(f(name, *t)); }
 	}
-	msumm.aligned = tot.bases();
-	msumm.unique = tot.bases() - rl.get(&FSReadLevelType::LowMAPQ).map(|x| x.bases()).unwrap_or(0);
-	msumm.passed =  rl.get(&FSReadLevelType::Passed).map(|x| x.bases()).unwrap_or(0);
-	msumm.gc_correlation = calc_gc_corr(json);
+	if let Some(msumm) = ms {
+		msumm.aligned = tot.bases();
+		msumm.unique = tot.bases() - rl.get(&FSReadLevelType::LowMAPQ).map(|x| x.bases()).unwrap_or(0);
+		msumm.passed =  rl.get(&FSReadLevelType::Passed).map(|x| x.bases()).unwrap_or(0);
+		msumm.gc_correlation = calc_gc_corr(json);
+	}
+	Ok(())
+}
+
+fn make_read_level_table(json: &CallJson, msumm: &mut MapSummary) -> Result<Content, String> {
+	let mut table = HtmlTable::new("hor-zebra");
+	make_read_level_tab(&mut table, json, Some(msumm))?;
 	Ok(Content::Table(table))
 }
 
-fn make_base_level_table(json: &CallJson) -> Result<Content, String> {
-	let mut table = HtmlTable::new("green");
+fn make_read_level_latex_tab(json: &CallJson) -> Result<LatexContent, String> {
+	let mut table = LatexTable::new();
+	make_read_level_tab(&mut table, json, None)?;
+	Ok(LatexContent::Table(table))
+}
+
+fn make_base_level_tab<T: Table>(table: &mut T, json: &CallJson) -> Result<(), String> {
 	table.add_header(vec!("Bases", "#", "%"));
 	let fs = json.filter_stats();
 	let rl = fs.base_level();
@@ -391,42 +405,75 @@ fn make_base_level_table(json: &CallJson) -> Result<Content, String> {
 	for(key, name) in FSBaseLevelType::iter() {
 		if let Some(t) = rl.get(&key) { table.add_row(f(name, *t)); }
 	}
+	Ok(())
+}
+
+fn make_base_level_table(json: &CallJson) -> Result<Content, String> {
+	let mut table = HtmlTable::new("green");
+	make_base_level_tab(&mut table, json)?;
 	Ok(Content::Table(table))
+}
+
+fn make_base_level_latex_tab(json: &CallJson) -> Result<LatexContent, String> {
+	let mut table = LatexTable::new();
+	make_base_level_tab(&mut table, json)?;
+	Ok(LatexContent::Table(table))
+}
+
+fn make_variant_count_tab<T: Table>(table: &mut T, json: &CallJson) -> Result<(), String> {
+	table.add_header(vec!("Type", "Total", "Passed", "% Passed"));
+	let bs = json.basic_stats();
+	let f = |s: &str, ct: &Counts, tab: &mut T, opt: bool| {
+		if !opt || ct.all() > 0 {
+			tab.add_row(vec!(s.to_owned(), format!("{}", ct.all()), format!("{}", ct.passed()), format!("{:.2}", pct(ct.passed(), ct.all()))));
+		} 
+	};
+	f("SNPs", bs.snps(), table, false);
+	f("Indels", bs.indels(), table, true);
+	f("Multi-allelic", bs.multiallelic(), table, true);	
+	Ok(())
 }
 
 fn make_variant_count_table(json: &CallJson) -> Result<Content, String> {
 	let mut table = HtmlTable::new("hor-zebra");
+	make_variant_count_tab(&mut table, json)?;
+	Ok(Content::Table(table))
+}
+
+fn make_variant_count_latex_tab(json: &CallJson) -> Result<LatexContent, String> {
+	let mut table = LatexTable::new();
+	make_variant_count_tab(&mut table, json)?;
+	Ok(LatexContent::Table(table))
+}
+
+fn make_cpg_count_tab<T: Table>(table: &mut T, json: &CallJson, ms: Option<&mut MethSummary>) -> Result<(), String> {
 	table.add_header(vec!("Type", "Total", "Passed", "% Passed"));
 	let bs = json.basic_stats();
-	let f = |s: &str, ct: &Counts, tab: &mut HtmlTable, opt: bool| {
+	let f = |s: &str, ct: &Counts, tab: &mut T, opt: bool| {
 		if !opt || ct.all() > 0 {
 			tab.add_row(vec!(s.to_owned(), format!("{}", ct.all()), format!("{}", ct.passed()), format!("{:.2}", pct(ct.passed(), ct.all()))));
 		} 
 	};
-	f("SNPs", bs.snps(), &mut table, false);
-	f("Indels", bs.indels(), &mut table, true);
-	f("Multi-allelic", bs.multiallelic(), &mut table, true);	
-	Ok(Content::Table(table))	
+	f("Reference Cpgs", bs.ref_cpg(), table, false);
+	f("Non Reference Cpgs", bs.non_ref_cpg(), table, true);
+	if let Some(msumm) = ms { msumm.passed_cpgs = bs.ref_cpg().passed() + bs.non_ref_cpg().passed(); }
+	Ok(())	
 }
 
 fn make_cpg_count_table(json: &CallJson, msumm: &mut MethSummary) -> Result<Content, String> {
 	let mut table = HtmlTable::new("hor-zebra");
-	table.add_header(vec!("Type", "Total", "Passed", "% Passed"));
-	let bs = json.basic_stats();
-	let f = |s: &str, ct: &Counts, tab: &mut HtmlTable, opt: bool| {
-		if !opt || ct.all() > 0 {
-			tab.add_row(vec!(s.to_owned(), format!("{}", ct.all()), format!("{}", ct.passed()), format!("{:.2}", pct(ct.passed(), ct.all()))));
-		} 
-	};
-	f("Reference Cpgs", bs.ref_cpg(), &mut table, false);
-	f("Non Reference Cpgs", bs.non_ref_cpg(), &mut table, true);
-	msumm.passed_cpgs = bs.ref_cpg().passed() + bs.non_ref_cpg().passed();
-	Ok(Content::Table(table))	
+	make_cpg_count_tab(&mut table, json, Some(msumm))?;
+	Ok(Content::Table(table))
 }
 
-fn make_cpg_meth_profile_table(json: &CallJson, msumm: &mut MethSummary) -> Result<Content, String> {
-	let mut table = HtmlTable::new("green");
-	table.add_header(vec!("Type", "All Reference CpGs", "%", "Passed Reference CpGs", "%", "All Non Reference CpGs", "%", "Passed Non Reference CpGs", "%"));
+fn make_cpg_count_latex_tab(json: &CallJson) -> Result<LatexContent, String> {
+	let mut table = LatexTable::new();
+	make_read_level_tab(&mut table, json, None)?;
+	Ok(LatexContent::Table(table))
+}
+
+fn make_cpg_meth_profile_tab<T: Table>(table: &mut T, json: &CallJson, ms: Option<&mut MethSummary>) -> Result<(), String> {
+	table.add_header(vec!("Type", "All Ref. CpGs (%)", "Passed (%)", "All Non Ref. CpGs (%)", "Passed (%)"));
 	let rf = &json.methylation();
 	let vrf = [&rf.all_ref_cpg, &rf.passed_ref_cpg, &rf.all_non_ref_cpg, &rf.passed_non_ref_cpg];
 	let mut stats = Vec::new();
@@ -446,26 +493,41 @@ fn make_cpg_meth_profile_table(json: &CallJson, msumm: &mut MethSummary) -> Resu
 	}
 	let f = |a, b| { if b > 0.0 { 100.0 * a / b } else { 0.0 } };
 	table.add_row(vec!(
-		"Low methylation (m < 0.3)".to_string(), format!("{:.0}",stats[0].2), format!("{:.2}", f(stats[0].2, stats[0].1)),
-		format!("{:.0}",stats[1].2), format!("{:.2}", f(stats[1].2, stats[1].1)), format!("{:.0}",stats[2].2), 
-		format!("{:.2}", f(stats[2].2, stats[2].1)), format!("{:.0}",stats[3].2), format!("{:.2}", f(stats[3].2, stats[3].1))));
+		"m < 0.3".to_string(), format!("{:.0} ({:.2})",stats[0].2, f(stats[0].2, stats[0].1)),
+		format!("{:.0} ({:.2}%)",stats[1].2, f(stats[1].2, stats[1].1)), 
+		format!("{:.0} ({:.2}%)",stats[2].2, f(stats[2].2, stats[2].1)), 
+		format!("{:.0} ({:.2}%)",stats[3].2, f(stats[3].2, stats[3].1))));
 	table.add_row(vec!(
-		"Medium methylation (0.3 <= m < 0.7)".to_string(), format!("{:.0}",stats[0].3), format!("{:.2}", f(stats[0].3, stats[0].1)),
-		format!("{:.0}",stats[1].3), format!("{:.2}", f(stats[1].3, stats[1].1)), format!("{:.0}",stats[2].3), 
-		format!("{:.2}", f(stats[2].3, stats[2].1)), format!("{:.0}",stats[3].3), format!("{:.2}", f(stats[3].3, stats[3].1))));
+		"0.3 <= m < 0.7".to_string(), format!("{:.0} ({:.2})",stats[0].3, f(stats[0].3, stats[0].1)),
+		format!("{:.0} ({:.2}%)",stats[1].3, f(stats[1].3, stats[1].1)), 
+		format!("{:.0} ({:.2}%)",stats[2].3, f(stats[2].3, stats[2].1)), 
+		format!("{:.0} ({:.2}%)",stats[3].3, f(stats[3].3, stats[3].1))));
 	table.add_row(vec!(
-		"High methylation (m >= 0.7)".to_string(), format!("{:.0}",stats[0].4), format!("{:.2}", f(stats[0].4, stats[0].1)),
-		format!("{:.0}",stats[1].4), format!("{:.2}", f(stats[1].4, stats[1].1)), format!("{:.0}",stats[2].4), 
-		format!("{:.2}", f(stats[2].4, stats[2].1)), format!("{:.0}",stats[3].4), format!("{:.2}", f(stats[3].4, stats[3].1))));
+		"m >= 0.7".to_string(), format!("{:.0} ({:.2})",stats[0].4, f(stats[0].4, stats[0].1)),
+		format!("{:.0} ({:.2}%)",stats[1].4, f(stats[1].4, stats[1].1)), 
+		format!("{:.0} ({:.2}%)",stats[2].4, f(stats[2].4, stats[2].1)), 
+		format!("{:.0} ({:.2}%)",stats[3].4, f(stats[3].4, stats[3].1))));
 	table.add_row(Vec::new());
 	table.add_row(vec!(
-		"Median".to_string(), format!("{:0}", stats[0].0), String::new(), format!("{:0}", stats[1].0), String::new(), 
-		format!("{:0}", stats[2].0), String::new(), format!("{:0}", stats[3].0), String::new()));
-	msumm.med_cpg_meth = stats[0].0;
-	Ok(Content::Table(table))	
+		"Median".to_string(), format!("{:0}", stats[0].0), format!("{:0}", stats[1].0),
+		format!("{:0}", stats[2].0), format!("{:0}", stats[3].0)));
+	if let Some(msumm) = ms { msumm.med_cpg_meth = stats[0].0; }
+	Ok(())	
 }
-fn make_variant_type_tables(json: &CallJson, vsumm: &mut VarSummary) -> Result<(Content, Content), String> {
-	let mut table = HtmlTable::new("green");
+
+fn make_cpg_meth_profile_table(json: &CallJson, msumm: &mut MethSummary) -> Result<Content, String> {
+	let mut table = HtmlTable::new("hor-zebra");
+	make_cpg_meth_profile_tab(&mut table, json, Some(msumm))?;
+	Ok(Content::Table(table))
+}
+
+fn make_cpg_meth_profile_latex_tab(json: &CallJson) -> Result<LatexContent, String> {
+	let mut table = LatexTable::new();
+	make_cpg_meth_profile_tab(&mut table, json, None)?;
+	Ok(LatexContent::Table(table))
+}
+
+fn make_variant_type_tab<T: Table>(table: &mut T, table1: &mut T, json: &CallJson, vs: Option<&mut VarSummary>) -> Result<(), String> {
 	let mutations = json.mutations();
 	let mut ct_ti = MutCounts::new();
 	let mut ct_tv = MutCounts::new();
@@ -506,22 +568,35 @@ fn make_variant_type_tables(json: &CallJson, vsumm: &mut VarSummary) -> Result<(
 	for (k, c) in v_ti.iter() { table.add_row(f(*k, c, "Transition")); }
 	table.add_row(Vec::new());
 	for (k, c) in v_tv.iter() { table.add_row(f(*k, c, "Transversion")); }
-	let mut table1 = HtmlTable::new("hor-zebra");
 	table1.add_header(vec!("Status", "Ratio", "Transitions", "Transversions"));
 	let ratio = |a, b| if b > 0 { (a as f64) / (b as f64) } else { 0.0 };
 	let g = |a, b, s: &str| vec!(s.to_owned(), format!("{:.2}", ratio(a, b)), format!("{}", a), format!("{}", b));
 	table1.add_row(g(ct_ti.all(), ct_tv.all(), "All"));
 	table1.add_row(g(ct_ti.passed(), ct_tv.passed(), "Passed"));
-	vsumm.ti_tv_ratio = ratio(ct_ti.passed(), ct_tv.passed());
+	if let Some(vsumm) = vs { vsumm.ti_tv_ratio = ratio(ct_ti.passed(), ct_tv.passed()); }
 	if dbsnp {
 		table1.add_row(g(ct_ti.dbsnp_all(), ct_tv.dbsnp_all(), "dbSNP All"));
 		table1.add_row(g(ct_ti.dbsnp_passed(), ct_tv.dbsnp_passed(), "dbSNP Passed"));
 	}
-	Ok((Content::Table(table), Content::Table(table1)))	
+	Ok(())
 }
 
-fn make_vcf_filter_stats_table(json: &CallJson, vsumm: &mut VarSummary) -> Result<Content, String> {
+fn make_variant_type_tables(json: &CallJson, vsumm: &mut VarSummary) -> Result<(Content, Content), String> {
 	let mut table = HtmlTable::new("green");
+	let mut table1 = HtmlTable::new("hor-zebra");
+	make_variant_type_tab(&mut table, &mut table1, json, Some(vsumm))?;
+	Ok((Content::Table(table), Content::Table(table1)))		
+}
+
+fn make_variant_type_latex_tabs(json: &CallJson) -> Result<(LatexContent, LatexContent), String> {
+	let mut table = LatexTable::new();
+	let mut table1 = LatexTable::new();
+	make_variant_type_tab(&mut table, &mut table1, json, None)?;
+	Ok((LatexContent::Table(table), LatexContent::Table(table1)))		
+}
+
+
+fn make_vcf_filter_stats_tab<T: Table>(table: &mut T, json: &CallJson, vs: Option<&mut VarSummary>) -> Result<(), String> {
 	table.add_header(vec!("Type", "# Sites", "%", "# Non-Variant Sites", "%", "# Variant Sites", "%"));
 	let mut v = Vec::new();
 	let mut pass = None;
@@ -546,9 +621,23 @@ fn make_vcf_filter_stats_table(json: &CallJson, vsumm: &mut VarSummary) -> Resul
 	table.add_row(f("Filtered", flt, all.all()));
 	table.add_row(Vec::new());
 	for(k, ct) in v.iter() { if ct.all() > 0 { table.add_row(f(k, *ct, flt.all())); }}
-	vsumm.variants = all.all();
-	vsumm.variants_passed = pass.all();
+	if let Some(vsumm) = vs {
+		vsumm.variants = all.all();
+		vsumm.variants_passed = pass.all();
+	}
+	Ok(())
+}
+
+fn make_vcf_filter_stats_table(json: &CallJson, vsumm: &mut VarSummary) -> Result<Content, String> {
+	let mut table = HtmlTable::new("green");
+	make_vcf_filter_stats_tab(&mut table, json, Some(vsumm))?;
 	Ok(Content::Table(table))		
+}
+
+fn make_vcf_filter_stats_latex_tab(json: &CallJson) -> Result<LatexContent, String> {
+	let mut table = LatexTable::new();
+	make_vcf_filter_stats_tab(&mut table, json, None)?;
+	Ok(LatexContent::Table(table))		
 }
 
 fn new_body(project: &str, bc: &str, tag: &str) -> HtmlElement {
@@ -592,7 +681,7 @@ fn create_mapping_report_body(project: &str, bc: &str, dir: &Path, json: &CallJs
 	body.push(Content::Table(table));
 	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
 	table = HtmlTable::new("green");
-	table.add_header(vec!("GC/Coverage heatmap", "% Non-Conversion at Non-CpG Sites"));
+	table.add_header(vec!("GC/Coverage Heatmap", "% Non-Conversion at Non-CpG Sites"));
 	table.add_row(vec!(img_str(&get_path("gc_coverage")), img_str(&get_path("non_cpg_read_profile"))));
 	body.push(Content::Table(table));	
 	Ok(body)
@@ -623,7 +712,7 @@ fn create_variant_report_body(project: &str, bc: &str, dir: &Path, json: &CallJs
 	table.add_row(vec!(img_str(&get_path("coverage_variants")), img_str(&get_path("quality_variants"))));
 	body.push(Content::Table(table));
 	body.push_element(HtmlElement::new("BR><BR><BR", None, false));
-	body.push_element(make_section("Distributions of Filter Criteria"));
+	body.push_element(make_section("Filter Criteria Distribution"));
 	table = HtmlTable::new("hor-zebra");
 	table.add_header(vec!("Phred scale strand bias estimated by Fisher's Exact Test"));
 	table.add_row(vec!(img_str(&get_path("fs_variant"))));
@@ -714,34 +803,155 @@ fn new_page(path: &Path) -> Result<HtmlPage, String> {
 	Ok(html)
 }
 
-fn create_mapping_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>) -> Result<(), String> {
+
+// Strategy!
+//
+// For each of the three report we create a new LatexSection.  We then lock latex_doc and check if there is already a SectionArray for this barcode. 
+// If not we create it, and then we add the new section to the array.  We give the tags for the Sections so that they will sort in the desired order 
+// for the output
+//
+
+fn create_mapping_latex_section(bc: &str, json: &CallJson) -> Result<LatexSection, String> {
+	let mut img_dir = PathBuf::from_str(bc).expect("Couldn't get Path from barcode");
+	img_dir.push("images");
+	let mut sec = LatexSection::new("A");
+	sec.push_string(format!("\\subsection{{Alignment \\& Coverage Report for {}}}", bc));
+	sec.push_str("\\subsubsection{{Read Level Counts}}");
+	sec.push(make_read_level_latex_tab(json)?);
+	sec.push_str("\\subsubsection{{Base Level Counts}}");
+	sec.push(make_base_level_latex_tab(json)?);
+	sec.push_str("\\subsubsection{{Coverage Distribution}}");
+	sec.push_string(format!("\\includegraphics[width=12cm]{{{}}}", img_dir.join(format!("{}_coverage_all", bc).as_str()).display()));
+	sec.push_str("\\subsubsection{{Quality Distribution}}");
+	sec.push_string(format!("\\includegraphics[width=12cm]{{{}}}", img_dir.join(format!("{}_quality_all", bc).as_str()).display()));
+	sec.push_str("\\subsubsection{{GC/Coverage Heatmap}}");
+	sec.push_string(format!("\\includegraphics[width=12cm]{{{}}}", img_dir.join(format!("{}_gc_coverage", bc).as_str()).display()));
+	sec.push_str("\\subsubsection{{Non-Conversion at Non-CpG Sites}}");
+	sec.push_string(format!("\\includegraphics[width=12cm]{{{}}}", img_dir.join(format!("{}_non_cpg_read_profile", bc).as_str()).display()));	
+	Ok(sec)
+}
+
+fn create_variant_latex_section(bc: &str, json: &CallJson) -> Result<LatexSection, String> {
+	let mut img_dir = PathBuf::from_str(bc).expect("Couldn't get Path from barcode");
+	img_dir.push("images");
+	let set_img = |nm: &str, sec: &mut LatexSection| {
+		sec.push_string(format!("\\includegraphics[width=12cm]{{{}}}", img_dir.join(format!("{}_{}", bc, nm).as_str()).display()));		
+	};
+	let mut sec = LatexSection::new("B");
+	sec.push_string(format!("\\subsection{{Variant Calling Report for {}}}", bc));
+	sec.push_str("\\subsubsection{Variant Counts}");
+	sec.push(make_variant_count_latex_tab(json)?);
+	sec.push_str("\\subsubsection{VCF Filter Stats}");
+	sec.push(make_vcf_filter_stats_latex_tab(json)?);
+	sec.push_str("\\subsubsection{Coverage Distribution for Variant Sites}");
+	set_img("coverage_variants", &mut sec);
+	sec.push_str("\\subsubsection{Quality Distribution for Variant Sites}");
+	set_img("quality_variants", &mut sec);
+	sec.push_str("\\subsubsection{Filter Criteria Distributions}");
+	sec.push_str("\\subsubsection*{Phred Scale Strand Bias (Fisher's Exact Test)}");
+	set_img("fs_variant", &mut sec);
+	sec.push_str("\\subsubsection*{Quality by Depth for Variant Alleles}");
+	set_img("qd_variant", &mut sec);
+	sec.push_str("\\subsubsection*{Quality by Depth for Non-Variant Alleles}");
+	set_img("qd_nonvariant", &mut sec);
+	sec.push_str("\\subsubsection*{RMS Mapping Quality for Variant Alleles}");
+	set_img("rmsmq_variant", &mut sec);
+	sec.push_str("\\subsubsection*{RMS Mapping Quality for Non-Variant Alleles}");
+	set_img("rmsmq_nonvariant", &mut sec);
+	let (t1, t2) = make_variant_type_latex_tabs(json)?;
+	sec.push_str("\\subsubsection{Variant Types}");
+	sec.push(t1);
+	sec.push_str("\\subsubsection{Ti / Tv Ratio}");
+	sec.push(t2);
+	Ok(sec)
+}
+
+fn create_meth_latex_section(bc: &str, json: &CallJson) -> Result<LatexSection, String> {
+	let mut img_dir = PathBuf::from_str(bc).expect("Couldn't get Path from barcode");
+	img_dir.push("images");
+	let set_img = |nm: &str, sec: &mut LatexSection| {
+		sec.push_string(format!("\\includegraphics[width=12cm]{{{}}}", img_dir.join(format!("{}_{}", bc, nm).as_str()).display()));		
+	};
+	let mut sec = LatexSection::new("C");
+	sec.push_string(format!("\\subsection{{Methylation Report for {}}}", bc));
+	sec.push_str("\\subsubsection{CpG Counts}");
+	sec.push(make_cpg_count_latex_tab(json)?);
+	sec.push_str("\\subsubsection{Coverage Distribution for Reference CpGs}");
+	set_img("coverage_ref_cpg", &mut sec);
+	sec.push_str("\\subsubsection{Informative Read Distribution for Reference CpGs}");
+	set_img("coverage_ref_cpg_inf", &mut sec);
+	sec.push_str("\\subsubsection{Quality Distribution for Reference CpGs}");
+	set_img("quality_ref_cpg", &mut sec);
+	sec.push_str("\\subsubsection{Quality Distribution for Non Reference CpGs}");
+	set_img("quality_non_ref_cpg", &mut sec);
+	sec.push_str("\\subsubsection{CpG Methylation Distribution}");
+	set_img("methylation_levels", &mut sec);
+	sec.push_str("\\subsubsection{CpG Methylation Profiles}");
+	sec.push(make_cpg_meth_profile_latex_tab(json)?);
+	Ok(sec)
+}
+
+fn get_section_array_for_bc<'a>(ldoc: &'a mut LatexDoc, bc: &str) -> Result<&'a mut SectionArray, String> {
+	if ldoc.find_section(bc).is_none() {
+		let mut  s = LatexSection::new(bc);
+		s.push_string(format!("\\newpage\n\\section{{Report for Sample {}}}", bc));
+		s.push(LatexContent::SecArray(SectionArray::new()));
+		ldoc.push_section(s)?;
+	}
+	let sec = ldoc.find_section(bc).expect("Couldn't find LatexSection");
+	let mut sa = None;
+	for c in sec.content().iter_mut() {
+		if let LatexContent::SecArray(ref mut s) = c { 
+			sa = Some(s);
+			break;
+		}
+	}
+	sa.ok_or_else(|| format!("Could not find SectionArray for Sample {}", bc))
+}
+
+fn create_mapping_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Result<(), String> {
 	let path: PathBuf = [dir, Path::new(format!("{}_mapping_coverage.html", bc).as_str())].iter().collect();
 	let mut html = new_page(&path)?;
 	let mut map_summ = MapSummary::new();
 	html.push_element(create_mapping_report_body(project, bc, dir, call_json, &mut map_summ)?);	
 	let mut shash = summary.lock().expect("Couldn't lock CallSummary");
 	shash.get_mut(&bc.to_owned()).expect("Couldn't find CallSummary for sample").map = Some(map_summ);
-	Ok(())
+	let sec = create_mapping_latex_section(bc, call_json)?;
+	if let Ok(mut ldoc) = latex_doc.lock() { 
+		let sa = get_section_array_for_bc(&mut ldoc, bc)?;
+		sa.push(sec);
+		Ok(())
+	} else { Err("Couldn't obtain lock on latex doc".to_string()) }
 }
 
-fn create_variant_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>) -> Result<(), String> {
+fn create_variant_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Result<(), String> {
 	let path: PathBuf = [dir, Path::new(format!("{}_variants.html", bc).as_str())].iter().collect();
 	let mut var_summ = VarSummary::new();
 	let mut html = new_page(&path)?;
 	html.push_element(create_variant_report_body(project, bc, dir, call_json, &mut var_summ)?);	
 	let mut shash = summary.lock().expect("Couldn't lock CallSummary");
 	shash.get_mut(&bc.to_owned()).expect("Couldn't find CallSummary for sample").var = Some(var_summ);
-	Ok(())
+	let sec = create_variant_latex_section(bc, call_json)?;
+	if let Ok(mut ldoc) = latex_doc.lock() { 
+		let sa = get_section_array_for_bc(&mut ldoc, bc)?;
+		sa.push(sec);
+		Ok(())
+	} else { Err("Couldn't obtain lock on latex doc".to_string()) }
 }
 
-fn create_meth_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>) -> Result<(), String> {
+fn create_meth_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Result<(), String> {
 	let path: PathBuf = [dir, Path::new(format!("{}_methylation.html", bc).as_str())].iter().collect();
 	let mut html = new_page(&path)?;
 	let mut meth_summ = MethSummary::new();
 	html.push_element(create_meth_report_body(project, bc, dir, call_json, &mut meth_summ)?);	
 	let mut shash = summary.lock().expect("Couldn't lock CallSummary");
 	shash.get_mut(&bc.to_owned()).expect("Couldn't find CallSummary for sample").meth = Some(meth_summ);
-	Ok(())
+	let sec = create_meth_latex_section(bc, call_json)?;
+	if let Ok(mut ldoc) = latex_doc.lock() { 
+		let sa = get_section_array_for_bc(&mut ldoc, bc)?;
+		sa.push(sec);
+		Ok(())
+	} else { Err("Couldn't obtain lock on latex doc".to_string()) }
 }
 
 fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<HashMap<String, CallSummary>>>) -> Result<(), String> {
@@ -825,9 +1035,9 @@ fn make_call_job(bc: &str, bc_dir: &Path, project: &str, job: MakeCallJob) -> Re
 			let path: PathBuf = [&img_dir, Path::new(format!("{}_fs_variant.png", bc).as_str())].iter().collect();
 			make_hist(&path, &cj.qc_dist().fisher_strand, "Fisher Strand Test", "Fisher Strand Phred Scale Probability", "# sites").map_err(|e| format!("{}", e))
 		},
-		CallJob::MappingReport => create_mapping_report(bc, bc_dir, project, cj, job.summary),
-		CallJob::VariantReport => create_variant_report(bc, bc_dir, project, cj, job.summary),
-		CallJob::MethylationReport => create_meth_report(bc, bc_dir, project, cj, job.summary),
+		CallJob::MappingReport => create_mapping_report(bc, bc_dir, project, cj, job.summary, job.latex_doc),
+		CallJob::VariantReport => create_variant_report(bc, bc_dir, project, cj, job.summary, job.latex_doc),
+		CallJob::MethylationReport => create_meth_report(bc, bc_dir, project, cj, job.summary, job.latex_doc),
 	}
 }
 
@@ -869,7 +1079,7 @@ fn worker_thread(tx: mpsc::Sender<(isize, usize)>, rx: mpsc::Receiver<Option<Rep
 	Ok(())
 }
 
-fn prepare_jobs(svec: &[CallJsonFiles], project: &str, summary: Arc<Mutex<HashMap<String, CallSummary>>>) -> Vec<ReportJob> {
+fn prepare_jobs(svec: &[CallJsonFiles], project: &str, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Vec<ReportJob> {
 	let mut v = Vec::new();
 	for cjson in svec.iter() {
 		let call_json = Arc::new(RwLock::new(None));
@@ -877,7 +1087,7 @@ fn prepare_jobs(svec: &[CallJsonFiles], project: &str, summary: Arc<Mutex<HashMa
 		let ld_json_ix = v.len();
 		v.push(ReportJob::new(&cjson.barcode, project, &cjson.bc_dir, RepJob::CallJson(load_json)));
 		for job_type in CallJob::iter() {
-			let mk_graph = MakeCallJob{job_type, depend: ld_json_ix, call_json: call_json.clone(), summary: summary.clone()};
+			let mk_graph = MakeCallJob{job_type, depend: ld_json_ix, call_json: call_json.clone(), summary: summary.clone(), latex_doc: latex_doc.clone()};
 			v.push(ReportJob::new(&cjson.barcode, project, &cjson.bc_dir, RepJob::CallJob(mk_graph)));
 		}
 	}
@@ -888,7 +1098,8 @@ fn prepare_jobs(svec: &[CallJsonFiles], project: &str, summary: Arc<Mutex<HashMa
 pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, n_cores: usize, svec: Vec<CallJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
 	utils::check_signal(Arc::clone(&sig))?;
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
-	let output_dir = outputs.first().expect("No output files for map report").parent().expect("No parent directory found for map report");
+	let report_tex_path = outputs.first().expect("No output files for call report");
+	let output_dir = report_tex_path.parent().expect("No parent directory found for call report");
 	// Set up worker threads	
 	// Maximum parallel jobs that we could do if there were enough cores is 18 * the number of samples (18 images per sample)
 	let n_dsets = svec.len() * 18;
@@ -896,7 +1107,9 @@ pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opt
 	let mut shash = HashMap::new();
 	for cjson in svec.iter() { shash.insert(cjson.barcode.clone(), CallSummary::new()); }
 	let summary = Arc::new(Mutex::new(shash));
-	let mut job_vec = prepare_jobs(&svec, &project, summary.clone());
+	let latex_doc = Arc::new(Mutex::new(LatexDoc::new(&report_tex_path, PageSize::A4, format!("Methylation and Variant Report for Project {}", project).as_str(), "gemBS")?));
+
+	let mut job_vec = prepare_jobs(&svec, &project, summary.clone(), latex_doc.clone());
 	let (ctr_tx, ctr_rx) = mpsc::channel();
 	let mut avail = Vec::new();
 	let mut workers = Vec::new();

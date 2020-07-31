@@ -111,7 +111,7 @@ pub struct MakeCallJob {
 	pub depend: usize,
 	pub call_json: Arc<RwLock<Option<CallJson>>>,	
 	pub summary: Arc<Mutex<HashMap<String, CallSummary>>>,
-
+	pub latex_doc: Arc<Mutex<LatexDoc>>,
 }
 
 #[derive(Clone)]
