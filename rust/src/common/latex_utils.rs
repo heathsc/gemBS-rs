@@ -18,7 +18,6 @@ pub fn latex_escape_str(s: &str) -> String {
 
 pub enum LatexContent {
 	Text(String),
-	Env(LatexEnv),
 	SecArray(SectionArray),
 	Table(LatexTable),
 }
@@ -28,7 +27,6 @@ impl fmt::Display for LatexContent {
 		lazy_static! { static ref RE: Regex = Regex::new(r"([%#])").unwrap(); }
 		match self {
 			LatexContent::Text(s) => writeln!(f, "{}", RE.replace_all(s, |caps: &Captures| { format!("\\{}", &caps[1]) }).into_owned()),
-			LatexContent::Env(s) => writeln!(f, "{}", s),
 			LatexContent::SecArray(s) => writeln!(f, "{}", s),
 			LatexContent::Table(s) => writeln!(f, "{}", s),
 		}
@@ -38,33 +36,6 @@ impl fmt::Display for LatexContent {
 pub enum PageSize {
 	A4,
 	Letter,
-}
-
-pub struct LatexEnv {
-	name: &'static str,
-	content: Vec<LatexContent>,
-}
-
-impl fmt::Display for LatexEnv {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		writeln!(f, "\\begin{{{}}}", self.name)?;
-		if !self.content.is_empty() {
-			writeln!(f)?;
-			for x in self.content.iter() { write!(f, "{}", x)? }
-		}
-		writeln!(f, "\\end{{{}}}", self.name)?;
-		Ok(())
-	}
-}
-
-impl LatexEnv {
-	pub fn new(name: &'static str) -> Self { 
-		LatexEnv{ name, content: Vec::new() }
-	}
-	pub fn push(&mut self, content: LatexContent) { self.content.push(content) }	
-	pub fn push_str(&mut self, s: &str) { self.content.push(LatexContent::Text(s.to_string())) }
-	pub fn push_string(&mut self, s: String) { self.content.push(LatexContent::Text(s)) }
-	pub fn push_env(&mut self, e: LatexEnv) { self.content.push(LatexContent::Env(e)) }
 }
 
 pub struct LatexTable {
@@ -97,7 +68,7 @@ impl fmt::Display for LatexTable {
 			if r.len() > ncol { ncol = r.len(); }
 		}
 		let mut s = "|".to_string();
-		for _ in 0..ncol {s.push_str("c|");}
+		for _ in 0..ncol {s.push_str("l|");}
 		writeln!(f, "\\begin{{tabular}}{{{}}}\n\\hline", s)?;		
 		// Header row
 		if !self.header.is_empty() {
@@ -139,7 +110,6 @@ impl LatexSection {
 	pub fn new(tag: &str) -> Self {
 		LatexSection{ sort_tag: tag.to_owned(), content: Vec::new() }
 	}
-	pub fn push_env(&mut self, e: LatexEnv) { self.content.push(LatexContent::Env(e)) }
 	pub fn push(&mut self, content: LatexContent) { self.content.push(content) }	
 	pub fn push_str(&mut self, s: &str) { self.content.push(LatexContent::Text(s.to_string())) }
 	pub fn push_string(&mut self, s: String) { self.content.push(LatexContent::Text(s)) }

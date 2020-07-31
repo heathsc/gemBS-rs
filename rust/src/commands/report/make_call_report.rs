@@ -954,7 +954,7 @@ fn create_meth_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson,
 	} else { Err("Couldn't obtain lock on latex doc".to_string()) }
 }
 
-fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<HashMap<String, CallSummary>>>) -> Result<(), String> {
+fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Result<(), String> {
 	let mut path = dir.to_owned();
 	path.push("index.html");
 	let mut html = HtmlPage::new(&path)?;
@@ -975,24 +975,47 @@ fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<HashMap<String, 
 	table.add_header(vec!(
 		"Sample", "Aligned", "Uniquely Aligned", "Passed", "GC Depth corr.", "Variants", "Passed Variants", "Med. Cov. Passed Variants",
 		"Ti/Tv Ratio", "Med. CpG Meth.", "Med. CpG Cov.", "Passed CpGs", "Reports"));
+	let mut ltable1 = LatexTable::new();
+	let mut ltable2 = LatexTable::new();
+	let mut ltable3 = LatexTable::new();
+	ltable1.add_header(vec!("Sample", "Aligned", "Uniquely Aligned", "Passed", "GC Depth Corr."));
+	ltable2.add_header(vec!("Variants", "Passed Variants", "Med. Cov. Passed Variants", "Ti/Tv Ratio"));
+	ltable3.add_header(vec!("Med. CpG Meth.", "Med. CpG Cov.", "Passed CpGs"));
 	if let Ok(sum_vec) = summary.lock() {
 		for (bc, s) in sum_vec.iter() {
 			let mut row = Vec::new();
+			let mut lrow1 = Vec::new();
+			let mut lrow2 = Vec::new();
+			let mut lrow3 = Vec::new();
 			let  map_summ = s.map.as_ref().expect("Empty Map Summary");
 			let  var_summ = s.var.as_ref().expect("Empty Variant Summary");
 			let  meth_summ = s.meth.as_ref().expect("Empty Meth Summary");
 			row.push(bc.to_string());
+			lrow1.push(bc.to_string());
 			row.push(f(map_summ.aligned));
+			lrow1.push(f(map_summ.aligned));
 			row.push(format!("{} ({:.2} %)", f(map_summ.unique), pct(map_summ.unique, map_summ.aligned)));
+			lrow1.push(format!("{} ({:.2} %)", f(map_summ.unique), pct(map_summ.unique, map_summ.aligned)));
 			row.push(format!("{} ({:.2} %)", f(map_summ.passed), pct(map_summ.passed, map_summ.aligned)));
+			lrow1.push(format!("{} ({:.2} %)", f(map_summ.passed), pct(map_summ.passed, map_summ.aligned)));
 			row.push(format!("{:.2}", map_summ.gc_correlation));
+			lrow1.push(format!("{:.2}", map_summ.gc_correlation));
+			ltable1.add_row(lrow1);
 			row.push(format!("{:.3e}", var_summ.variants));
+			lrow2.push(format!("{:.3e}", var_summ.variants));
 			row.push(format!("{:.3e} ({:.2} %)", var_summ.variants_passed, pct(var_summ.variants_passed, var_summ.variants)));
+			lrow2.push(format!("{:.3e} ({:.2} %)", var_summ.variants_passed, pct(var_summ.variants_passed, var_summ.variants)));
 			row.push(format!("{}x", var_summ.med_cov_var_passed));
+			lrow2.push(format!("{}x", var_summ.med_cov_var_passed));
 			row.push(format!("{:.2}", var_summ.ti_tv_ratio));
+			lrow2.push(format!("{:.2}", var_summ.ti_tv_ratio));
+			ltable2.add_row(lrow2);
 			row.push(format!("{:.2}", meth_summ.med_cpg_meth));
+			lrow3.push(format!("{:.2}", meth_summ.med_cpg_meth));
 			row.push(format!("{}x", meth_summ.med_cpg_cov));
+			lrow3.push(format!("{}x", meth_summ.med_cpg_cov));
 			row.push(format!("{:.3e}", meth_summ.passed_cpgs));
+			lrow3.push(format!("{:.3e}", meth_summ.passed_cpgs));
 			let mut link1 = HtmlElement::new("a", Some(format!("class=\"link\" href=\"{}/{}_mapping_coverage.html\"", bc, bc).as_str()), true);
 			link1.push_str("&#187 Alignments & Coverage");
 			let mut link2 = HtmlElement::new("a", Some(format!("class=\"link\" href=\"{}/{}_variants.html\"", bc, bc).as_str()), true);
@@ -1001,11 +1024,21 @@ fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<HashMap<String, 
 			link3.push_str("&#187 Methylation");
 			row.push(format!("{}<BR>{}<BR>{}<BR>", link1, link2, link3));
 			table.add_row(row);
+			ltable3.add_row(lrow3);
 		}
 	} else { return Err("Couldn't obtain lock on sample summary".to_string()); }
 	body.push(Content::Table(table));
 	html.push_element(body);	
-	Ok(())
+		if let Ok(mut ldoc) = latex_doc.lock() { 
+		ldoc.push(LatexContent::Text("\\section{{Sample Summaries}}".to_string()));
+		ldoc.push(LatexContent::Text("\\subsection{{Alignment \\& Coverage}}".to_string()));
+		ldoc.push(LatexContent::Table(ltable1));
+		ldoc.push(LatexContent::Text("\\subsection{{Variant Calling}}".to_string()));
+		ldoc.push(LatexContent::Table(ltable2));
+		ldoc.push(LatexContent::Text("\\subsection{{Methylation}}".to_string()));
+		ldoc.push(LatexContent::Table(ltable3));
+		Ok(())
+	} else { Err("Couldn't obtain lock on latex doc".to_string()) }
 }
 
 fn make_call_job(bc: &str, bc_dir: &Path, project: &str, job: MakeCallJob) -> Result<(), String> {
@@ -1219,7 +1252,7 @@ pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opt
 	}
 	if abort { Err("Map-report generation failed".to_string()) }
 	else {
-		create_summary(output_dir, &project, summary)?; 
+		create_summary(output_dir, &project, summary, latex_doc)?; 
 		make_map_report::copy_css(output_dir, css)?;
 		Ok(None) 
 
