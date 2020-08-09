@@ -3,8 +3,10 @@ use std::str::FromStr;
 use std::collections::HashMap;
 use crate::config::GemBS;
 use lazy_static::lazy_static;
-use crate::common::defs::{Section, DataValue, VarType, FileType, JobLen, MemSize};
+use crate::common::defs::{Section, DataValue, VarType, FileType, JobLen, MemSize, ReadEnd};
+use crate::common::latex_utils::PageSize;
 
+/*
 pub fn from_arg_matches<T: FromStr>(m: &ArgMatches, option: &str) -> Option<T> {
 	match m.value_of(option) {
 		None => None,
@@ -18,7 +20,8 @@ pub fn from_arg_matches<T: FromStr>(m: &ArgMatches, option: &str) -> Option<T> {
 			}
 		}
 	}
-}
+} 
+*/
 
 pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
 	match tt {
@@ -27,7 +30,9 @@ pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
 		VarType::Float => m.value_of(opt).and_then(|x| <f64>::from_str(x).ok().map(DataValue::Float)),
 		VarType::String => m.value_of(opt).map(|x| DataValue::String(x.to_owned())),
 		VarType::FileType => m.value_of(opt).and_then(|x| <FileType>::from_str(x).ok().map(DataValue::FileType)),
+		VarType::ReadEnd => m.value_of(opt).and_then(|x| <ReadEnd>::from_str(x).ok().map(DataValue::ReadEnd)),
 		VarType::JobLen => m.value_of(opt).and_then(|x| <JobLen>::from_str(x).ok().map(DataValue::JobLen)),
+		VarType::PageSize => m.value_of(opt).and_then(|x| <PageSize>::from_str(x).ok().map(DataValue::PageSize)),
 		VarType::MemSize => m.value_of(opt).and_then(|x| <MemSize>::from_str(x).ok().map(DataValue::MemSize)),
 		VarType::FloatVec => m.values_of(opt).map(|v| {			
 			let vec:Vec<_> = v.map(|x| <f64>::from_str(x).ok().unwrap()).collect();
@@ -37,8 +42,6 @@ pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
 			let args: Vec<String> = v.map(|x| x.to_owned()).collect();
 			DataValue::StringVec(args)
 		}),
-
-		_ => None,
 	}
 }
 
@@ -141,6 +144,7 @@ lazy_static! {
       	m.push(("json", OptionType::Special("_json", VarType::String)));
 	  	m.push(("project", OptionType::Global("project", VarType::String)));
 	  	m.push(("report_dir", OptionType::Global("report_dir", VarType::String)));
+	  	m.push(("paper_size", OptionType::Global("paper_size", VarType::PageSize)));
         m
     };
 }

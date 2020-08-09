@@ -523,6 +523,7 @@ fn make_cpg_meth_profile_table(json: &CallJson, msumm: &mut MethSummary) -> Resu
 
 fn make_cpg_meth_profile_latex_tab(json: &CallJson) -> Result<LatexContent, String> {
 	let mut table = LatexTable::new();
+	table.set_col_desc("|m{3cm}|m{3cm}|m{3cm}|m{3cm}|m{3cm}|");
 	make_cpg_meth_profile_tab(&mut table, json, None)?;
 	Ok(LatexContent::Table(table))
 }
@@ -979,8 +980,10 @@ fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<HashMap<String, 
 	let mut ltable2 = LatexTable::new();
 	let mut ltable3 = LatexTable::new();
 	ltable1.add_header(vec!("Sample", "Aligned", "Uniquely Aligned", "Passed", "GC Depth Corr."));
-	ltable2.add_header(vec!("Variants", "Passed Variants", "Med. Cov. Passed Variants", "Ti/Tv Ratio"));
-	ltable3.add_header(vec!("Med. CpG Meth.", "Med. CpG Cov.", "Passed CpGs"));
+	ltable2.set_col_desc("|m{1.6cm}|m{3cm}|m{3cm}|m{2.5cm}|");
+	ltable2.add_header(vec!("Variants", "Passed Variants", "Median Cov. of Passed Variants", "Ti/Tv Ratio"));
+	ltable3.set_col_desc("|m{2.3cm}|m{2.2cm}|m{1.6cm}|");
+	ltable3.add_header(vec!("Median CpG Meth.", "Median CpG Cov.", "Passed CpGs"));
 	if let Ok(sum_vec) = summary.lock() {
 		for (bc, s) in sum_vec.iter() {
 			let mut row = Vec::new();
@@ -1128,7 +1131,7 @@ fn prepare_jobs(svec: &[CallJsonFiles], project: &str, summary: Arc<Mutex<HashMa
 	v
 }
 
-pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, n_cores: usize, svec: Vec<CallJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
+pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, page_size: PageSize, css: &Path, n_cores: usize, svec: Vec<CallJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
 	utils::check_signal(Arc::clone(&sig))?;
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
 	let report_tex_path = outputs.first().expect("No output files for call report");
@@ -1140,7 +1143,7 @@ pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opt
 	let mut shash = HashMap::new();
 	for cjson in svec.iter() { shash.insert(cjson.barcode.clone(), CallSummary::new()); }
 	let summary = Arc::new(Mutex::new(shash));
-	let latex_doc = Arc::new(Mutex::new(LatexDoc::new(&report_tex_path, PageSize::A4, format!("Methylation and Variant Report for Project {}", project).as_str(), "gemBS")?));
+	let latex_doc = Arc::new(Mutex::new(LatexDoc::new(&report_tex_path, page_size, format!("Methylation and Variant Report for Project {}", project).as_str(), "gemBS")?));
 
 	let mut job_vec = prepare_jobs(&svec, &project, summary.clone(), latex_doc.clone());
 	let (ctr_tx, ctr_rx) = mpsc::channel();

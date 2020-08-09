@@ -11,6 +11,7 @@ use crate::common::json_call_stats::CallJson;
 use super::{QPipe, QPipeCom};
 use crate::common::compress;
 use crate::common::utils;
+use crate::common::latex_utils::PageSize;
 
 #[derive(Debug)]
 pub struct SampleJsonFiles {
@@ -68,7 +69,8 @@ pub fn make_map_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	}
 	let mut css_dir = gem_bs.get_css_path();
 	css_dir.push("style.css");
-	let com = QPipeCom::MapReport((project, css_dir, mapq_thresh as usize, n_cores, json_files));
+	let page_size = if let Some(DataValue::PageSize(s)) = gem_bs.get_config(Section::Report, "paper_size") { *s } else { PageSize::A4 };
+	let com = QPipeCom::MapReport((project, page_size, css_dir, mapq_thresh as usize, n_cores, json_files));
 	pipeline.add_com(com);
 	pipeline		
 }
@@ -91,7 +93,8 @@ pub fn make_call_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	}
 	let mut css_dir = gem_bs.get_css_path();
 	css_dir.push("style.css");
-	let com = QPipeCom::CallReport((project, css_dir, n_cores, json_files));
+	let page_size = if let Some(DataValue::PageSize(s)) = gem_bs.get_config(Section::Report, "paper_size") { *s } else { PageSize::A4 };
+	let com = QPipeCom::CallReport((project, page_size, css_dir, n_cores, json_files));
 	pipeline.add_com(com);
 	pipeline		
 }

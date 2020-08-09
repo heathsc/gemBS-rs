@@ -125,6 +125,7 @@ fn make_known_var_list() -> KnownVarList {
 	kv_list.add_known_var("strand_specific", VarType::Bool, vec!(Section::Extract));
 	kv_list.add_known_var("project", VarType::String, vec!(Section::Report));
 	kv_list.add_known_var("report_dir", VarType::String, vec!(Section::Report));
+	kv_list.add_known_var("paper_size", VarType::PageSize, vec!(Section::Report));
 	kv_list
 }
 

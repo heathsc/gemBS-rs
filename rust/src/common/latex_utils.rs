@@ -2,8 +2,10 @@ use std::path::{Path, PathBuf};
 use std::io::{Write, BufWriter};
 use std::{fs, fmt};
 use std::collections::HashMap;
+use std::str::FromStr;
 use regex::{Regex, Captures};
 use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 
 use super::html_utils::Table;
 
@@ -33,19 +35,36 @@ impl fmt::Display for LatexContent {
 	}		
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum PageSize {
 	A4,
 	Letter,
 }
 
+impl FromStr for PageSize {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "a4" => Ok(PageSize::A4),
+            "letter" => Ok(PageSize::Letter),
+            _ => Err("PageSize: no match"),
+        }
+    }
+}
+
 pub struct LatexTable {
 	header: Vec<&'static str>,
 	rows: Vec<Vec<String>>,
+	col_desc: Option<String>,
 }
 
 impl LatexTable {
 	pub fn new() -> Self {
-		LatexTable{header: Vec::new(), rows: Vec::new() }
+		LatexTable{header: Vec::new(), rows: Vec::new(), col_desc: None }
+	}
+	pub fn set_col_desc(&mut self, desc: &str) {
+		self.col_desc = Some(desc.to_owned());
 	}
 }
 impl Table for LatexTable {
@@ -67,15 +86,22 @@ impl fmt::Display for LatexTable {
 		for r in self.rows.iter() { 
 			if r.len() > ncol { ncol = r.len(); }
 		}
-		let mut s = "|".to_string();
-		for _ in 0..ncol {s.push_str("l|");}
+		let s = if let Some(desc) = &self.col_desc {
+			desc.clone()
+		} else {
+			let mut ts = "|".to_string();
+			for _ in 0..ncol {ts.push_str("l|");}
+			ts
+		};
+		let start_row = if self.header.is_empty() {1} else {2};
+		writeln!(f, "{{\\rowcolors{{{}}}{{green!10!white!90}}{{blue!10!white!90}}", start_row)?;
 		writeln!(f, "\\begin{{tabular}}{{{}}}\n\\hline", s)?;		
 		// Header row
 		if !self.header.is_empty() {
 			let mut first = true;
 			for s in self.header.iter() {
 				if first { first = false } else { write!(f, " & ")? } 
-				write!(f, "{{\\small {}}}", RE.replace_all(s, |caps: &Captures| { format!("\\{}", &caps[1]) }).into_owned())?;
+				write!(f, "{{\\small\\textbf{{{}}}}}", RE.replace_all(s, |caps: &Captures| { format!("\\{}", &caps[1]) }).into_owned())?;
 			}
 			writeln!(f, "\\\\\n\\hline")?;
 		}
@@ -89,7 +115,7 @@ impl fmt::Display for LatexTable {
 				writeln!(f, "\\\\")?;
 			}
 		}
-		writeln!(f, "\\hline\n\\end{{tabular}}")?;		
+		writeln!(f, "\\hline\n\\end{{tabular}}}}")?;		
 		Ok(())
 	}
 }
@@ -143,7 +169,6 @@ pub struct LatexDoc {
 	sections: SectionArray,
 	path: PathBuf,
 	sec_hash: HashMap<String, usize>,
-//	writer: Box<dyn Write>,
 }
 
 impl LatexDoc {
@@ -177,10 +202,12 @@ impl Drop for LatexDoc {
 				PageSize::Letter => "letter",
 			};
 			let _ = writeln!(writer, "\\documentclass[12pt]{{article}}");
-			let _ = writeln!(writer, "\\usepackage[T1]{{fontenc}}");
+			let _ = writeln!(writer, "\\usepackage[T1]{{fontenc}}\n\\usepackage{{array}}");
+			let _ = writeln!(writer, "\\usepackage[table]{{xcolor}}");
 			let _ = writeln!(writer, "\\usepackage{{geometry}}\n\\geometry{{{}, left=15mm, top=20mm}}", sz);
 			let _ = writeln!(writer, "\\usepackage{{graphicx}}");
 			let _ = writeln!(writer, "\\usepackage{{hyperref}}\n\\hypersetup{{colorlinks=true}}");
+			let _ = writeln!(writer, "\\setlength{{\\arrayrulewidth}}{{0.5mm}}\n\\renewcommand{{\\arraystretch}}{{1.5}}");
 			let _ = writeln!(writer, "\\title{{{}}}", self.title);
 			let _ = writeln!(writer, "\\author{{{}}}", self.author);
 			let _ = writeln!(writer, "\\date{{\\today}}");

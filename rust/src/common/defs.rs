@@ -6,6 +6,7 @@ use regex::Regex;
 use lazy_static::lazy_static;
 
 use crate::config::contig;
+use super::latex_utils::PageSize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Section {
@@ -225,6 +226,7 @@ pub enum DataValue {
 	Float(f64),
 	FloatVec(Vec<f64>),
 	JobLen(JobLen),
+	PageSize(PageSize),
 	MemSize(MemSize),
 }
 
@@ -234,6 +236,7 @@ impl DataValue {
 			VarType::String | VarType::StringVec => Ok(DataValue::String(s.to_string())),
 			VarType::ReadEnd => Ok(DataValue::ReadEnd(s.parse::<ReadEnd>()?)),
 			VarType::JobLen => Ok(DataValue::JobLen(s.parse::<JobLen>()?)),
+			VarType::PageSize => Ok(DataValue::PageSize(s.parse::<PageSize>()?)),
 			VarType::FileType => Ok(DataValue::FileType(s.parse::<FileType>()?)),
 			VarType::MemSize => Ok(DataValue::MemSize(s.parse::<MemSize>()?)),
 			VarType::Bool => match s.to_lowercase().as_str() {
@@ -255,7 +258,7 @@ impl DataValue {
 
 #[derive(Debug, Clone, Copy)]
 pub enum VarType {
-	String, StringVec, Bool, Int, Float, FloatVec, ReadEnd, FileType, JobLen, MemSize,
+	String, StringVec, Bool, Int, Float, FloatVec, ReadEnd, FileType, JobLen, PageSize, MemSize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

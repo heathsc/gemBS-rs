@@ -14,6 +14,7 @@ use crate::common::defs::{DataValue, Command, Section, VarType};
 use crate::common::tasks::{TaskStatus, RunningTask};
 use crate::common::utils::{Pipeline, FileLock};
 use crate::common::utils;
+use crate::common::latex_utils::PageSize;
 use crate::common::assets::{GetAsset};
 use crate::commands::report::{make_map_report, make_call_report};
 
@@ -235,8 +236,8 @@ impl<'a> Scheduler<'a> {
 
 #[derive(Debug)]
 pub enum QPipeCom { 
-	MapReport((Option<String>, PathBuf, usize, usize, Vec<SampleJsonFiles>)), 
-	CallReport((Option<String>, PathBuf, usize, Vec<CallJsonFiles>)),
+	MapReport((Option<String>, PageSize, PathBuf, usize, usize, Vec<SampleJsonFiles>)), 
+	CallReport((Option<String>, PageSize, PathBuf, usize, Vec<CallJsonFiles>)),
 	MergeCallJsons(MergeJsonFiles),
 }
 
@@ -326,8 +327,8 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 					QPipeStage::Internal(com) => {
 						let ret = match com {
 							QPipeCom::MergeCallJsons(x) => report::merge_call_jsons(Arc::clone(&qpipe.sig), &qpipe.outputs, &x),
-							QPipeCom::MapReport((prj, cdir, thresh, nc, x)) => make_map_report::make_map_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, &cdir, thresh, nc, x),
-							QPipeCom::CallReport((prj, cdir, nc, x)) => make_call_report::make_call_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, &cdir, nc, x),					
+							QPipeCom::MapReport((prj, page_size, cdir, thresh, nc, x)) => make_map_report::make_map_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, page_size, &cdir, thresh, nc, x),
+							QPipeCom::CallReport((prj, page_size, cdir, nc, x)) => make_call_report::make_call_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, page_size, &cdir, nc, x),					
 						};
 						if ret.is_err() {
 							error!("Error returned from internal pipeline command");

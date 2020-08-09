@@ -222,6 +222,7 @@ fn make_mismatch_table(json: &MapJson) -> Result<Content, String> {
 
 fn make_mismatch_length_latex_tab(json: &MapJson) -> Result<LatexContent, String> {
 	let mut table = LatexTable::new();
+	table.set_col_desc("|m{2.4cm}|m{1.5cm}|m{1.5cm}|m{1.5cm}|m{1.5cm}|m{1.5cm}|m{1.5cm}|");
 	make_mismatch_tab(&mut table, json)?;
 	Ok(LatexContent::Table(table))
 }
@@ -680,7 +681,7 @@ pub fn copy_css(output_dir: &Path, css: &Path) -> Result<(), String> {
 	Ok(())
 }
 
-pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, mapq_threshold: usize, n_cores: usize, svec: Vec<SampleJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
+pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, page_size: PageSize, css: &Path, mapq_threshold: usize, n_cores: usize, svec: Vec<SampleJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
 	utils::check_signal(Arc::clone(&sig))?;
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
 	let report_tex_path = outputs.first().expect("No output files for map report");
@@ -702,7 +703,7 @@ pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opti
 	}
 	// Prepare jobs
 	let summary = Arc::new(Mutex::new(Vec::new()));
-	let latex_doc = Arc::new(Mutex::new(LatexDoc::new(&report_tex_path, PageSize::A4, format!("Mapping Report for Project {}", project).as_str(), "gemBS")?));
+	let latex_doc = Arc::new(Mutex::new(LatexDoc::new(&report_tex_path, page_size, format!("Mapping Report for Project {}", project).as_str(), "gemBS")?));
 	
 	let mut job_vec = prepare_jobs(&svec, &project, mapq_threshold, summary.clone(), latex_doc.clone());
 	let mut abort = false;

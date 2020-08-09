@@ -192,6 +192,7 @@ subcommands:
         args:
           - project: {short: p, long: project, value_name: NAME, takes_value: true, help: Output title for report (project name)}
           - report_dir: {short: r, long: report-dir, value_name: PATH, takes_value: true, help: Root directory for reports}
+          - paper_size: {short: S, long: paper-size, help: Select paper size for latex versions of report, takes_value: true, value_name: PAPER_SIZE, possible_values: [a4, letter], case_insensitive: true}
           - mapq_threshold: {short: q, long: mapq-threshold, value_name: MAPQ_THRESHOLD, takes_value: true, help: Threshold for MAPQ scores}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
@@ -205,6 +206,7 @@ subcommands:
         args:
           - project: {short: p, long: project, value_name: NAME, takes_value: true, help: Output title for report (project name)}
           - report_dir: {short: r, long: report-dir, value_name: PATH, takes_value: true, help: Root directory for reports}
+          - paper_size: {short: S, long: paper-size, help: Select paper size for latex versions of report, takes_value: true, value_name: PAPER_SIZE, possible_values: [a4, letter], case_insensitive: true}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
           - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
