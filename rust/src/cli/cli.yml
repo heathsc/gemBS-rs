@@ -196,8 +196,8 @@ subcommands:
           - pdf: {short: P, long: pdf, help: Generate pdf version of QC report (requires latexmk and pdflatex)}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
-          - mapping: {short: M, long: mapping, help: Generate mapping report}
-          - calling: {short: C, long: calling, help: Generate calling report}
+          - mapping: {short: M, long: mapping, help: Generate mapping report, conflicts_with: pdf}
+          - calling: {short: C, long: calling, help: Generate calling report, conflicts_with: pdf}
           - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - dry_run: {long: dry-run, help: Output pending commands without execution}
