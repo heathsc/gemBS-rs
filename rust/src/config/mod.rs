@@ -213,6 +213,7 @@ impl GemBS {
 			if !config_dir.is_dir() { return Err(format!("Config directory {:?} does not exist (or is not accessible)", config_dir)); }
 			if !json_file.exists() { return Err(format!("Config JSON file {:?} does not exist (or is not accessible)", json_file)); }
 		}
+		debug!("gem_bs_root set to {}", gem_bs_root.display());
 		self.fs = Some(GemBSFiles{config_dir: config_dir.to_path_buf(), json_file, gem_bs_root});	
 		Ok(())
 	}
