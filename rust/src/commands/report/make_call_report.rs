@@ -892,7 +892,7 @@ fn create_meth_latex_section(bc: &str, json: &CallJson) -> Result<LatexSection, 
 	Ok(sec)
 }
 
-fn get_section_array_for_bc<'a>(ldoc: &'a mut LatexDoc, bc: &str) -> Result<&'a mut SectionArray, String> {
+fn get_section_array_for_bc<'a>(ldoc: &'a mut LatexBare, bc: &str) -> Result<&'a mut SectionArray, String> {
 	if ldoc.find_section(bc).is_none() {
 		let mut  s = LatexSection::new(bc);
 		s.push_string(format!("\\newpage\n\\section{{Report for Sample {}}}", bc));
@@ -910,7 +910,7 @@ fn get_section_array_for_bc<'a>(ldoc: &'a mut LatexDoc, bc: &str) -> Result<&'a 
 	sa.ok_or_else(|| format!("Could not find SectionArray for Sample {}", bc))
 }
 
-fn create_mapping_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Result<(), String> {
+fn create_mapping_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexBare>>) -> Result<(), String> {
 	let path: PathBuf = [dir, Path::new(format!("{}_mapping_coverage.html", bc).as_str())].iter().collect();
 	let mut html = new_page(&path)?;
 	let mut map_summ = MapSummary::new();
@@ -925,7 +925,7 @@ fn create_mapping_report(bc: &str, dir: &Path, project: &str, call_json: &CallJs
 	} else { Err("Couldn't obtain lock on latex doc".to_string()) }
 }
 
-fn create_variant_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Result<(), String> {
+fn create_variant_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexBare>>) -> Result<(), String> {
 	let path: PathBuf = [dir, Path::new(format!("{}_variants.html", bc).as_str())].iter().collect();
 	let mut var_summ = VarSummary::new();
 	let mut html = new_page(&path)?;
@@ -940,7 +940,7 @@ fn create_variant_report(bc: &str, dir: &Path, project: &str, call_json: &CallJs
 	} else { Err("Couldn't obtain lock on latex doc".to_string()) }
 }
 
-fn create_meth_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Result<(), String> {
+fn create_meth_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexBare>>) -> Result<(), String> {
 	let path: PathBuf = [dir, Path::new(format!("{}_methylation.html", bc).as_str())].iter().collect();
 	let mut html = new_page(&path)?;
 	let mut meth_summ = MethSummary::new();
@@ -955,7 +955,7 @@ fn create_meth_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson,
 	} else { Err("Couldn't obtain lock on latex doc".to_string()) }
 }
 
-fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Result<(), String> {
+fn create_summary(dir: &Path, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexBare>>) -> Result<(), String> {
 	let mut path = dir.to_owned();
 	path.push("index.html");
 	let mut html = HtmlPage::new(&path)?;
@@ -965,7 +965,6 @@ fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<HashMap<String, 
 	head_element.push_element(style_element);
 	html.push_element(head_element);
 	let mut body = HtmlElement::new("BODY", None, true);
-	body.push_element(make_title(format!("bs_call Report: Project {}", project)));
 	let mut table = HtmlTable::new("hor-zebra");
 	let f = |x| {
 		if x > 1_000_000_000 { format!("{:.2} Tb", (x as f64) / 1_000_000_000.0)}
@@ -1115,7 +1114,7 @@ fn worker_thread(tx: mpsc::Sender<(isize, usize)>, rx: mpsc::Receiver<Option<Rep
 	Ok(())
 }
 
-fn prepare_jobs(svec: &[CallJsonFiles], project: &str, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Vec<ReportJob> {
+fn prepare_jobs(svec: &[CallJsonFiles], project: &str, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexBare>>) -> Vec<ReportJob> {
 	let mut v = Vec::new();
 	for cjson in svec.iter() {
 		let call_json = Arc::new(RwLock::new(None));
@@ -1131,7 +1130,7 @@ fn prepare_jobs(svec: &[CallJsonFiles], project: &str, summary: Arc<Mutex<HashMa
 	v
 }
 
-pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, page_size: PageSize, css: &Path, n_cores: usize, svec: Vec<CallJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
+pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, n_cores: usize, svec: Vec<CallJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
 	utils::check_signal(Arc::clone(&sig))?;
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
 	let report_tex_path = outputs.first().expect("No output files for call report");
@@ -1143,8 +1142,7 @@ pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opt
 	let mut shash = HashMap::new();
 	for cjson in svec.iter() { shash.insert(cjson.barcode.clone(), CallSummary::new()); }
 	let summary = Arc::new(Mutex::new(shash));
-	let latex_doc = Arc::new(Mutex::new(LatexDoc::new(&report_tex_path, page_size, format!("Methylation and Variant Report for Project {}", project).as_str(), "gemBS")?));
-
+	let latex_doc = Arc::new(Mutex::new(LatexBare::new(&report_tex_path)?));
 	let mut job_vec = prepare_jobs(&svec, &project, summary.clone(), latex_doc.clone());
 	let (ctr_tx, ctr_rx) = mpsc::channel();
 	let mut avail = Vec::new();
@@ -1255,7 +1253,7 @@ pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opt
 	}
 	if abort { Err("Map-report generation failed".to_string()) }
 	else {
-		create_summary(output_dir, &project, summary, latex_doc)?; 
+		create_summary(output_dir, summary, latex_doc)?; 
 		make_map_report::copy_css(output_dir, css)?;
 		Ok(None) 
 

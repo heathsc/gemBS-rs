@@ -186,29 +186,17 @@ subcommands:
         groups:
           - sample_desc:
              args: [sample, barcode] 
-    - map-report:
+    - report:
         setting: DeriveDisplayOrder
-        about: Generate mapping summary report
-        args:
-          - project: {short: p, long: project, value_name: NAME, takes_value: true, help: Output title for report (project name)}
-          - report_dir: {short: r, long: report-dir, value_name: PATH, takes_value: true, help: Root directory for reports}
-          - paper_size: {short: S, long: paper-size, help: Select paper size for latex versions of report, takes_value: true, value_name: PAPER_SIZE, possible_values: [a4, letter], case_insensitive: true}
-          - mapq_threshold: {short: q, long: mapq-threshold, value_name: MAPQ_THRESHOLD, takes_value: true, help: Threshold for MAPQ scores}
-          - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
-          - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
-          - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
-          - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
-          - dry_run: {long: dry-run, help: Output pending commands without execution}
-          - json: {long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
-    - call-report:
-        setting: DeriveDisplayOrder
-        about: Generate calling summary report
+        about: Generate QC report
         args:
           - project: {short: p, long: project, value_name: NAME, takes_value: true, help: Output title for report (project name)}
           - report_dir: {short: r, long: report-dir, value_name: PATH, takes_value: true, help: Root directory for reports}
           - paper_size: {short: S, long: paper-size, help: Select paper size for latex versions of report, takes_value: true, value_name: PAPER_SIZE, possible_values: [a4, letter], case_insensitive: true}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
+          - mapping: {short: M, long: mapping, help: Generate mapping report}
+          - calling: {short: C, long: calling, help: Generate calling report}
           - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
           - dry_run: {long: dry-run, help: Output pending commands without execution}

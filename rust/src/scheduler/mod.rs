@@ -16,7 +16,7 @@ use crate::common::utils::{Pipeline, FileLock};
 use crate::common::utils;
 use crate::common::latex_utils::PageSize;
 use crate::common::assets::{GetAsset};
-use crate::commands::report::{make_map_report, make_call_report};
+use crate::commands::report::{make_map_report, make_call_report, make_report};
 
 use report::{MergeJsonFiles, SampleJsonFiles, CallJsonFiles};
 
@@ -132,6 +132,7 @@ pub fn get_command_req(gem_bs: &GemBS, com: Command) -> (f64, usize) {
 		Command::Extract => get_requirements(gem_bs, Section::Extract, false),
 		Command::MapReport => get_requirements(gem_bs, Section::Report, false),
 		Command::CallReport => get_requirements(gem_bs, Section::Report, false),
+		Command::Report => get_requirements(gem_bs, Section::Report, false),
 		Command::MD5Sum => (1.0, 0), // No special requirement for MD5Sum, and it can not be multithreaded
 		Command::MergeBams => get_merge_bam_req(gem_bs),
 		Command::MergeBcfs => get_merge_bcf_req(gem_bs),
@@ -236,8 +237,9 @@ impl<'a> Scheduler<'a> {
 
 #[derive(Debug)]
 pub enum QPipeCom { 
-	MapReport((Option<String>, PageSize, PathBuf, usize, usize, Vec<SampleJsonFiles>)), 
-	CallReport((Option<String>, PageSize, PathBuf, usize, Vec<CallJsonFiles>)),
+	MapReport((Option<String>, PathBuf, usize, usize, Vec<SampleJsonFiles>)), 
+	CallReport((Option<String>, PathBuf, usize, Vec<CallJsonFiles>)),
+	Report((Option<String>, PageSize)),
 	MergeCallJsons(MergeJsonFiles),
 }
 
@@ -301,6 +303,7 @@ fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: u
 		Command::Extract => Some(extract::make_extract_pipeline(gem_bs, job)),
 		Command::MapReport => Some(report::make_map_report_pipeline(gem_bs, job)),
 		Command::CallReport => Some(report::make_call_report_pipeline(gem_bs, job)),
+		Command::Report => Some(report::make_report_pipeline(gem_bs, job)),
 		Command::MergeCallJsons => Some(report::make_merge_call_jsons_pipeline(gem_bs, job)),
 	}
 }
@@ -327,8 +330,9 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 					QPipeStage::Internal(com) => {
 						let ret = match com {
 							QPipeCom::MergeCallJsons(x) => report::merge_call_jsons(Arc::clone(&qpipe.sig), &qpipe.outputs, &x),
-							QPipeCom::MapReport((prj, page_size, cdir, thresh, nc, x)) => make_map_report::make_map_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, page_size, &cdir, thresh, nc, x),
-							QPipeCom::CallReport((prj, page_size, cdir, nc, x)) => make_call_report::make_call_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, page_size, &cdir, nc, x),					
+							QPipeCom::MapReport((prj, cdir, thresh, nc, x)) => make_map_report::make_map_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, &cdir, thresh, nc, x),
+							QPipeCom::CallReport((prj, cdir, nc, x)) => make_call_report::make_call_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, &cdir, nc, x),					
+							QPipeCom::Report((prj, page_size)) => make_report::make_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, page_size),
 						};
 						if ret.is_err() {
 							error!("Error returned from internal pipeline command");

@@ -69,8 +69,7 @@ pub fn make_map_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	}
 	let mut css_dir = gem_bs.get_css_path();
 	css_dir.push("style.css");
-	let page_size = if let Some(DataValue::PageSize(s)) = gem_bs.get_config(Section::Report, "paper_size") { *s } else { PageSize::A4 };
-	let com = QPipeCom::MapReport((project, page_size, css_dir, mapq_thresh as usize, n_cores, json_files));
+	let com = QPipeCom::MapReport((project, css_dir, mapq_thresh as usize, n_cores, json_files));
 	pipeline.add_com(com);
 	pipeline		
 }
@@ -93,8 +92,19 @@ pub fn make_call_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	}
 	let mut css_dir = gem_bs.get_css_path();
 	css_dir.push("style.css");
-	let page_size = if let Some(DataValue::PageSize(s)) = gem_bs.get_config(Section::Report, "paper_size") { *s } else { PageSize::A4 };
-	let com = QPipeCom::CallReport((project, page_size, css_dir, n_cores, json_files));
+	let com = QPipeCom::CallReport((project, css_dir, n_cores, json_files));
+	pipeline.add_com(com);
+	pipeline		
+}
+
+pub fn make_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
+{
+	let task = &gem_bs.get_tasks()[job];
+	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
+	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get report output asset").path()); }
+	let project = gem_bs.get_config_str(Section::Report, "project").map(|x| x.to_owned());
+	let page_size = if let Some(DataValue::PageSize(s)) = gem_bs.get_config(Section::Report, "paper_size") { *s } else { PageSize::A4 };	
+	let com = QPipeCom::Report((project, page_size));
 	pipeline.add_com(com);
 	pipeline		
 }

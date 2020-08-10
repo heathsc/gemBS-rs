@@ -3,6 +3,7 @@
 
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use crate::common::defs::{Section, DataValue, Command, Metadata};
 use crate::common::assets::{AssetType, GetAsset};
@@ -24,7 +25,7 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let samples = gem_bs.get_samples();
 	let mut json_files = Vec::new();
 	let mut out_vec = Vec::new();
-	out_vec.push(handle_file(gem_bs, "map_report_report.tex", "map_report.tex", &report_dir));
+	out_vec.push(handle_file(gem_bs, "map_report.tex", "map_report.tex", &report_dir));
 	out_vec.push(handle_file(gem_bs, "map_report_index.html", "index.html", &report_dir));
 	out_vec.push(handle_file(gem_bs, "style.css", "style.css", &css_dir));
 	for (bc, _) in samples.iter() { 
@@ -76,7 +77,7 @@ pub fn check_call_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let samples = gem_bs.get_samples();
 	let mut json_files = Vec::new();
 	let mut out_vec = Vec::new();
-	out_vec.push(handle_file(gem_bs, "call_report_report.tex", "call_report.tex", &report_dir));
+	out_vec.push(handle_file(gem_bs, "call_report.tex", "call_report.tex", &report_dir));
 	out_vec.push(handle_file(gem_bs, "call_report_index.html", "index.html", &report_dir));
 	for (bc, _) in samples.iter() { 
 		let bc_dir: PathBuf = [&report_dir, Path::new(bc)].iter().collect();
@@ -102,5 +103,32 @@ pub fn check_call_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.add_task_inputs(task, &json_files).add_outputs(&out_vec).add_cores(cores).add_memory(memory).add_time(time);
 	out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &json_files));
 	
+	Ok(())
+}
+
+pub fn check_report(gem_bs: &mut GemBS) -> Result<(), String> {
+	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Report, name ) { x } else { "gemBS_reports" } };
+	let rdir = PathBuf::from_str(get_dir("report_dir")).map_err(|e| format!("{}", e))?;
+	let project = gem_bs.get_config_str(Section::Report, "project");
+	let cores = Some(1);
+	let memory = gem_bs.get_config_memsize(Section::Report, "memory");
+	let time = gem_bs.get_config_joblen(Section::Report, "time").or_else(|| Some(3600.into()));
+	let mut in_vec = Vec::new();
+	in_vec.push(gem_bs.get_asset("map_report_index.html").expect("Couldn't find map report index asset").idx());
+	in_vec.push(gem_bs.get_asset("map_report.tex").expect("Couldn't find map report latex asset").idx());
+	in_vec.push(gem_bs.get_asset("call_report_index.html").expect("Couldn't find call report index asset").idx());
+	in_vec.push(gem_bs.get_asset("call_report.tex").expect("Couldn't find call report latex asset").idx());
+	let handle_file = |gb: &mut GemBS, id: &str, nm: String, p: &Path| {
+		let path: PathBuf = [p, Path::new(&nm)].iter().collect();
+		gb.insert_asset(id, &path, AssetType::Derived)
+	}; 
+	let mut out_vec = Vec::new();
+	let name = if let Some(s) = project { format!("{}_QC_Report", s) } else { "GemBS_QC_Report".to_string() };
+	out_vec.push(handle_file(gem_bs, "report.tex", format!("{}.tex", name), &rdir));
+	out_vec.push(handle_file(gem_bs, "report.html", format!("{}.html", name), &rdir));
+	out_vec.push(handle_file(gem_bs, "report.pdf", format!("{}.pdf", name), &rdir));
+	let task = gem_bs.add_task("report", "Generate report", Command::Report, "");
+	gem_bs.add_task_inputs(task, &in_vec).add_outputs(&out_vec).add_cores(cores).add_memory(memory).add_time(time);
+	out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &in_vec));
 	Ok(())
 }

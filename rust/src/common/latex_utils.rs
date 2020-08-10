@@ -161,20 +161,17 @@ impl fmt::Display for SectionArray {
 	}
 }
 
-pub struct LatexDoc {
-	title: String,
-	author: String,
-	page_size: PageSize,
+// Just a bare collection of latex sections with no preamble etc.
+pub struct LatexBare {
 	body: Vec<LatexContent>,
 	sections: SectionArray,
 	path: PathBuf,
-	sec_hash: HashMap<String, usize>,
+	sec_hash: HashMap<String, usize>,	
 }
 
-impl LatexDoc {
-	pub fn new(path: &Path, page_size: PageSize, title: &str, author: &str) -> Result<Self, String> { 
-		Ok(LatexDoc{ title: latex_escape_str(title), author: author.to_owned(), page_size, sections: SectionArray::new(), 
-			body: Vec::new(), path: path.to_owned(), sec_hash: HashMap::new() })
+impl LatexBare {
+	pub fn new(path: &Path) -> Result<Self, String> { 
+		Ok(LatexBare{ sections: SectionArray::new(), body: Vec::new(), path: path.to_owned(), sec_hash: HashMap::new() })
 	}
 	pub fn push_section(&mut self, s: LatexSection) -> Result<(), String> { 
 		if self.sec_hash.contains_key(&s.sort_tag) { Err(format!("Error inserting LatexSection: tag {} already exists", s.sort_tag)) } 
@@ -193,6 +190,31 @@ impl LatexDoc {
 	pub fn push(&mut self, c: LatexContent) { self.body.push(c) }
 }
 
+impl Drop for LatexBare {
+	fn drop(&mut self) {
+		if let Ok(ofile) = fs::File::create(&self.path) {
+			let mut writer = Box::new(BufWriter::new(ofile));
+			for x in &self.body { let _ = write!(writer, "{}", x); }
+			let _ = write!(writer, "{}", self.sections);
+		}
+	}
+}
+
+pub struct LatexDoc {
+	title: String,
+	author: String,
+	page_size: PageSize,
+	body: Vec<LatexContent>,
+	path: PathBuf,
+}
+
+impl LatexDoc {
+	pub fn new(path: &Path, page_size: PageSize, title: &str, author: &str) -> Result<Self, String> { 
+		Ok(LatexDoc{ title: latex_escape_str(title), author: author.to_owned(), page_size, body: Vec::new(), path: path.to_owned() })
+	}
+	pub fn push(&mut self, c: LatexContent) { self.body.push(c) }
+}
+
 impl Drop for LatexDoc {
 	fn drop(&mut self) {
 		if let Ok(ofile) = fs::File::create(&self.path) {
@@ -201,11 +223,15 @@ impl Drop for LatexDoc {
 				PageSize::A4 => "a4paper",
 				PageSize::Letter => "letter",
 			};
-			let _ = writeln!(writer, "\\documentclass[12pt]{{article}}");
+			let _ = writeln!(writer, "\\documentclass[12pt]{{book}}");
 			let _ = writeln!(writer, "\\usepackage[T1]{{fontenc}}\n\\usepackage{{array}}");
 			let _ = writeln!(writer, "\\usepackage[table]{{xcolor}}");
 			let _ = writeln!(writer, "\\usepackage{{geometry}}\n\\geometry{{{}, left=15mm, top=20mm}}", sz);
 			let _ = writeln!(writer, "\\usepackage{{graphicx}}");
+			let _ = writeln!(writer, "\\graphicspath{{{{./mapping/}}{{./calling/}}}}");
+			let _ = writeln!(writer, "\\usepackage{{titlesec}}");
+			let _ = writeln!(writer, "\\titleformat{{\\chapter}}[display]{{\\bfseries\\Large\\itshape}}{{Section\\ \\thechapter}}{{0.5ex}}{{\\rule{{\\textwidth}}{{1pt}}");
+			let _ = writeln!(writer, "\\vspace{{1ex}}\\centering}}[\\vspace{{-0.5ex}}\\rule{{\\textwidth}}{{0.3pt}}]");		
 			let _ = writeln!(writer, "\\usepackage{{hyperref}}\n\\hypersetup{{colorlinks=true}}");
 			let _ = writeln!(writer, "\\setlength{{\\arrayrulewidth}}{{0.5mm}}\n\\renewcommand{{\\arraystretch}}{{1.5}}");
 			let _ = writeln!(writer, "\\title{{{}}}", self.title);
@@ -214,7 +240,6 @@ impl Drop for LatexDoc {
 			let _ = writeln!(writer, "\\begin{{document}}");
 			let _ = writeln!(writer, "\\begin{{titlepage}}\n\\maketitle\n\\tableofcontents\n\\end{{titlepage}}");
 			for x in &self.body { let _ = write!(writer, "{}", x); }
-			let _ = write!(writer, "{}", self.sections);
 			let _ = writeln!(writer, "\\end{{document}}");
 		}
 	}

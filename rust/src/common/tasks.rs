@@ -73,7 +73,9 @@ impl Task {
 	pub fn command(&self) -> Command { self.command }
 	pub fn status(&self) -> Option<TaskStatus> { self.status }
 	pub fn clear_status(&mut self) { self.status = None; }
-	pub fn add_parent(&mut self, ix: usize) { self.parents.push(ix) }
+	pub fn add_parent(&mut self, ix: usize) { 
+		if !self.parents.contains(&ix) { self.parents.push(ix) } 
+	}
 	pub fn parents(&self) -> &[usize] { &self.parents }
 	pub fn log(&self) -> Option<usize> { self.log }
 	pub fn inputs(&self) -> std::slice::Iter<'_, usize> { self.inputs.iter() }

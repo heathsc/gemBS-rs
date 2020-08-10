@@ -276,6 +276,7 @@ impl GemBS {
 		check_report::check_map_report(self)?;
 		check_call::check_call(self)?;
 		check_report::check_call_report(self)?;
+		check_report::check_report(self)?;
 		check_extract::check_extract(self)?;
 		self.asset_digest = Some(self.assets.get_digest());
 		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());

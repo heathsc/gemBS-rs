@@ -94,13 +94,9 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 			debug!("User entered 'run' command");
 			commands::run::run_command(m_sum, gem_bs)
 		},
-		("map-report", Some(m_sum)) => {
-			debug!("User entered 'map-report' command");
-			commands::report::map_report_command(m_sum, gem_bs)
-		},
-		("call-report", Some(m_sum)) => {
-			debug!("User entered 'call-report' command");
-			commands::report::call_report_command(m_sum, gem_bs)
+		("report", Some(m_sum)) => {
+			debug!("User entered 'report' command");
+			commands::report::report_command(m_sum, gem_bs)
 		},
 		_ => {
 			Err("Unknown subcommand".to_string())

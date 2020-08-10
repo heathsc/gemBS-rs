@@ -577,7 +577,7 @@ fn create_sample_report(job: ReportJob) -> Result<(), String> {
 	}
 }
 
-fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<Vec<SampleSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Result<(), String> {
+fn create_summary(dir: &Path, summary: Arc<Mutex<Vec<SampleSummary>>>, latex_doc: Arc<Mutex<LatexBare>>) -> Result<(), String> {
 	let mut path = dir.to_owned();
 	path.push("index.html");
 	let mut html = HtmlPage::new(&path)?;
@@ -587,7 +587,6 @@ fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<Vec<SampleSummar
 	head_element.push_element(style_element);
 	html.push_element(head_element);
 	let mut body = HtmlElement::new("BODY", None, true);
-	body.push_element(make_title(format!("Methylation Pipeline Report: Project {}", project)));
 	let mut table = HtmlTable::new("hor-zebra");
 	let mut ltable = LatexTable::new();
 	table.add_header(vec!("Sample", "Reads", "Fragments", "Unique (%)", "Conv. Rate", "Over Conv. Rate"));
@@ -599,7 +598,7 @@ fn create_summary(dir: &Path, project: &str, summary: Arc<Mutex<Vec<SampleSummar
 			let mut lrow = Vec::new();
 			let mut link = HtmlElement::new("a", Some(format!("class=\"link\" href=\"{}/{}.html\"", s.barcode, s.barcode).as_str()), true);
 			link.push_str(s.barcode.as_str());
-			row.push(format!("{}", link));
+			row.push(format!("&#187 {}", link));
 			lrow.push(s.barcode.clone());
 			row.push(format!("{}", s.reads));
 			lrow.push(format!("{}", s.reads));
@@ -653,7 +652,7 @@ fn worker_thread(tx: mpsc::Sender<(isize, usize)>, rx: mpsc::Receiver<Option<Rep
 }
 
 fn prepare_jobs(svec: &[SampleJsonFiles], project: &str, mapq_threshold: usize, 
-	summary: Arc<Mutex<Vec<SampleSummary>>>, latex_doc: Arc<Mutex<LatexDoc>>) -> Vec<ReportJob> {
+	summary: Arc<Mutex<Vec<SampleSummary>>>, latex_doc: Arc<Mutex<LatexBare>>) -> Vec<ReportJob> {
 	let mut v = Vec::new();
 	for hr in svec.iter() {
 		// First push sample report job
@@ -681,7 +680,7 @@ pub fn copy_css(output_dir: &Path, css: &Path) -> Result<(), String> {
 	Ok(())
 }
 
-pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, page_size: PageSize, css: &Path, mapq_threshold: usize, n_cores: usize, svec: Vec<SampleJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
+pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, mapq_threshold: usize, n_cores: usize, svec: Vec<SampleJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
 	utils::check_signal(Arc::clone(&sig))?;
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
 	let report_tex_path = outputs.first().expect("No output files for map report");
@@ -703,7 +702,7 @@ pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opti
 	}
 	// Prepare jobs
 	let summary = Arc::new(Mutex::new(Vec::new()));
-	let latex_doc = Arc::new(Mutex::new(LatexDoc::new(&report_tex_path, page_size, format!("Mapping Report for Project {}", project).as_str(), "gemBS")?));
+	let latex_doc = Arc::new(Mutex::new(LatexBare::new(&report_tex_path)?));
 	
 	let mut job_vec = prepare_jobs(&svec, &project, mapq_threshold, summary.clone(), latex_doc.clone());
 	let mut abort = false;
@@ -811,7 +810,7 @@ pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opti
 	}
 	if abort { Err("Map-report generation failed".to_string()) }
 	else {
-		create_summary(output_dir, &project, summary, latex_doc)?; 
+		create_summary(output_dir, summary, latex_doc)?; 
 		copy_css(output_dir, css)?;
 		Ok(None)
 	}

@@ -145,6 +145,8 @@ lazy_static! {
 	  	m.push(("project", OptionType::Global("project", VarType::String)));
 	  	m.push(("report_dir", OptionType::Global("report_dir", VarType::String)));
 	  	m.push(("paper_size", OptionType::Global("paper_size", VarType::PageSize)));
+      	m.push(("mapping", OptionType::Special("_mapping", VarType::Bool)));
+      	m.push(("calling", OptionType::Special("_calling", VarType::Bool)));
         m
     };
 }
