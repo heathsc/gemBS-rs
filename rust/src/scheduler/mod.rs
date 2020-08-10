@@ -239,7 +239,7 @@ impl<'a> Scheduler<'a> {
 pub enum QPipeCom { 
 	MapReport((Option<String>, PathBuf, usize, usize, Vec<SampleJsonFiles>)), 
 	CallReport((Option<String>, PathBuf, usize, Vec<CallJsonFiles>)),
-	Report((Option<String>, PageSize)),
+	Report((Option<String>, PageSize, bool)),
 	MergeCallJsons(MergeJsonFiles),
 }
 
@@ -332,7 +332,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 							QPipeCom::MergeCallJsons(x) => report::merge_call_jsons(Arc::clone(&qpipe.sig), &qpipe.outputs, &x),
 							QPipeCom::MapReport((prj, cdir, thresh, nc, x)) => make_map_report::make_map_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, &cdir, thresh, nc, x),
 							QPipeCom::CallReport((prj, cdir, nc, x)) => make_call_report::make_call_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, &cdir, nc, x),					
-							QPipeCom::Report((prj, page_size)) => make_report::make_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, page_size),
+							QPipeCom::Report((prj, page_size, pdf)) => make_report::make_report(Arc::clone(&qpipe.sig), &qpipe.outputs, prj, page_size, pdf),
 						};
 						if ret.is_err() {
 							error!("Error returned from internal pipeline command");

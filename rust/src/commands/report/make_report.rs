@@ -1,7 +1,8 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::io::BufRead;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use std::fs;
 
 use crate::common::utils;
 use super::make_map_report::{make_title, make_section};
@@ -34,12 +35,36 @@ fn create_latex_report(path: &PathBuf, project: &str, page_size: PageSize) -> Re
 	Ok(())	
 }
 
-pub fn make_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, page_size: PageSize) -> Result<Option<Box<dyn BufRead>>, String> {
+pub fn make_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, page_size: PageSize, pdf: bool) -> Result<Option<Box<dyn BufRead>>, String> {
 	utils::check_signal(Arc::clone(&sig))?;
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
 	let report_tex_path = outputs.get(0).expect("No output files for report");
 	let report_html_path = outputs.get(1).expect("No html output file for report");
+	let output_dir = report_tex_path.parent().expect("No parent directory found for map report");
 	create_html_report(report_html_path, &project)?;
 	create_latex_report(report_tex_path, &project, page_size)?;
+	if pdf {	
+		let report_pdf_path = outputs.get(2).expect("No pdf output file for report");
+		let pdf_name = Path::new(report_pdf_path.file_name().expect("No file name for pdf output file"));
+		let mut pipeline = utils::Pipeline::new();
+		let tex_name = format!("{}", report_tex_path.display());
+		let args = vec!("-pdf", "-silent", "-cd", "-outdir=.latexwork", &tex_name);
+		let path = Path::new("latexmk");
+		let ofile = output_dir.join("latexmk.log");
+		pipeline.add_stage(&path, Some(args.iter())).log_file(output_dir.join("latexmk.err")).out_file(&ofile);
+		let tdir = output_dir.join(".latexwork");
+		match pipeline.run(Arc::clone(&sig)) {
+			Ok(_) => {
+				fs::rename(tdir.join(pdf_name), report_pdf_path).map_err(|e| format!("Could not find output pdf file: {}", e))?;
+				fs::remove_dir_all(tdir).map_err(|e| format!("Could not remove latexmk work directory: {}", e))?;
+				let _ = fs::remove_file(output_dir.join("latexmk.err"));
+				let _ = fs::remove_file(ofile);
+			},
+			Err(e) => {
+				let _ = fs::remove_dir_all(tdir);
+				return Err(e);
+			}
+		}
+	}
 	Ok(None)
 }

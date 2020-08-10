@@ -126,7 +126,9 @@ pub fn check_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let name = if let Some(s) = project { format!("{}_QC_Report", s) } else { "GemBS_QC_Report".to_string() };
 	out_vec.push(handle_file(gem_bs, "report.tex", format!("{}.tex", name), &rdir));
 	out_vec.push(handle_file(gem_bs, "report.html", format!("{}.html", name), &rdir));
-	out_vec.push(handle_file(gem_bs, "report.pdf", format!("{}.pdf", name), &rdir));
+	if gem_bs.get_config_bool(Section::Report, "pdf") {
+		out_vec.push(handle_file(gem_bs, "report.pdf", format!("{}.pdf", name), &rdir));
+	}
 	let task = gem_bs.add_task("report", "Generate report", Command::Report, "");
 	gem_bs.add_task_inputs(task, &in_vec).add_outputs(&out_vec).add_cores(cores).add_memory(memory).add_time(time);
 	out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &in_vec));
