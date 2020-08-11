@@ -2,7 +2,7 @@
 
 all: bin
 	cargo build --release 
-	cp target/release/gem_bs bin/
+	cp target/release/gem_bs bin/gemBS
 
 bin:
 	mkdir bin
