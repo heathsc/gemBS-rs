@@ -27,7 +27,7 @@ install: all installdirs
 	cp c_tools/bs_call/bin/* $(bin_dir)
 	cp c_tools/gem3-mapper/bin/gem-mapper $(bin_dir)
 	cp c_tools/gem3-mapper/bin/gem-indexer $(bin_dir)
-	cp etc/css/style.css $(etc_dir)
+	cp etc/css/style.css $(css_dir)
 	cp etc/config_scripts/*.conf $(cfg_dir)
 
 installdirs: $(INSTALLDIRS)
