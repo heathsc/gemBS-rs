@@ -152,7 +152,7 @@ static void process(bcf1_t * const rec, rec_t * const rc, char ** cxp, int32_t *
 					if(tty) {
 						fprintf(stderr,"Reading %s (%.1f%% completed)                                                      \r", args->sr->regions->seq_names[id], 0.1 * (double)complete);
 					} else {
-						fprintf(stderr,"Reading %s\n", args->sr->regions->seq_names[id], complete);
+						fprintf(stderr,"Reading %s\n", args->sr->regions->seq_names[id]);
 					}
 				}
 			}
