@@ -1,7 +1,8 @@
+include ../gemBS_config.mk
 .PHONY: all clean distclean
 
 all: bin
-	cargo build --release 
+	GEMBS_INSTALL_ROOT=$(GEMBS_INSTALL_ROOT) cargo build --release 
 	cp target/release/gem_bs bin/gemBS
 
 bin:
