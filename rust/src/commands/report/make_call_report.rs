@@ -1250,7 +1250,7 @@ pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opt
 			}
 		}
 	}
-	if abort { Err("Map-report generation failed".to_string()) }
+	if abort { Err("Call report generation failed".to_string()) }
 	else {
 		create_summary(output_dir, summary, latex_doc)?; 
 		make_map_report::copy_css(output_dir, css)?;
