@@ -52,6 +52,8 @@ pub fn make_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<S
 		let ofile = output_dir.join("latexmk.log");
 		pipeline.add_stage(&path, Some(args.iter())).log_file(output_dir.join("latexmk.err")).out_file(&ofile);
 		let tdir = output_dir.join(".latexwork");
+		// Older versions of latexmk need the output directory to exist before running
+		fs::create_dir_all(&tdir).expect("Could not create temporary output directory for latexmk");	
 		match pipeline.run(Arc::clone(&sig)) {
 			Ok(_) => {
 				fs::rename(tdir.join(pdf_name), report_pdf_path).map_err(|e| format!("Could not find output pdf file: {}", e))?;
