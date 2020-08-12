@@ -20,4 +20,6 @@ From: ubuntu:xenial
     git clone --recursive https://github.com/heathsc/gemBS-rs.git
     (cd gemBS-rs; PATH=$PATH:/root/.cargo/bin make install)
     (cd /usr/local/bin; ln -s /usr/local/lib/gemBS/bin/* .)
+	 sh gemBS-rs/latex/latex_install.sh
+    cd
     rm -rf /usr/local/build

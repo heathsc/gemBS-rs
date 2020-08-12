@@ -4,6 +4,6 @@ geometry hyperref pdftexcmds infwarerr kvoptions epstopdf-pkg"
 wget http://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz
 tar zxf install-tl-unx.tar.gz && rm install-tl-unx.tar.gz
 cd install-tl-*
-./install-tl -profile ../gemBS-rs/gembs_texlive.profile
+./install-tl -profile ../gemBS-rs/latex/gembs_texlive.profile
 /usr/local/texlive/bin/*/tlmgr install $PKGS
 /usr/local/texlive/bin/*/tlmgr path add
