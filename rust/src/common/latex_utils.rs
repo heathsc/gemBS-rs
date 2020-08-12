@@ -224,7 +224,7 @@ impl Drop for LatexDoc {
 				PageSize::Letter => "letter",
 			};
 			let _ = writeln!(writer, "\\documentclass[12pt]{{book}}");
-			let _ = writeln!(writer, "\\usepackage[T1]{{fontenc}}\n\\usepackage{{array}}");
+			let _ = writeln!(writer, "\\usepackage[T1]{{fontenc}}\n\\usepackage{{lmodern}}\n\\usepackage{{array}}");
 			let _ = writeln!(writer, "\\usepackage[table]{{xcolor}}");
 			let _ = writeln!(writer, "\\usepackage{{geometry}}\n\\geometry{{{}, left=15mm, top=20mm}}", sz);
 			let _ = writeln!(writer, "\\usepackage{{graphicx}}");

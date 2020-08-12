@@ -1,4 +1,4 @@
-PKGS="latex-bin latexmk ec cm-super colortbl titlesec latex-tools-dev xcolor \
+PKGS="latex-bin latexmk ec colortbl titlesec latex-tools-dev xcolor \
 geometry hyperref pdftexcmds infwarerr kvoptions epstopdf-pkg"
 
 wget http://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz
