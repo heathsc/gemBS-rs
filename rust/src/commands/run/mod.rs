@@ -30,7 +30,7 @@ pub fn run_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	// Get JSON config file from disk
 	gem_bs.read_json_config()?;
 	
-	let options = handle_options(m, gem_bs, Section::Index);
+	let options = handle_options(m, gem_bs, Section::Default);
 	let task_path = gem_bs.get_task_file_path();
 	let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?; 
 	gem_bs.setup_assets_and_tasks(&flock)?;

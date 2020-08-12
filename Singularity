@@ -2,7 +2,7 @@ BootStrap: docker
 From: ubuntu:xenial
 
 %runscript
-    exec /usr/local/bin/gemBS $@
+    exec gemBS $@
 
 %environment
     export PATH=/usr/local/lib/gemBS/bin:/usr/local/lib/gemBS/texlive/bin/x86_64-linux:$PATH
