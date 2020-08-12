@@ -10,6 +10,5 @@ bin:
 clean:
 	rm -rf target
 
-dist_clean: clean
+distclean: clean
 	rm -rf bin
-
