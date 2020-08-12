@@ -3,6 +3,9 @@
 all: gemBS_config.mk
 	$(MAKE) -f Makefile.gemBS
 
+install: gemBS_config.mk
+	$(MAKE) -f Makefile.gemBS install
+	
 gemBS_config.mk: gemBS_config.mk.in
 	cp $< $@
 
