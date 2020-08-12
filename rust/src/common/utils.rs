@@ -1,6 +1,6 @@
 use std::fs;
 use std::os::unix::fs::{symlink, MetadataExt};
-use std::process::{Command, Stdio, Child, ChildStdout};
+use std::process::{Command, Stdio, Child};
 use std::process;
 use std::path::{Path, PathBuf};
 use std::ffi::{OsString, OsStr};
@@ -12,7 +12,6 @@ use std::sync::Arc;
 use std::{thread, time};
 use blake2::{Blake2b, Digest};
 
-use super::compress::ReadType;
 use crate::common::defs::{SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 
 pub fn get_inode(name: &str) -> Option<u64> {
@@ -36,13 +35,6 @@ pub fn get_phys_memory() -> Option<usize> {
 
 pub enum PipelineOutput<'a> {
 	File(&'a Path),
-	Pipe,
-	None,
-}
-
-pub enum PipelineInput<'a> {
-	File(&'a Path),
-	Pipe,
 	None,
 }
 
@@ -53,7 +45,6 @@ where
 {
 	stage: Vec<(&'a Path, Option<I>)>,
 	output: PipelineOutput<'a>,
-	input: PipelineInput<'a>,
 	log: Option<PathBuf>,
 	expected_outputs: Vec<&'a Path>,
 }
@@ -64,7 +55,7 @@ where
     S: AsRef<OsStr>,
 {
 	pub fn new() -> Self {
-		Pipeline{stage: Vec::new(), output: PipelineOutput::None, input: PipelineInput::None, log: None, expected_outputs: Vec::new() }
+		Pipeline{stage: Vec::new(), output: PipelineOutput::None, log: None, expected_outputs: Vec::new() }
 	}
 	// Add pipeline stage (command + optional vector of arguments)
 	pub fn add_stage(&mut self, command: &'a Path, args: Option<I>) -> &mut Pipeline<'a, I, S> {
@@ -82,16 +73,6 @@ where
 		self
 	}
 
-	// Get output of pipeline to file
-	pub fn in_file(&mut self, file: &'a Path) -> &mut Pipeline<'a, I, S> {
-		self.input = PipelineInput::File(file);
-		self.add_output(file)
-	}
-	// Send output of pipeline to BufReader
-	pub fn out_pipe(&mut self) -> &mut Pipeline<'a, I, S> {
-		self.output = PipelineOutput::Pipe;
-		self
-	}
 	// Add expected output file to pipeline.  If pipeline finished with an error, the expected output files
 	// will be deleted
 	pub fn add_output(&mut self, file: &'a Path) -> &mut Pipeline<'a, I, S> {
@@ -99,7 +80,7 @@ where
 		self
 	}
 	// Execute the pipeline
-	pub fn run(&mut self, sig: Arc<AtomicUsize>) -> Result<Option<Box<dyn BufRead>>, String> {
+	pub fn run(&mut self, sig: Arc<AtomicUsize>) -> Result<(), String> {
 		let log_file = if let Some(file) = &self.log {
 			let f = fs::File::create(file).map_err(|e| format!("Couldn't open output file {}: {}", file.to_string_lossy(), e))?;
 			Some(f)
@@ -114,32 +95,19 @@ where
 			e
 		})
 	}
-	fn do_run(&mut self, sig: Arc<AtomicUsize>, log: Option<fs::File>) -> Result<Option<Box<dyn BufRead>>, String> {
+	fn do_run(&mut self, sig: Arc<AtomicUsize>, log: Option<fs::File>) -> Result<(), String> {
 		if self.stage.is_empty() { return Err("Error - Empty pipeline".to_string()); }	
 		let mut len = self.stage.len();
 		let mut cinfo: Vec<(Child, &'a Path)> = Vec::new();
 		let mut desc = "Starting pipeline:\n\t".to_string();
-		let mut opipe: Option<ChildStdout> = None;
 		for (com, args) in self.stage.drain(..) {
 			let mut cc = Command::new(com);
 			let mut cc = if let Some((child, _)) = cinfo.last_mut() { 
 				desc.push_str(format!(" | {}", com.to_string_lossy()).as_str());
 				cc.stdin(child.stdout.take().unwrap()) 
 			} else {
-				match self.input {
-					PipelineInput::File(file) => {
-						let fname = file.to_string_lossy();
-						desc.push_str(format!("<cat> {} | {}",fname, com.to_string_lossy()).as_str());
-						match super::compress::open_reader(file).map_err(|e| format!("Couldn't open input file {} for pipeline: {}", fname, e))? {
-							ReadType::File(file) => cc.stdin(file),
-							ReadType::Pipe(pipe) => cc.stdin(pipe),
-						}
-					},
-					_ => {
-						desc.push_str(format!("{}", com.to_string_lossy()).as_str());
-						cc.stdin(Stdio::null())
-					}, 
-				}
+				desc.push_str(format!("{}", com.to_string_lossy()).as_str());
+				cc.stdin(Stdio::null())
 			};
 			if let Some(lfile) = log.as_ref() { 
 				if let Ok(f) = lfile.try_clone() { cc = cc.stderr(f) }
@@ -161,19 +129,12 @@ where
 						desc.push_str(format!(" > {}", fname).as_str());
 						cc = cc.stdout(Stdio::from(f));
 					},
-					PipelineOutput::Pipe => cc = cc.stdout(Stdio::piped()),
 					PipelineOutput::None => (),
 				}
 			}
 			if !arg_vec.is_empty() { cc = cc.args(arg_vec.iter())}
-			let mut child = cc.spawn().map_err(|e| format!("Error - problem launching command {}: {}", com.to_string_lossy(), e))?;
+			let child = cc.spawn().map_err(|e| format!("Error - problem launching command {}: {}", com.to_string_lossy(), e))?;
 			trace!("Launched pipeline command {}", com.to_string_lossy());
-			if let PipelineOutput::Pipe = self.output {
-				if len == 0 { 
-					desc.push_str(" |");
-					opipe = Some(child.stdout.take().unwrap()) 
-				};
-			}
 			cinfo.push((child, com));
 		}
 		info!("{}", desc);
@@ -189,7 +150,7 @@ where
 			},
 			None => {
 				debug!("Pipeline terminated succesfully");
-				if let Some(pipe) = opipe { Ok(Some(Box::new(BufReader::new(pipe)))) } else { Ok(None) }
+				Ok(())
 			},
 		}
 	}

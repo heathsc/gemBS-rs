@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 use std::collections::HashMap; 
-use std::io::BufRead;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
@@ -126,7 +125,7 @@ pub fn make_merge_call_jsons_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	pipeline		
 }
 
-pub fn merge_call_jsons(sig: Arc<AtomicUsize>, outputs: &[PathBuf], sfiles: &MergeJsonFiles) -> Result<Option<Box<dyn BufRead>>, String> {
+pub fn merge_call_jsons(sig: Arc<AtomicUsize>, outputs: &[PathBuf], sfiles: &MergeJsonFiles) -> Result<(), String> {
 	let mut combined_stats: Option<CallJson> = None;
 	for (_, path) in sfiles.json_files.iter() {
 		utils::check_signal(Arc::clone(&sig))?;
@@ -140,6 +139,6 @@ pub fn merge_call_jsons(sig: Arc<AtomicUsize>, outputs: &[PathBuf], sfiles: &Mer
 		let output = outputs.first().expect("No output file for merge JSON command");
 		let wrt = compress::open_bufwriter(&output).map_err(|e| format!("{}", e))?;
 		st.to_writer(wrt)?;
-		Ok(None)
+		Ok(())
 	} else { Err("OK".to_string()) }
 }

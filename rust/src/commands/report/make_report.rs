@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::io::BufRead;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::fs;
@@ -35,7 +34,7 @@ fn create_latex_report(path: &PathBuf, project: &str, page_size: PageSize) -> Re
 	Ok(())	
 }
 
-pub fn make_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, page_size: PageSize, pdf: bool) -> Result<Option<Box<dyn BufRead>>, String> {
+pub fn make_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, page_size: PageSize, pdf: bool) -> Result<(), String> {
 	utils::check_signal(Arc::clone(&sig))?;
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
 	let report_tex_path = outputs.get(0).expect("No output files for report");
@@ -66,5 +65,5 @@ pub fn make_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<S
 			}
 		}
 	}
-	Ok(None)
+	Ok(())
 }

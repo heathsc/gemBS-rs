@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::io::{BufRead, BufReader};
+use std::io::BufReader;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, mpsc, Mutex};
 use std::{fs, thread, time};
@@ -680,7 +680,7 @@ pub fn copy_css(output_dir: &Path, css: &Path) -> Result<(), String> {
 	Ok(())
 }
 
-pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, mapq_threshold: usize, n_cores: usize, svec: Vec<SampleJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
+pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, mapq_threshold: usize, n_cores: usize, svec: Vec<SampleJsonFiles>) -> Result<(), String> {
 	utils::check_signal(Arc::clone(&sig))?;
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
 	let report_tex_path = outputs.first().expect("No output files for map report");
@@ -812,6 +812,6 @@ pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opti
 	else {
 		create_summary(output_dir, summary, latex_doc)?; 
 		copy_css(output_dir, css)?;
-		Ok(None)
+		Ok(())
 	}
 }

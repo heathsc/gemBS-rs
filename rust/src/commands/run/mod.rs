@@ -18,7 +18,7 @@ fn collect_terminal_assets(gem_bs: &mut GemBS, options: &HashMap<&'static str, D
 	for task in gem_bs.get_tasks().iter() {
 		if if let Some(bc) = task.barcode() {
 			! bc_hash.contains(bc) }
-		else { true } { task.outputs().for_each(|x| flag[*x] = false) }
+		else { false } { task.outputs().for_each(|x| flag[*x] = false) }
 	}
 	// Make final list
 	let assets: Vec<_> = gem_bs.get_assets().iter().filter(|x| x.asset_type() == AssetType::Derived).map(|x| x.idx()).filter(|x| flag[*x]).collect();
@@ -36,7 +36,7 @@ pub fn run_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.setup_assets_and_tasks(&flock)?;
 	let assets = collect_terminal_assets(gem_bs, &options)?;
 	let com_set = [Command::Index, Command::Map, Command::MergeBams, Command::MergeCallJsons, Command::Call, Command::MergeBcfs, Command::Extract,
-		Command::MapReport, Command::CallReport, Command::MD5Sum, Command::IndexBcf];
+		Command::MapReport, Command::CallReport, Command::Report, Command::MD5Sum, Command::IndexBcf];
 	let task_list = gem_bs.get_required_tasks_from_asset_list(&assets, &com_set);
 	if options.contains_key("_dry_run") { dry_run::handle_dry_run(gem_bs, &options, &task_list) }
 	if let Some(DataValue::String(json_file)) = options.get("_json") { dry_run::handle_json_tasks(gem_bs, &options, &task_list, json_file)?; }

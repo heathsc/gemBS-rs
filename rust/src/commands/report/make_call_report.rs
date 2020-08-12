@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::io::BufRead;
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, mpsc, Mutex, RwLock};
@@ -19,7 +18,7 @@ use crate::common::latex_utils::*;
 
 enum CovType { All, NonRefCpg, NonRefCpgInf, RefCpg, RefCpgInf, Variant }
 enum QualType { All, RefCpg, NonRefCpg, Variant }
-enum QCDistType { QDVariant, QDNonVariant, RMSVariant, RMSNonVariant }
+enum QCDistType { QD, QDNonVar, RMS, RMSNonVar }
 
 fn prep_hist_vec(ch: &HashMap<usize, usize>) -> (Vec<(usize, usize)>, usize, usize) {
 	let mut total = 0;
@@ -107,10 +106,10 @@ fn make_quality_graph(bc: &str, dir: &Path, qual: QualType, call_json: &CallJson
 fn make_qc_dist_graph(bc: &str, dir: &Path, qual: QCDistType, call_json: &CallJson) -> Result<(), String> {
 	let qc_dist = call_json.qc_dist();
 	let (name, title, xaxis, variant, qv) = match qual {
-		QCDistType::QDVariant => ("qd_variant", "Quality by depth for variant allele", "Quality by Depth", true, &qc_dist.quality_by_depth),
-		QCDistType::QDNonVariant => ("qd_nonvariant", "Quality by depth for non-variant allele", "Quality by Depth", false, &qc_dist.quality_by_depth),
-		QCDistType::RMSVariant => ("rmsmq_variant", "RMS MapQ of variant allele reads", "RMS MapQ", true, &qc_dist.rms_mapping_quality),
-		QCDistType::RMSNonVariant => ("rmsmq_nonvariant", "RMS MapQ of non-variant allele reads", "RMS MapQ", false, &qc_dist.rms_mapping_quality),
+		QCDistType::QD => ("qd_variant", "Quality by depth for variant allele", "Quality by Depth", true, &qc_dist.quality_by_depth),
+		QCDistType::QDNonVar => ("qd_nonvariant", "Quality by depth for non-variant allele", "Quality by Depth", false, &qc_dist.quality_by_depth),
+		QCDistType::RMS => ("rmsmq_variant", "RMS MapQ of variant allele reads", "RMS MapQ", true, &qc_dist.rms_mapping_quality),
+		QCDistType::RMSNonVar => ("rmsmq_nonvariant", "RMS MapQ of non-variant allele reads", "RMS MapQ", false, &qc_dist.rms_mapping_quality),
 	};
 	let path: PathBuf = [dir, Path::new(format!("{}_{}.png", bc, name).as_str())].iter().collect();
 	let mut th = HashMap::new();
@@ -1059,10 +1058,10 @@ fn make_call_job(bc: &str, bc_dir: &Path, project: &str, job: MakeCallJob) -> Re
 		CallJob::QualityRefCpg => make_quality_graph(bc, &img_dir, QualType::RefCpg, cj),
 		CallJob::QualityNonRefCpg => make_quality_graph(bc, &img_dir, QualType::NonRefCpg, cj),
 		CallJob::QualityVariant => make_quality_graph(bc, &img_dir, QualType::Variant, cj),
-		CallJob::QdVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::QDVariant, cj),
-		CallJob::QdNonVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::QDNonVariant, cj),
-		CallJob::RmsMqVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::RMSVariant, cj),
-		CallJob::RmsMqNonVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::RMSNonVariant, cj),
+		CallJob::QdVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::QD, cj),
+		CallJob::QdNonVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::QDNonVar, cj),
+		CallJob::RmsMqVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::RMS, cj),
+		CallJob::RmsMqNonVariant => make_qc_dist_graph(bc, &img_dir, QCDistType::RMSNonVar, cj),
 		CallJob::GCCoverage => make_gc_coverage_heatmap(bc, &img_dir, cj),
 		CallJob::MethylationLevels => make_meth_level_chart(bc, &img_dir, cj),
 		CallJob::NonCpgReadProfile => make_noncpg_read_profile(bc, &img_dir, cj),
@@ -1130,7 +1129,7 @@ fn prepare_jobs(svec: &[CallJsonFiles], project: &str, summary: Arc<Mutex<HashMa
 	v
 }
 
-pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, n_cores: usize, svec: Vec<CallJsonFiles>) -> Result<Option<Box<dyn BufRead>>, String> {
+pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, n_cores: usize, svec: Vec<CallJsonFiles>) -> Result<(), String> {
 	utils::check_signal(Arc::clone(&sig))?;
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
 	let report_tex_path = outputs.first().expect("No output files for call report");
@@ -1255,7 +1254,7 @@ pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opt
 	else {
 		create_summary(output_dir, summary, latex_doc)?; 
 		make_map_report::copy_css(output_dir, css)?;
-		Ok(None) 
+		Ok(()) 
 
 	}
 }
