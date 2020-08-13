@@ -147,7 +147,7 @@ lazy_static! {
 	  	m.push(("paper_size", OptionType::Global("paper_size", VarType::PageSize)));
       	m.push(("mapping", OptionType::Special("_mapping", VarType::Bool)));
       	m.push(("calling", OptionType::Special("_calling", VarType::Bool)));
-     	m.push(("pdf", OptionType::Global("pdf", VarType::Bool)));
+     	m.push(("pdf", OptionType::Special("_pdf", VarType::Bool)));
         m
     };
 }

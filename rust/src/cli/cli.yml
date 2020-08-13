@@ -240,7 +240,6 @@ subcommands:
         args:
           - sample: {short: n, long: sample, value_name: SAMPLE, takes_value: true, multiple: true, help: Name of sample to be mapped}
           - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample to be mapped}
-          - pdf: {short: P, long: pdf, help: Generate pdf version of QC report (requires latexmk and pdflatex)}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for extraction pipeline}
           - cores: {short: c, long: cores, value_name: CORES, takes_value: true, help: Number of cores for a job (default - available cores / jobs)}
           - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}

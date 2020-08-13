@@ -26,7 +26,7 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
             }.exit()
         })
     }).unwrap_or(stderrlog::Timestamp::Off);
-	let verbose = value_t!(m.value_of("loglevel"), LogLevel).unwrap_or_else(|_| LogLevel::new(0));
+	let verbose = value_t!(m.value_of("loglevel"), LogLevel).unwrap_or_else(|_| LogLevel::from_str("info").expect("Could not set loglevel info"));
 	let quiet = verbose.is_none() || m.is_present("quiet");
     stderrlog::new()
         .quiet(quiet)

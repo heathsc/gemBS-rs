@@ -29,6 +29,7 @@ pub fn report_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> 
 		options.insert("_calling", DataValue::Bool(true));
 		options.insert("_report", DataValue::Bool(true));
 	}
+	if options.contains_key("_pdf") { gem_bs.set_config(Section::Report, "pdf", DataValue::Bool(true)); }
 	let task_path = gem_bs.get_task_file_path();
 	let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?; 
 	gem_bs.setup_assets_and_tasks(&flock)?;

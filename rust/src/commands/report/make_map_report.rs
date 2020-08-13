@@ -534,8 +534,7 @@ fn make_latex_sec(bc: &str, ds: Option<&str>, mapq_threshold: usize, json: &MapJ
 fn create_sample_report(job: ReportJob) -> Result<(), String> {
 	match job.job {
 		RepJob::Sample(v) => {
-			debug!("Creating sample report for {}/{}", job.project, job.barcode);
-//			latex_sec.push_string(format!("\\section{{Sample {}}}", LatexEscapeStr(&job.barcode)));
+			info!("Create sample mapping report for {}/{}", job.project, job.barcode);
 			let mut dataset_secs = if v.datasets.len() > 1 { Some(SectionArray::new()) } else { None };
 			let mut mrg_json: Option<MapJson> = None;
 			let mut dsets: Vec<&str> = Vec::new();
@@ -570,7 +569,7 @@ fn create_sample_report(job: ReportJob) -> Result<(), String> {
 		},
 		RepJob::Dataset(v) => {
 			let json = read_map_json(&v.json_path)?;
-			debug!("Creating dataset report for {}/{}/{}", job.project, job.barcode, v.dataset);
+			info!("Create dataset mapping report for {}/{}/{}", job.project, job.barcode, v.dataset);
 			create_sample_html(&job.project, &job.barcode, &[&v.dataset], v.mapq_threshold, &job.bc_dir, &json, false) 
 		},
 		_ => Err("Invalid command".to_string())
@@ -578,6 +577,7 @@ fn create_sample_report(job: ReportJob) -> Result<(), String> {
 }
 
 fn create_summary(dir: &Path, summary: Arc<Mutex<Vec<SampleSummary>>>, latex_doc: Arc<Mutex<LatexBare>>) -> Result<(), String> {
+	info!("Create mapping summary report");
 	let mut path = dir.to_owned();
 	path.push("index.html");
 	let mut html = HtmlPage::new(&path)?;
@@ -686,6 +686,7 @@ pub fn copy_css(output_dir: &Path, css: &Path) -> Result<(), String> {
 
 pub fn make_map_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, mapq_threshold: usize, n_cores: usize, svec: Vec<SampleJsonFiles>) -> Result<(), String> {
 	utils::check_signal(Arc::clone(&sig))?;
+	info!("Making mapping report");
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
 	let report_tex_path = outputs.first().expect("No output files for map report");
 	let output_dir = report_tex_path.parent().expect("No parent directory found for map report");

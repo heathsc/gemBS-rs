@@ -3,7 +3,7 @@ use std::fs;
 use std::io::BufWriter;
 use crate::config::GemBS;
 use crate::common::tasks::{Task, JsonTask};
-use crate::common::defs::DataValue;
+use crate::common::defs::{Command, DataValue};
 use crate::common::assets::GetAsset;
 use std::path::Path;
 
@@ -30,8 +30,10 @@ fn get_arg_string(task: &Task, options: &HashMap<&'static str, DataValue>) -> St
 pub fn handle_dry_run(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize]) {
 	for ix in task_list {
 		let task = &gem_bs.get_tasks()[*ix];
-		let arg_string = get_arg_string(task, options);
-		println!("gemBS {} {}", task.command(), arg_string);
+		if task.command() != Command::MergeCallJsons {
+			let arg_string = get_arg_string(task, options);
+			println!("gemBS {} {}", task.command(), arg_string);
+		}
 	}	
 }
 

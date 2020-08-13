@@ -812,6 +812,7 @@ fn new_page(path: &Path) -> Result<HtmlPage, String> {
 //
 
 fn create_mapping_latex_section(bc: &str, json: &CallJson) -> Result<LatexSection, String> {
+	info!("Create latex mapping report for {}", bc);
 	let mut img_dir = PathBuf::from_str(bc).expect("Couldn't get Path from barcode");
 	img_dir.push("images");
 	let mut sec = LatexSection::new("A");
@@ -832,6 +833,7 @@ fn create_mapping_latex_section(bc: &str, json: &CallJson) -> Result<LatexSectio
 }
 
 fn create_variant_latex_section(bc: &str, json: &CallJson) -> Result<LatexSection, String> {
+	info!("Create latex variant report for {}", bc);
 	let mut img_dir = PathBuf::from_str(bc).expect("Couldn't get Path from barcode");
 	img_dir.push("images");
 	let set_img = |nm: &str, sec: &mut LatexSection| {
@@ -867,6 +869,7 @@ fn create_variant_latex_section(bc: &str, json: &CallJson) -> Result<LatexSectio
 }
 
 fn create_meth_latex_section(bc: &str, json: &CallJson) -> Result<LatexSection, String> {
+	info!("Create latex methylation report for {}", bc);
 	let mut img_dir = PathBuf::from_str(bc).expect("Couldn't get Path from barcode");
 	img_dir.push("images");
 	let set_img = |nm: &str, sec: &mut LatexSection| {
@@ -910,6 +913,7 @@ fn get_section_array_for_bc<'a>(ldoc: &'a mut LatexBare, bc: &str) -> Result<&'a
 }
 
 fn create_mapping_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexBare>>) -> Result<(), String> {
+	debug!("Create mapping report (from the calling stage) for {}", bc);
 	let path: PathBuf = [dir, Path::new(format!("{}_mapping_coverage.html", bc).as_str())].iter().collect();
 	let mut html = new_page(&path)?;
 	let mut map_summ = MapSummary::new();
@@ -925,6 +929,7 @@ fn create_mapping_report(bc: &str, dir: &Path, project: &str, call_json: &CallJs
 }
 
 fn create_variant_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexBare>>) -> Result<(), String> {
+	debug!("Create variant report for {}", bc);
 	let path: PathBuf = [dir, Path::new(format!("{}_variants.html", bc).as_str())].iter().collect();
 	let mut var_summ = VarSummary::new();
 	let mut html = new_page(&path)?;
@@ -940,6 +945,7 @@ fn create_variant_report(bc: &str, dir: &Path, project: &str, call_json: &CallJs
 }
 
 fn create_meth_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexBare>>) -> Result<(), String> {
+	debug!("Create methylation report for {}", bc);
 	let path: PathBuf = [dir, Path::new(format!("{}_methylation.html", bc).as_str())].iter().collect();
 	let mut html = new_page(&path)?;
 	let mut meth_summ = MethSummary::new();
@@ -955,6 +961,7 @@ fn create_meth_report(bc: &str, dir: &Path, project: &str, call_json: &CallJson,
 }
 
 fn create_summary(dir: &Path, summary: Arc<Mutex<HashMap<String, CallSummary>>>, latex_doc: Arc<Mutex<LatexBare>>) -> Result<(), String> {
+	debug!("Create summary of calling report");
 	let mut path = dir.to_owned();
 	path.push("index.html");
 	let mut html = HtmlPage::new(&path)?;
@@ -1131,6 +1138,8 @@ fn prepare_jobs(svec: &[CallJsonFiles], project: &str, summary: Arc<Mutex<HashMa
 
 pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, n_cores: usize, svec: Vec<CallJsonFiles>) -> Result<(), String> {
 	utils::check_signal(Arc::clone(&sig))?;
+	info!("Making calling Report");
+
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
 	let report_tex_path = outputs.first().expect("No output files for call report");
 	let output_dir = report_tex_path.parent().expect("No parent directory found for call report");

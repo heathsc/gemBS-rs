@@ -36,6 +36,7 @@ fn create_latex_report(path: &PathBuf, project: &str, page_size: PageSize) -> Re
 
 pub fn make_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, page_size: PageSize, pdf: bool) -> Result<(), String> {
 	utils::check_signal(Arc::clone(&sig))?;
+	info!("Making summary report");
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
 	let report_tex_path = outputs.get(0).expect("No output files for report");
 	let report_html_path = outputs.get(1).expect("No html output file for report");
@@ -43,6 +44,7 @@ pub fn make_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<S
 	create_html_report(report_html_path, &project)?;
 	create_latex_report(report_tex_path, &project, page_size)?;
 	if pdf {	
+		info!("Making pdf version of summary report");
 		let report_pdf_path = outputs.get(2).expect("No pdf output file for report");
 		let pdf_name = Path::new(report_pdf_path.file_name().expect("No file name for pdf output file"));
 		let mut pipeline = utils::Pipeline::new();
