@@ -76,23 +76,23 @@ fn check_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 		if let Some(d) = tp { d.to_owned() } else { PathBuf::from_str(".").unwrap() }
 	}; 
 	if need_nonbs_index && gem_bs.get_config(Section::Index, "nonbs_index").is_none() { missing_nonbs_index = true; }
-	if need_bs_index && gem_bs.get_config(Section::Index, "bs_index").is_none() { missing_index = true; }
+	if need_bs_index && gem_bs.get_config(Section::Index, "index").is_none() { missing_index = true; }
 
+	// Check for index_dir
+	let idx_dir = if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Index, "index_dir") { PathBuf::from(x) }
+	else {
+		if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Index, "index")	{ infer_idx_dir = Some(infer_parent(x.clone())); }	
+		else if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Index, "nonbs_index")	{ infer_idx_dir = Some(infer_parent(x.clone())); }	
+		else { infer_idx_dir = Some(PathBuf::from_str(".").unwrap()) };
+		infer_idx_dir.clone().unwrap()			
+	};	
+	// Check directory exists
+	if !idx_dir.is_dir() { 
+		if let Err(e) = fs::create_dir(&idx_dir) {
+			return Err(format!("Could not create index_dir directory {}: {}", idx_dir.display(), e)); 
+		}
+	} 
 	if missing_index || missing_nonbs_index {			
-		// Check for index_dir
-		let idx_dir = if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Index, "index_dir") { PathBuf::from(x) }
-		else {
-			if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Index, "bs_index")	{ infer_idx_dir = Some(infer_parent(x.clone())); }	
-			else if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Index, "nonbs_index")	{ infer_idx_dir = Some(infer_parent(x.clone())); }	
-			else { infer_idx_dir = Some(PathBuf::from_str(".").unwrap()) };
-			infer_idx_dir.clone().unwrap()			
-		};	
-		// Check directory exists
-		if !idx_dir.is_dir() { 
-			if let Err(e) = fs::create_dir(&idx_dir) {
-				return Err(format!("Could not create index_dir directory {}: {}", idx_dir.display(), e)); 
-			}
-		} 
 		if missing_index {
 			let tpath = Path::new(Path::new(reference).file_stem().unwrap()).with_extension("BS.gem");	
 			let mut idx = idx_dir.clone();
