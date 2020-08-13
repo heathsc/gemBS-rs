@@ -63,7 +63,7 @@ fn gen_map_command(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue
 	let mut coms = HashSet::new();
 	if !options.contains_key("_no_md5") { super::md5sum::get_assets_md5_map(gem_bs, &options, &mut assets, &mut coms)?; }
 	if gem_bs.all() { [Command::Index, Command::Map].iter().for_each(|x| {coms.insert(*x);}) }
-	else if !options.contains_key("_merge") { coms.insert(Command::Map); }
+	else if !(options.contains_key("_merge") || options.contains_key("_md5")) { coms.insert(Command::Map); }
 	if !options.contains_key("_no_merge") { coms.insert(Command::MergeBams); }
 	let asset_ids: Vec<_> = assets.iter().copied().collect();
 	let com_set: Vec<_> = coms.iter().copied().collect();
@@ -84,14 +84,7 @@ pub fn map_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 		options.insert("_no_md5", DataValue::Bool(true)); 
 		options.insert("_no_merge", DataValue::Bool(true)); 
 	}
+	if options.contains_key("_md5") { options.insert("_no_merge", DataValue::Bool(true)); }
 	gen_map_command(gem_bs, &options)
 }
 
-pub fn merge_bams_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
-	gem_bs.setup_fs(false)?;
-	gem_bs.read_json_config()?;
-	
-	let mut options = handle_options(m, gem_bs, Section::Mapping);
-	options.insert("_merge", DataValue::Bool(true));
-	gen_map_command(gem_bs, &options)
-}

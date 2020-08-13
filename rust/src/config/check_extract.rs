@@ -55,6 +55,8 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 		else { panic!("alignment file {}.bcf not found", bc); };
 		let bcf_ix = if let Some(x) = gem_bs.get_asset(format!("{}.bcf.csi", bc).as_str()) { x.idx() } 
 		else { panic!("BCF index file {}.bcf.csi not found", bc); };
+		let bcf_md5 = if let Some(x) = gem_bs.get_asset(format!("{}.bcf.md5", bc).as_str()) { x.idx() } 
+		else { panic!("alignment md5 file {}.bcf.md5 not found", bc); };
 		let replace_meta_var = |s: &str| {
 			if let Some(sm) = name { s.replace("@BARCODE", bc).replace("@SAMPLE", sm) } else { s.replace("@BARCODE", bc) }
 		};
@@ -68,7 +70,7 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Extract methylation values for barcode {}", bc).as_str(),
 					Command::Extract, format!("{} --barcode {}", mextr_comm, bc).as_str());
-			gem_bs.add_task_inputs(task, &[bcf, bcf_ix]).add_outputs(&out_vec).set_log(Some(log_index)).set_barcode(bc)
+			gem_bs.add_task_inputs(task, &[bcf, bcf_ix, bcf_md5]).add_outputs(&out_vec).set_log(Some(log_index)).set_barcode(bc)
 				.add_cores(cores).add_memory(memory).add_time(time);
 			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
@@ -80,7 +82,7 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Extract SNPs for barcode {}", bc).as_str(),
 					Command::Extract, format!("--snps --barcode {}", bc).as_str());
-			gem_bs.add_task_inputs(task, &[bcf, bcf_ix]).add_outputs(&out_vec).set_log(Some(log_index)).set_barcode(bc)
+			gem_bs.add_task_inputs(task, &[bcf, bcf_ix, bcf_md5]).add_outputs(&out_vec).set_log(Some(log_index)).set_barcode(bc)
 				.add_cores(cores).add_memory(memory).add_time(time);
 			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		

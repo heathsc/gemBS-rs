@@ -86,7 +86,6 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 			m
 		};
 	}
-	
 	let threads = gem_bs.get_config_int(Section::Mapping, "threads");
 	let mapping_threads = gem_bs.get_config_int(Section::Mapping, "mapping_threads").or(threads);
 	let sort_threads = gem_bs.get_config_int(Section::Mapping, "sort_threads").or(mapping_threads);

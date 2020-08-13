@@ -30,7 +30,7 @@ fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataV
 		}
 	}
 	// Now the individual contig pools
-	if !options.contains_key("_merge") && !options.contains_key("_index") && pools.len() > 1 {
+	if options.contains_key("_no_merge") && pools.len() > 1 {
 		let add_bcf_asset = |b: &str, p: &str, rf: &mut HashSet<usize>| {
 			if let Some(asset) = gem_bs.get_asset(format!("{}_{}.bcf", b, p).as_str()) { rf.insert(asset.idx()); }
 			else { return Err(format!("Unknown pool {}", p)); }
@@ -54,9 +54,9 @@ fn gen_call_command(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValu
 	let mut assets = get_required_asset_list(gem_bs, &options)?;
 	let mut coms = HashSet::new();
 	if !options.contains_key("_no_md5") { super::md5sum::get_assets_md5_call(gem_bs, &options, &mut assets, &mut coms)?; }
-	if gem_bs.all() { [Command::Index, Command::Map, Command::MergeBams, Command::Call].iter().for_each(|x| { coms.insert(*x); }) }
-	else if !(options.contains_key("_merge") || options.contains_key("_index")) { coms.insert(Command::Call); }
-	if !(options.contains_key("_no_merge") || options.contains_key("_index")) { 
+	if gem_bs.all() { [Command::Index, Command::Map, Command::MergeBams, Command::MD5SumMap, Command::Call].iter().for_each(|x| { coms.insert(*x); }) }
+	else if !(options.contains_key("_merge") || options.contains_key("_index") || options.contains_key("_md5")) { coms.insert(Command::Call); }
+	if !(options.contains_key("_no_merge") || options.contains_key("_index") || options.contains_key("_md5")) { 
 		coms.insert(Command::MergeBcfs); 
 		coms.insert(Command::MergeCallJsons); 
 	}
@@ -80,24 +80,9 @@ pub fn call_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 		 options.insert("_no_md5", DataValue::Bool(true)); 		
 		 options.insert("_no_index", DataValue::Bool(true)); 
 	}
+	if options.contains_key("_md5") {
+		 options.insert("_no_merge", DataValue::Bool(true)); 		
+		 options.insert("_no_index", DataValue::Bool(true)); 
+	}
 	gen_call_command(gem_bs, &options)
 }
-
-pub fn merge_bcfs_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
-	gem_bs.setup_fs(false)?;
-	gem_bs.read_json_config()?;
-	
-	let mut options = handle_options(m, gem_bs, Section::Calling);
-	options.insert("_merge", DataValue::Bool(true));	
-	gen_call_command(gem_bs, &options)
-}
-
-pub fn index_bcf_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
-	gem_bs.setup_fs(false)?;
-	gem_bs.read_json_config()?;
-
-	let mut options = handle_options(m, gem_bs, Section::Calling);
-	options.insert("_index", DataValue::Bool(true));	
-	gen_call_command(gem_bs, &options)
-}
-

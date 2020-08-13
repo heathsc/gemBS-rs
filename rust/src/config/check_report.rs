@@ -34,7 +34,7 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
 		out_vec.push(handle_file(gem_bs, format!("{}_map_index.html", bc).as_str(), format!("{}.html", bc).as_str(), &bc_dir));
 		out_vec.push(handle_file(gem_bs, format!("{}_isize.png", bc).as_str(), format!("{}_isize.png", bc).as_str(), &img_dir));
 		out_vec.push(handle_file(gem_bs, format!("{}_mapq.png", bc).as_str(), format!("{}_mapq.png", bc).as_str(), &img_dir));
-		json_files.extend(gem_bs.get_mapping_json_files_for_barcode(bc)); 
+		json_files.extend(gem_bs.get_mapping_json_files_for_barcode(bc));		 
 	}
 	let mut dsets = Vec::new();
 	let mut bc_count = HashMap::new();

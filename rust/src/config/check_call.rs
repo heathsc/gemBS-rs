@@ -33,6 +33,8 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 		else { panic!("alignment file {}.{} not found", bcode, ext); };
 		let bam_idx = if let Some(x) = gem_bs.get_asset(format!("{}.{}", bcode, idx_ext).as_str()) { x.idx() } 
 		else { panic!("index file {}.{} not found", bcode, idx_ext); };
+		let bam_md5 = if let Some(x) = gem_bs.get_asset(format!("{}.{}.md5", bcode, ext).as_str()) { x.idx() } 
+		else { panic!("alignment md5 file {}.{}.md5 not found", bcode, ext); };
 		let replace_meta_var = |s: &str| {
 			if let Some(sm) = name { s.replace("@BARCODE", bcode).replace("@SAMPLE", sm) } else { s.replace("@BARCODE", bcode) }
 		};
@@ -45,7 +47,8 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 				let mut in_vec = common_inputs.clone();
 				in_vec.push(bam);
 				in_vec.push(bam_idx);
-				let out = handle_file(gem_bs, format!("{}_{}.bcf", bcode, pool), None, bcf_path, AssetType::Derived);
+				in_vec.push(bam_md5);
+				let out = handle_file(gem_bs, format!("{}_{}.bcf", bcode, pool), None, bcf_path, AssetType::Temp);
 				let out1 = handle_file(gem_bs, format!("{}_{}.json", bcode, pool), Some(format!("{}_{}_call.json", bcode, pool)), bcf_path, AssetType::Temp);
 				out_bcfs.push(out);
 				out_jsons.push(out1);
@@ -75,6 +78,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 		} else {
 			let mut in_vec = common_inputs.clone();
 			in_vec.push(bam);
+			in_vec.push(bam_md5);
 			let out = handle_file(gem_bs, format!("{}.bcf", bcode), None, bcf_path, AssetType::Derived);
 			let out1 = handle_file(gem_bs, format!("{}.json", bcode), Some(format!("{}_call.json", bcode)), bcf_path, AssetType::Derived);
 			let id = format!("single_bcf_call_{}", bcode);
@@ -93,7 +97,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 		let (md5_name, md5_path)  = assets::make_ext_asset(gem_bs.get_asset(bcf_asset).unwrap().id(), &bcf_path, "md5");
 		let md5 = gem_bs.insert_asset(&md5_name, &md5_path, AssetType::Derived);
 		let md5_task = gem_bs.add_task(&md5_name, format!("Calc MD5 sum for {}", id).as_str(),
-			Command::MD5Sum, format!("--barcode {} call", bcode).as_str());
+			Command::MD5SumCall, format!("--barcode {}", bcode).as_str());
 		let md5_cores = gem_bs.get_config_int(Section::MD5Sum, "cores").map(|x| x as usize).or(Some(1));
 		let md5_memory = gem_bs.get_config_memsize(Section::MD5Sum, "memory");
 		let md5_time = gem_bs.get_config_joblen(Section::MD5Sum, "time").or_else(|| Some(3600.into()));

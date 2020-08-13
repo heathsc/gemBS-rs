@@ -100,8 +100,11 @@ lazy_static! {
 		m.push(("jobs", OptionType::Global("jobs", VarType::Int)));
         m.push(("non_bs", OptionType::Local(VarType::Bool)));
         m.push(("bs", OptionType::Local(VarType::Bool)));
+      	m.push(("merge", OptionType::Special("_merge", VarType::Bool)));
       	m.push(("no_merge", OptionType::Special("_no_merge", VarType::Bool)));
+      	m.push(("md5", OptionType::Special("_md5", VarType::Bool)));
       	m.push(("no_md5", OptionType::Special("_no_md5", VarType::Bool)));
+      	m.push(("index", OptionType::Special("_index", VarType::Bool)));
       	m.push(("no_index", OptionType::Special("_no_index", VarType::Bool)));
       	m.push(("merge", OptionType::Local(VarType::Bool)));
       	m.push(("remove", OptionType::Local(VarType::Bool)));
@@ -179,8 +182,5 @@ impl LogLevel {
 	}
 	pub fn get_level(&self) -> usize {
 		if self.level > 4 { 0 } else { self.level }
-	}
-	pub fn new(x: usize) -> Self {
-		LogLevel{level: x}
 	}
 }

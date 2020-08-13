@@ -26,7 +26,7 @@ fn make_gem_index(gem_bs: &GemBS, job: usize, bisulfite: bool) -> QPipe
 	pipeline	
 }
 
-fn make_dbsnp_index(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: usize) -> QPipe
+fn make_dbsnp_index(gem_bs: &GemBS, _options: &HashMap<&'static str, DataValue>, _job: usize) -> QPipe
 {
 	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
 	if gem_bs.get_config_bool(Section::Index, "keep_logs") { pipeline.set_remove_log(false) }

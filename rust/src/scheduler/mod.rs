@@ -133,7 +133,7 @@ pub fn get_command_req(gem_bs: &GemBS, com: Command) -> (f64, usize) {
 		Command::MapReport => get_requirements(gem_bs, Section::Report, false),
 		Command::CallReport => get_requirements(gem_bs, Section::Report, false),
 		Command::Report => get_requirements(gem_bs, Section::Report, false),
-		Command::MD5Sum => (1.0, 0), // No special requirement for MD5Sum, and it can not be multithreaded
+		Command::MD5SumMap | Command::MD5SumCall => (1.0, 0), // No special requirement for MD5Sum, and it can not be multithreaded
 		Command::MergeBams => get_merge_bam_req(gem_bs),
 		Command::MergeBcfs => get_merge_bcf_req(gem_bs),
 		Command::MergeCallJsons => (1.0, 0),
@@ -299,7 +299,7 @@ fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: u
 		Command::Call => Some(call::make_call_pipeline(gem_bs, job)),
 		Command::MergeBcfs => Some(call::make_merge_bcfs_pipeline(gem_bs, options, job)),
 		Command::IndexBcf => Some(call::make_index_bcf_pipeline(gem_bs, job)),
-		Command::MD5Sum => Some(md5sum::make_md5sum_pipeline(gem_bs, job)),
+		Command::MD5SumMap | Command::MD5SumCall => Some(md5sum::make_md5sum_pipeline(gem_bs, job)),
 		Command::Extract => Some(extract::make_extract_pipeline(gem_bs, job)),
 		Command::MapReport => Some(report::make_map_report_pipeline(gem_bs, job)),
 		Command::CallReport => Some(report::make_call_report_pipeline(gem_bs, job)),
