@@ -347,7 +347,7 @@ impl GemBS {
 				}
 			}
 			for asset in task.outputs().map(|x| self.assets.get_asset(*x).unwrap()) {
-				if !(asset.status() != AssetStatus::Present || asset.status() != AssetStatus::Deleted) {
+				if !(asset.status() == AssetStatus::Present || asset.status() == AssetStatus::Deleted) {
 					outputs_ready = false;
 					break;
 				}

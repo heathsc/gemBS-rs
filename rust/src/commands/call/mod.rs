@@ -30,7 +30,7 @@ fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataV
 		}
 	}
 	// Now the individual contig pools
-	if options.contains_key("_no_merge") && pools.len() > 1 {
+	if !options.contains_key("_merge") && pools.len() > 1 {
 		let add_bcf_asset = |b: &str, p: &str, rf: &mut HashSet<usize>| {
 			if let Some(asset) = gem_bs.get_asset(format!("{}_{}.bcf", b, p).as_str()) { rf.insert(asset.idx()); }
 			else { return Err(format!("Unknown pool {}", p)); }

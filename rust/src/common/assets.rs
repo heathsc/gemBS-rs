@@ -235,8 +235,8 @@ impl AssetList {
 				if asset.status == AssetStatus::Absent && !missing_desc[ix] { 
 					debug!("Switching Asset Type for {} from Absent to Deleted", asset.path.display());
 					asset.status = AssetStatus::Deleted
-				} else if missing_desc[ix] && !(asset.status == AssetStatus::Present || asset.status == AssetStatus::Incomplete) {
-					debug!("Switching Asset Type for {} from {} to Absent", asset.status, asset.path.display());
+				} else if missing_desc[ix] && asset.status == AssetStatus::Deleted {
+					debug!("Switching Asset Type for {} from {} to Absent", asset.path.display(), asset.status);
 					asset.status = AssetStatus::Absent
 				} 	 
 			}
