@@ -269,6 +269,7 @@ impl GemBS {
 	
 	pub fn setup_assets_and_tasks(&mut self, lock: &FileLock) -> Result<(), String> {
 		self.check_signal()?;
+		// Assets are inserted in order so we know that a parent asset will always have a lower index than any child
 		check_ref::check_ref_and_indices(self)?;
 		self.contig_pool_digest = Some(contig::setup_contigs(self)?);
 		check_ref::make_contig_sizes(self)?;		
@@ -276,11 +277,12 @@ impl GemBS {
 		check_report::check_map_report(self)?;
 		check_call::check_call(self)?;
 		check_report::check_call_report(self)?;
-		check_report::check_report(self)?;
 		check_extract::check_extract(self)?;
+		check_report::check_report(self)?;
 		self.asset_digest = Some(self.assets.get_digest());
 		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());
 		self.assets.calc_mod_time_ances();
+		self.assets.check_delete_status();
 		let running = get_running_tasks(lock)?;		
 		self.handle_status(&running)?;
 		Ok(())		
@@ -293,6 +295,7 @@ impl GemBS {
 		});
 		self.assets.recheck_status(&running_ids);
 		self.assets.calc_mod_time_ances();
+		self.assets.check_delete_status();		
 		self.handle_status(&running)?;
 		Ok(())				
 	}
@@ -323,14 +326,15 @@ impl GemBS {
 		let mut first_output_mod = None;
 		if ignore_times {
 			let check = |x| match x {
-				AssetStatus::Present | AssetStatus::Outdated => false,
-				_ => true,
+				AssetStatus::Present | AssetStatus::Outdated => 1,
+				AssetStatus::Deleted => 2,
+				_ => 0,
 			};
 			for asset in task.inputs().map(|x| self.assets.get_asset(*x).unwrap()) {
-				if check(asset.status()) { inputs_ready = false; break; }
+				if check(asset.status()) != 1 { inputs_ready = false; break; }
 			}
 			for asset in task.outputs().map(|x| self.assets.get_asset(*x).unwrap()) {
-				if check(asset.status()) { outputs_ready = false; break; }
+				if check(asset.status()) == 0 { outputs_ready = false; break; }
 			}
 		} else {
 			for asset in task.inputs().map(|x| self.assets.get_asset(*x).unwrap()) {
@@ -343,7 +347,7 @@ impl GemBS {
 				}
 			}
 			for asset in task.outputs().map(|x| self.assets.get_asset(*x).unwrap()) {
-				if asset.status() != AssetStatus::Present {
+				if !(asset.status() != AssetStatus::Present || asset.status() != AssetStatus::Deleted) {
 					outputs_ready = false;
 					break;
 				}
