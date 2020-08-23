@@ -64,10 +64,10 @@ impl Asset {
 		Asset{id, path: path.to_owned(), idx, creator: None, parents: Vec::new(), asset_type, status, mod_time, mod_time_ances: mod_time}
 	}
 	pub fn recheck_status(&mut self) {
-		trace!("Rechecking status of asset {} {}", self.idx, self.id);
 		let (status, mod_time) = get_status_time(&self.path, self.asset_type);
 		self.status = status;
 		self.mod_time = mod_time;
+		trace!("Rechecking status of asset {} {} {}", self.idx, self.id, self.status);
 	}	
 	pub fn path(&self) -> &Path { &self.path }
 	pub fn status(&self) -> AssetStatus { self.status }
@@ -78,7 +78,7 @@ impl Asset {
 		self.creator = Some(idx);
 		pvec.iter().for_each(|x| self.parents.push(*x)); 
 	}
-	pub fn mod_time(&self) -> Option<SystemTime> { self.mod_time }
+//	pub fn mod_time(&self) -> Option<SystemTime> { self.mod_time }
 	pub fn mod_time_ances(&self) -> Option<SystemTime> { self.mod_time_ances }
 }
 
@@ -182,8 +182,10 @@ impl AssetList {
 		let len = self.assets.len();
 		let mut changed = vec!(None; len);
 		for asset in self.assets.iter_mut().filter(|x| x.asset_type != AssetType::Log) { 
-			if hs.contains(&asset.idx) { asset.status = AssetStatus::Incomplete }
-			else if asset.status != AssetStatus::Present {
+			if hs.contains(&asset.idx) { 
+				trace!("recheck_status: switching status of {} from {} to Incomplete", asset.id, asset.status);
+				asset.status = AssetStatus::Incomplete 
+			} else if !(asset.status == AssetStatus::Present || asset.status == AssetStatus::Deleted) {
 				let mut chg = None;
 				for i in asset.parents.iter() {
 					if let Some(x) = changed[*i] {
@@ -194,10 +196,11 @@ impl AssetList {
 				changed[asset.idx] = match chg {
 					Some(false) => Some(false),
 					_ => {
+						let st = asset.status;
 						asset.recheck_status();
-						Some(asset.status == AssetStatus::Present)					
+						Some(asset.status != st)					
 					},
-				};
+				}; 
 			}
 		}
 	}
@@ -222,15 +225,7 @@ impl AssetList {
 		let len = self.assets.len();
 		let mut missing_desc = vec!(false; len);
 		for ix in (0..len).rev() {
-			let asset = &self.assets[ix];
-			match asset.status {
-				AssetStatus::Absent | AssetStatus::Outdated => {
-					for j in &asset.parents { missing_desc[*j] = true; }
-				},
-				_ => (),
-			}
-		}
-		for (ix, asset) in self.assets.iter_mut().enumerate() { 
+			let asset = &mut self.assets[ix];
 			if asset.asset_type == AssetType::Temp {
 				if asset.status == AssetStatus::Absent && !missing_desc[ix] { 
 					debug!("Switching Asset Type for {} from Absent to Deleted", asset.path.display());
@@ -239,6 +234,12 @@ impl AssetList {
 					debug!("Switching Asset Type for {} from {} to Absent", asset.path.display(), asset.status);
 					asset.status = AssetStatus::Absent
 				} 	 
+			}
+			match asset.status {		
+				AssetStatus::Absent | AssetStatus::Outdated => {
+					for j in &asset.parents { missing_desc[*j] = true; }
+				},
+				_ => (),
 			}
 		}
 	}

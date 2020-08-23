@@ -283,9 +283,7 @@ impl GemBS {
 		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());
 		self.assets.calc_mod_time_ances();
 		self.assets.check_delete_status();
-		let running = get_running_tasks(lock)?;		
-		self.handle_status(&running)?;
-		Ok(())		
+		self.rescan_assets_and_tasks(lock)
 	}
 	pub fn rescan_assets_and_tasks(&mut self, lock: &FileLock) -> Result<(), String> {
 		let running = get_running_tasks(lock)?;		
@@ -315,7 +313,14 @@ impl GemBS {
 			}
 			(x.idx(), s)
 		}).collect();
-		svec.iter().for_each(|(ix, s)| {self.tasks[*ix].set_status(*s);} );
+		svec.iter().for_each(|(ix, s)| {
+			if Some(*s) != self.tasks[*ix].status() {
+				let task = &self.tasks[*ix];
+				trace!("calc_task_statuses(): switching task {} status from {:?} to {:?}", task.id(), task.status(), *s);
+				self.tasks[*ix].set_status(*s);
+			}
+		});
+		
 	}
 	pub fn task_status(&self, task: &Task) -> TaskStatus {
 		if let Some(s) = task.status() { return s; }
@@ -347,11 +352,11 @@ impl GemBS {
 				}
 			}
 			for asset in task.outputs().map(|x| self.assets.get_asset(*x).unwrap()) {
-				if !(asset.status() == AssetStatus::Present || asset.status() == AssetStatus::Deleted) {
+				if !(asset.status() == AssetStatus::Present || asset.status() == AssetStatus::Incomplete || asset.status() == AssetStatus::Deleted) {
 					outputs_ready = false;
 					break;
 				}
-				first_output_mod = match (first_output_mod, asset.mod_time()) {
+				first_output_mod = match (first_output_mod, asset.mod_time_ances()) {
 					(None, None) => None,
 					(Some(m), None) => Some(m),
 					(None, Some(m)) => Some(m),
@@ -363,6 +368,7 @@ impl GemBS {
 			(Some(m), Some(n)) => if m > n { x } else { TaskStatus::Complete },
 			(_, _) => TaskStatus::Complete,			
 		}};
+		trace!("task_status() {}: {} {} {:?} {:?}", task.id(), inputs_ready, outputs_ready, latest_input_mod, first_output_mod);
 		match (inputs_ready, outputs_ready) {
 			(true, true) => tst(latest_input_mod, first_output_mod, TaskStatus::Ready),
 			(false, true) => tst(latest_input_mod, first_output_mod, TaskStatus::Waiting),

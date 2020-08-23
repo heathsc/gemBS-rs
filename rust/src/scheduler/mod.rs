@@ -42,7 +42,7 @@ impl RunJob {
 
 impl Drop for RunJob {
     fn drop(&mut self) {
-        trace!("In RunJob Drop for {}", self.path.to_string_lossy());
+        trace!("In RunJob Drop for {} ({})", self.id, self.path.display());
 		match utils::timed_wait_for_lock(Arc::clone(&self.signal), &self.path) {
 			Ok(lock) => {
 				let running: Option<Vec<RunningTask>> = if let Ok(reader) = lock.reader() {
@@ -173,6 +173,7 @@ impl<'a> Scheduler<'a> {
 				.map_err(|e| SchedulerError::IoErr{desc: format!("Error: failed to read JSON config file {}: {}", lock.path().to_string_lossy(), e)})?
 		} else { Vec::new() };	
 		let task = &gem_bs.get_tasks()[ix];
+		trace!("Scheduling task {} with status {:?}", task.id(), task.status());
 		if running.iter().any(|x| x.id() == task.id()) { return Err(SchedulerError::TaskTaken) }
 		running.push(RunningTask::from_task(task));
 		let writer = lock.writer().map_err(|e| SchedulerError::IoErr{desc: format!("Error: Could not open JSON config file {} for writing: {}", lock.path().to_string_lossy(), e)})?;
@@ -359,6 +360,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 							}
 						}
 						for p in rm_list.iter() {
+							trace!("Removing file {} after normal task completion", p.display());
 							if let Err(e) = std::fs::remove_file(&p) {
 								error!("Could not remove file {}: {}", p.to_string_lossy(), e);
 							}
