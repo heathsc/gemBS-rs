@@ -42,7 +42,7 @@ impl RunJob {
 
 impl Drop for RunJob {
     fn drop(&mut self) {
-        trace!("In RunJob Drop for {} ({})", self.id, self.path.display());
+        trace!("In RunJob Drop for {} {} ({})", self.id, self.task_idx, self.path.display());
 		match utils::timed_wait_for_lock(Arc::clone(&self.signal), &self.path) {
 			Ok(lock) => {
 				let running: Option<Vec<RunningTask>> = if let Ok(reader) = lock.reader() {
@@ -414,7 +414,10 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 		avail.push(ix);
 	}
 	loop {
-		gem_bs.check_signal()?;
+		if let Err(e) = gem_bs.check_signal() {
+			info!("{}", e);
+			break;
+		}
 		let worker_ix = match sched.state {
 			SchedState::Ready => avail.pop(),
 			SchedState::Waiting(t) => {
@@ -477,7 +480,9 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 					sched.state = SchedState::Ready;
 				},
 				Ok(x) => {
-					error!("Error received from worker thread {}", -(x+1));
+					let x1 = -(x+1);
+					error!("Error received from worker thread {}", x1);
+					jobs.retain(|(_, ix)| *ix != x1);
 					sched.state = SchedState::Abort;
 					break;
 				},
@@ -498,8 +503,9 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 					sched.state = SchedState::Ready;
 				},
 				Ok(x) => {
-					error!("Error received from worker thread {}", -(x+1));
-					sched.state = SchedState::Abort;
+					let x1 = -(x+1);
+					error!("Error received from worker thread {}", x1);
+					jobs.retain(|(_, ix)| *ix != x1);
 					break;
 				},
 				Err(mpsc::RecvTimeoutError::Timeout) => {},
@@ -511,17 +517,26 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 			}
 		} else { thread::sleep(time::Duration::from_secs(5)) }
 	}
+	// If a signal has been caught, we still want to wait for the jobs to complete if possible
+	// but we will abort if a second signal is caught.
+	let mut signal = gem_bs.swap_signal(0);
+	debug!("Job loop finished - cleaning up");
+	if !sched.is_empty() { debug!("Waiting for running jobs to finish") }
 	while !sched.is_empty() {
-		if let SchedState::Abort = sched.state { break; }
-		gem_bs.check_signal()?;
+		let s = gem_bs.get_signal();
+		if s != 0 {
+			if signal == 0 { signal = gem_bs.swap_signal(0) } 
+			else { return Err("Received second signal.  Closing down immediately".to_string()) }
+		}
 		match ctr_rx.recv_timeout(time::Duration::from_millis(1000)) {
 			Ok(x) if x >= 0 => {
 				debug!("Job completion by worker thread {}", x);
 				jobs.retain(|(_, ix)| *ix != x);
 			},
 			Ok(x) => {
-				error!("Error received from worker thread {}", -(x+1));
-				break;
+				let x1 = -(x+1);
+				error!("Error received from worker thread {}", x1);
+				jobs.retain(|(_, ix)| *ix != x1);
 			},
 			Err(mpsc::RecvTimeoutError::Timeout) => {},
 			Err(e) => {
@@ -530,7 +545,8 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 			}				
 		}
 	}	
-	if SchedState::Abort != sched.state {
+	if SchedState::Abort != sched.state && signal == 0 {
+		debug!("Waiting for worker threads to terminate");
 		for w in workers.drain(..) {
 			if w.tx.send(None).is_err() {
 				debug!("Error when trying to send shutdown signal to worker thread {}", w.ix);

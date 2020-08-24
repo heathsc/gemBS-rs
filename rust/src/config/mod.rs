@@ -78,6 +78,9 @@ impl GemBS {
 			s => Err(format!("Received {} signal.  Closing down", signal_msg(s))),
 		}
 	}
+	pub fn swap_signal(&self, s: usize) -> usize {
+		self.signal.swap(s, Ordering::Relaxed)
+	}
 	pub fn set_config(&mut self, section: Section, name: &str, val: DataValue) {
 		if let GemBSHash::Config(href) = &mut self.var[0] {
 			debug!("Setting {:?}:{} to {:?}", section, name, val);

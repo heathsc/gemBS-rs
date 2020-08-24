@@ -87,8 +87,9 @@ where
 		} else { None };
 		self.do_run(sig, log_file).map_err(|e| {
 			for file in self.expected_outputs.iter() { 
+				debug!("Try to remove output file {}", file.display());
 				if file.exists() {
-					warn!("Removing output file {}", file.to_string_lossy());
+					warn!("Removing output file {}", file.display());
 					let _ = fs::remove_file(file); 
 				}
 			}
