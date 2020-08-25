@@ -428,9 +428,30 @@ impl GemBS {
 				} 
 			}
 		}
-		tlist
+		tlist.sort();
+		if ignore { tlist }
+		else {
+			let mut tlist1 = Vec::new();
+			reqd = HashSet::new();
+			for i in tlist.iter() {
+				let mut st = tasks[*i].status().unwrap(); // We already checked above that the status for all tasks is present
+				if st == TaskStatus::Waiting {
+ 					st = TaskStatus::Ready;
+					for ix in tasks[*i].parents() {
+						if !reqd.contains(ix) {
+							st = TaskStatus::Waiting;
+							break;
+						}
+					}
+				}
+				if st == TaskStatus::Ready {
+					reqd.insert(*i);
+					tlist1.push(*i);
+				}
+			} 
+			tlist1
+		}
 	}
-
 	pub fn get_mapping_json_files_for_barcode(&self, barcode: &str) -> Vec<usize> {
 		let mut json_files = Vec::new();
 		if let Some(t) = self.tasks.find_task(format!("single_map_{}", barcode).as_str()) {
