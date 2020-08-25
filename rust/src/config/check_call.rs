@@ -67,7 +67,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 			let (lname, lpath) = assets::make_ext_asset(&id, bcf_path, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let merge_task = gem_bs.add_task(&id, format!("Merge BCFs for barcode {}", bcode).as_str(),
-				 	Command::MergeBcfs, format!("--barcode {} --no_md5 --no_index", bcode).as_str());
+				 	Command::MergeBcfs, format!("--barcode {} --no-md5 --no-index", bcode).as_str());
 			gem_bs.add_task_inputs(merge_task, &out_bcfs).add_outputs(&[out]).set_log(Some(log_index)).set_barcode(bcode)
 				.add_cores(cores).add_memory(memory).add_time(time);
 			gem_bs.get_asset_mut(out).unwrap().set_creator(merge_task, &out_bcfs);
@@ -85,7 +85,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 			let (lname, lpath) = assets::make_ext_asset(&id, bcf_path, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let call_task = gem_bs.add_task(&id, format!("Call BCFs for barcode {}", bcode).as_str(),
-				 	Command::Call, format!("--barcode {} --no_md5 --no_index", bcode).as_str());
+				 	Command::Call, format!("--barcode {} --no-md5 --no-index", bcode).as_str());
 			gem_bs.add_task_inputs(call_task, &in_vec).add_outputs(&[out, out1]).set_log(Some(log_index)).set_barcode(bcode)
 				.add_cores(cores).add_memory(memory).add_time(time);
 			[out, out1].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(call_task, &in_vec));

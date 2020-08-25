@@ -41,12 +41,15 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 		debug!("Moved working directory to {}", f);
 	}	
 
-	if let Some(s) = m.value_of("json") { gem_bs.set_config(Section::Default, "json_file", DataValue::String(s.to_string())); }
+	if let Some(s) = m.value_of("json_file") { gem_bs.set_config(Section::Default, "json_file", DataValue::String(s.to_string())); }
 	if let Some(s) = m.value_of("gembs_root") { gem_bs.set_config(Section::Default, "gembs_root", DataValue::String(s.to_string())); }
 	if m.is_present("keep_logs") { gem_bs.set_config(Section::Default, "keep_logs", DataValue::Bool(true)); }
 	if m.is_present("ignore_times") { gem_bs.set_ignore_times(true); }
 	if m.is_present("ignore_status") { gem_bs.set_ignore_status(true); }
 	if m.is_present("all") { gem_bs.set_all(true); }
+	if m.is_present("dry_run") { gem_bs.set_dry_run(true); }
+	if m.is_present("slurm") { gem_bs.set_slurm(true); }
+	if let Some(s) = m.value_of("json") { gem_bs.set_json_out(s); }
 
 	let mem = (gem_bs.total_mem() as f64) / 1073741824.0;
 	info!("Total memory detected: {:.1} GB", mem);

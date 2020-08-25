@@ -49,14 +49,18 @@ pub struct GemBS {
 	signal: Arc<AtomicUsize>,
 	ignore_times: bool,
 	ignore_status: bool,
+	json_out: Option<String>,
 	all: bool,
+	slurm: bool,
+	dry_run: bool,
 }
 
 impl GemBS {
 	pub fn new() -> Self {
 		let total_mem = get_phys_memory().expect("Couldn't get total memory on system");
 		let mut gem_bs = GemBS{var: Vec::new(), fs: None, contig_pool_digest: None, asset_digest: None, 
-			ignore_times: false, ignore_status: false, all: false, total_mem,
+			ignore_times: false, ignore_status: false, total_mem,
+			json_out: None, all: false, slurm: false, dry_run: false,
 			assets: AssetList::new(), tasks: TaskList::new(), signal: Arc::new(AtomicUsize::new(0))};
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGTERM, Arc::clone(&gem_bs.signal), SIGTERM);		
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGINT, Arc::clone(&gem_bs.signal), SIGINT);		
@@ -385,6 +389,13 @@ impl GemBS {
 	pub fn ignore_status(&self) -> bool { self.ignore_status }
 	pub fn set_all(&mut self, x: bool) { self.all = x; }
 	pub fn all(&self) -> bool { self.all }
+	pub fn set_dry_run(&mut self, x: bool) { self.dry_run = x; }
+	pub fn dry_run(&self) -> bool { self.dry_run }
+	pub fn set_slurm(&mut self, x: bool) { self.slurm = x; }
+	pub fn slurm(&self) -> bool { self.slurm }
+	pub fn set_json_out(&mut self, s: &str) { self.json_out = Some(s.to_owned()); }
+	pub fn json_out(&self) -> Option<&str> { self.json_out.as_deref() }
+	pub fn execute_flag(&self) -> bool { !(self.dry_run || self.slurm || self.json_out.is_some()) }
 	pub fn get_required_tasks_from_asset_list(&self, assets: &[usize], com_list: &[Command]) -> Vec<usize> {
 		let com_set = com_list.iter().fold(HashSet::new(), |mut hs, x| { hs.insert(*x); hs });
 		fn check_reqd(i: usize, reqd: &mut HashSet<usize>, tlist: &mut Vec<usize>, rf: &TaskList, arf: &AssetList, com_set: &HashSet<Command>, ignore: bool) {

@@ -143,8 +143,6 @@ lazy_static! {
 	  	m.push(("make_bs_index", OptionType::Local(VarType::Bool)));
 	  	m.push(("make_dbsnp_index", OptionType::Local(VarType::Bool)));
 	  	m.push(("dbsnp_files", OptionType::Global("dbsnp_files", VarType::StringVec)));
-      	m.push(("dry_run", OptionType::Special("_dry_run", VarType::Bool)));
-      	m.push(("json", OptionType::Special("_json", VarType::String)));
 	  	m.push(("project", OptionType::Global("project", VarType::String)));
 	  	m.push(("report_dir", OptionType::Global("report_dir", VarType::String)));
 	  	m.push(("paper_size", OptionType::Global("paper_size", VarType::PageSize)));
