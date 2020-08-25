@@ -397,6 +397,7 @@ struct Worker {
 pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize], asset_ids: &[usize], com_set: &[Command], flock: FileLock) -> Result<(), String> {
 	gem_bs.check_signal()?;
 	let tlist: Vec<_> = task_list.iter().copied().collect();
+	debug!("Schedule_jobs started with {} tasks", tlist.len());
 	let mut sched = Scheduler::new(tlist);
 	let task_path = flock.path();
 	sched.set_lock(flock);
@@ -454,16 +455,16 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 					} else { return Err("Empty command pipeline!".to_string()) };
 				},
 				Err(SchedulerError::NoSlots) => {
-					debug!("No Slots");
+					debug!("No execution slots");
 					thread::sleep(time::Duration::from_millis(1000));
 					avail.push(idx);
 				},
-				Err(SchedulerError::WaitingForTasks) => {
+				Err(SchedulerError::WaitingForTasks) | Err(SchedulerError::NoTasksReady) => {
 					debug!("Waiting for tasks");
 					thread::sleep(time::Duration::from_millis(1000));
 					avail.push(idx);
 				},
-				Err(SchedulerError::NoTasks) | Err(SchedulerError::NoTasksReady) => {
+				Err(SchedulerError::NoTasks) => {
 					debug!("No tasks to do");
 					break;
 				},	

@@ -61,8 +61,6 @@ pub fn report_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> 
 	}
 	let assets: Vec<usize> = asset_set.into_iter().collect();
 	let task_list = gem_bs.get_required_tasks_from_asset_list(&assets, &com_set);
-	if gem_bs.dry_run() { dry_run::handle_dry_run(gem_bs, &options, &task_list) }
-	if let Some(json_file) = gem_bs.json_out() { dry_run::handle_json_tasks(gem_bs, &options, &task_list, json_file)?; }
-	if gem_bs.execute_flag() { scheduler::schedule_jobs(gem_bs, &options, &task_list, &assets, &com_set, flock)?; }		
-	Ok(())
+	if gem_bs.execute_flag() { scheduler::schedule_jobs(gem_bs, &options, &task_list, &assets, &com_set, flock) }		
+	else { dry_run::handle_nonexec(gem_bs, &options, &task_list) }
 }

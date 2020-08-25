@@ -410,7 +410,7 @@ impl GemBS {
 						}
 					}
 				}
-				if (ignore || st == TaskStatus::Ready || st == TaskStatus::Waiting) && 
+				if (ignore || st != TaskStatus::Complete) && 
 					com_set.contains(&rf[i].command()) { tlist.push(i); }
 			}
 		}
@@ -444,7 +444,7 @@ impl GemBS {
 						}
 					}
 				}
-				if st == TaskStatus::Ready {
+				if st == TaskStatus::Ready || st == TaskStatus::Running {
 					reqd.insert(*i);
 					tlist1.push(*i);
 				}

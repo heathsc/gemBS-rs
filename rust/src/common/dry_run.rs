@@ -5,6 +5,8 @@ use crate::config::GemBS;
 use crate::common::tasks::{Task, JsonTask};
 use crate::common::defs::{Command, DataValue};
 use crate::common::assets::GetAsset;
+use crate::cluster_mgmt::slurm;
+
 use std::path::Path;
 
 fn get_arg_string(task: &Task, options: &HashMap<&'static str, DataValue>) -> String {
@@ -27,7 +29,7 @@ fn get_arg_string(task: &Task, options: &HashMap<&'static str, DataValue>) -> St
 	arg_string
 }
 
-pub fn handle_dry_run(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize]) {
+fn handle_dry_run(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize]) {
 	for ix in task_list {
 		let task = &gem_bs.get_tasks()[*ix];
 		if task.command() != Command::MergeCallJsons {
@@ -37,7 +39,7 @@ pub fn handle_dry_run(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>
 	}	
 }
 
-pub fn handle_json_tasks(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize], json_file: &str) -> Result<(), String> {
+fn handle_json_tasks(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize], json_file: &str) -> Result<(), String> {
 	let task_set: HashSet<usize> = task_list.iter().fold(HashSet::new(), |mut hs, x| { hs.insert(*x); hs });
 	let mut json_task_list = Vec::new();
 	for ix in task_list {
@@ -64,3 +66,9 @@ pub fn handle_json_tasks(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	serde_json::to_writer_pretty(writer, &json_task_list).map_err(|e| format!("Error: failed to write JSON config file {}: {}", json_file, e))
 }
 
+pub fn handle_nonexec(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize]) -> Result<(), String> {
+	if gem_bs.dry_run() { handle_dry_run(gem_bs, &options, &task_list) }
+	if let Some(json_file) = gem_bs.json_out() { handle_json_tasks(gem_bs, &options, &task_list, json_file)?; }
+	if gem_bs.slurm() { slurm::handle_slurm(gem_bs, &options, &task_list)?; }
+	Ok(())
+}

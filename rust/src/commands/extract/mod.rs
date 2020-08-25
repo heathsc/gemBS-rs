@@ -30,8 +30,6 @@ pub fn extract_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String>
 	let asset_ids = get_required_asset_list(gem_bs, &options)?;
 	let task_list = if gem_bs.all() { gem_bs.get_required_tasks_from_asset_list(&asset_ids, &[Command::Index, Command::Map, Command::MergeBams, Command::Call, Command::MergeBcfs, Command::Extract]) }
 		else { gem_bs.get_required_tasks_from_asset_list(&asset_ids, &[Command::Extract]) };
-	if gem_bs.dry_run() { dry_run::handle_dry_run(gem_bs, &options, &task_list) }
-	if let Some(json_file) = gem_bs.json_out() { dry_run::handle_json_tasks(gem_bs, &options, &task_list, json_file)?; }
-	if gem_bs.execute_flag() { scheduler::schedule_jobs(gem_bs, &options, &task_list, &asset_ids, &[Command::Extract], flock)?; }	
-	Ok(())
+	if gem_bs.execute_flag() { scheduler::schedule_jobs(gem_bs, &options, &task_list, &asset_ids, &[Command::Extract], flock) }	
+	else { dry_run::handle_nonexec(gem_bs, &options, &task_list) }
 }

@@ -8,6 +8,7 @@ mod config;
 mod commands;
 mod common;
 mod scheduler;
+mod cluster_mgmt;
 
 fn main() -> Result<(), String> {
 	let mut gem_bs = config::GemBS::new();
