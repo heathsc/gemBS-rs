@@ -35,15 +35,15 @@ pub fn report_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> 
 	gem_bs.setup_assets_and_tasks(&flock)?;
 	let com_set = if gem_bs.all() {
 		let mut tc = vec!(Command::Index, Command::Map);
-		if options.contains_key("_mapping") { tc.push(Command::MapReport); }
-		if options.contains_key("_calling") { tc.append(&mut vec!(Command::MergeBams,Command::MergeCallJsons, Command::IndexBcf, Command::Call, Command::CallReport)); }
-		if options.contains_key("_report") { tc.append(&mut vec!(Command::MD5SumMap, Command::MD5SumCall, Command::Report)); }		
+		if options.contains_key("_mapping") { tc.append(&mut vec!(Command::MD5SumMap, Command::MapReport)); }
+		if options.contains_key("_calling") { tc.append(&mut vec!(Command::MergeBams, Command::MD5SumCall, Command::MergeCallJsons, Command::IndexBcf, Command::Call, Command::CallReport)); }
+		if options.contains_key("_report") { tc.push(Command::Report); }		
 		tc
 	} else {
 		let mut tc = Vec::new();
 		if options.contains_key("_mapping") { tc.push(Command::MapReport); }
 		if options.contains_key("_calling") { tc.append(&mut vec!(Command::MergeCallJsons, Command::CallReport)); }
-		if options.contains_key("_report") { tc.append(&mut vec!(Command::MD5SumMap, Command::MD5SumCall, Command::Report)); }
+		if options.contains_key("_report") { tc.push(Command::Report); }
 		tc
 	};
 	let mut asset_set = HashSet::new();

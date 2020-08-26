@@ -439,6 +439,7 @@ impl GemBS {
  					st = TaskStatus::Ready;
 					for ix in tasks[*i].parents() {
 						if !reqd.contains(ix) {
+							println!("Task {} has missing parent {}", tasks[*i].id(), tasks[*ix].id());
 							st = TaskStatus::Waiting;
 							break;
 						}

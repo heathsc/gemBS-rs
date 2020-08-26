@@ -28,8 +28,8 @@ pub fn extract_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String>
 	let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?; 
 	gem_bs.setup_assets_and_tasks(&flock)?;
 	let asset_ids = get_required_asset_list(gem_bs, &options)?;
-	let task_list = if gem_bs.all() { gem_bs.get_required_tasks_from_asset_list(&asset_ids, &[Command::Index, Command::Map, Command::MergeBams, Command::Call, Command::MergeBcfs, Command::Extract]) }
-		else { gem_bs.get_required_tasks_from_asset_list(&asset_ids, &[Command::Extract]) };
+	let task_list = if gem_bs.all() { gem_bs.get_required_tasks_from_asset_list(&asset_ids, &[Command::Index, Command::Map, Command::MergeBams, Command::Call, Command::MergeBcfs, Command::MD5SumMap, Command::MD5SumCall, Command::IndexBcf, Command::Extract])} 
+	else { gem_bs.get_required_tasks_from_asset_list(&asset_ids, &[Command::Extract]) };
 	if gem_bs.execute_flag() { scheduler::schedule_jobs(gem_bs, &options, &task_list, &asset_ids, &[Command::Extract], flock) }	
 	else { dry_run::handle_nonexec(gem_bs, &options, &task_list) }
 }
