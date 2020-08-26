@@ -173,4 +173,7 @@ subcommands:
           - calling: {short: C, long: calling, help: Generate calling report, conflicts_with: pdf}
           - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
+    - run:
+        setting: DeriveDisplayOrder
+        about: Run all pending pipeline commands
  

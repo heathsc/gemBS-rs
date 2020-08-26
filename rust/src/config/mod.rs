@@ -171,6 +171,7 @@ impl GemBS {
 	}
 	pub fn get_tasks_iter(&self) -> slice::Iter<'_, Task> { self.tasks.iter() }
 	pub fn get_tasks(&self) -> &TaskList { &self.tasks }
+	pub fn get_assets(&self) -> &AssetList { &self.assets }
 	pub fn add_parent_child(&mut self, child: usize, parent: usize) {
 		self.tasks.get_idx(child).add_parent(parent);
 	}	
@@ -439,7 +440,6 @@ impl GemBS {
  					st = TaskStatus::Ready;
 					for ix in tasks[*i].parents() {
 						if !reqd.contains(ix) {
-							println!("Task {} has missing parent {}", tasks[*i].id(), tasks[*ix].id());
 							st = TaskStatus::Waiting;
 							break;
 						}

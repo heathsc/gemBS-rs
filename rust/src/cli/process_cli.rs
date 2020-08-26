@@ -58,30 +58,26 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 	
 	match m.subcommand() {
 		("prepare", Some(m_sum)) => {
-			debug!("User entered 'prepare' command");
 			commands::prepare::prepare_command(m_sum, gem_bs)
 		},
 		("index", Some(m_sum)) => {
-			debug!("User entered 'index' command");
 			commands::index::index_command(m_sum, gem_bs)
 		},
 		("map", Some(m_sum)) => {
-			debug!("User entered 'map' command");
 			commands::map::map_command(m_sum, gem_bs)
 		},
 		("call", Some(m_sum)) => {
-			debug!("User entered 'call' command");
 			commands::call::call_command(m_sum, gem_bs)
 		},
 		("extract", Some(m_sum)) => {
-			debug!("User entered 'extract' command");
 			commands::extract::extract_command(m_sum, gem_bs)
 		},
 		("report", Some(m_sum)) => {
-			debug!("User entered 'report' command");
 			commands::report::report_command(m_sum, gem_bs)
 		},
-		_ => {
+		("run", Some(m_sum)) => {
+			commands::run::run_command(m_sum, gem_bs)
+		},		_ => {
 			Err("Unknown subcommand".to_string())
 		},
 	}

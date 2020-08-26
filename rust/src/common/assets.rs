@@ -80,6 +80,8 @@ impl Asset {
 	}
 //	pub fn mod_time(&self) -> Option<SystemTime> { self.mod_time }
 	pub fn mod_time_ances(&self) -> Option<SystemTime> { self.mod_time_ances }
+	pub fn parents(&self) -> &[usize] { &self.parents }
+	pub fn asset_type(&self) -> AssetType { self.asset_type }
 }
 
 pub fn make_ext_asset(id: &str, par: &Path, ext: &str) -> (String, PathBuf) {
@@ -177,7 +179,8 @@ impl AssetList {
 			visited[idx] = true;
 		} 
 	}
-	
+	pub fn iter(&self) -> std::slice::Iter<'_, Asset> { self.assets.iter() }
+	pub fn len(&self) -> usize { self.assets.len() }
 	pub fn recheck_status(&mut self, hs: &HashSet<usize>) {
 		let len = self.assets.len();
 		let mut changed = vec!(None; len);
