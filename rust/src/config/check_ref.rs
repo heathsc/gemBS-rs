@@ -229,7 +229,7 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 		let mut pipeline = Pipeline::new();
 		pipeline.add_stage(&md5_path, Some(md5_args.iter()))
 			    .add_stage(&bgzip_path, Some(bgzip_args.iter()))
-				.out_file(&gref).add_output(&ctg_md5);
+				.out_filepath(&gref).add_output(&ctg_md5);
 		pipeline.run(gem_bs.get_signal_clone())?;
 	}
 	// Create faidx index if required		

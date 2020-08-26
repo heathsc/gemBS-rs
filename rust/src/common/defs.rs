@@ -100,7 +100,7 @@ impl fmt::Display for FileType {
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MemSize {
 	mem: usize,	
 }
@@ -137,7 +137,8 @@ impl fmt::Display for MemSize {
 		let mem = self.mem;
 		if mem.trailing_zeros() >= 30 { write!(f, "{}G", mem >> 30) }
 		else if mem.trailing_zeros() >= 20 { write!(f, "{}M", mem >> 20) }
-		else if mem.trailing_zeros() >= 10 { write!(f, "{}M", mem >> 10) }
+		else if mem.trailing_zeros() >= 10 { write!(f, "{}K", mem >> 10) }
+		else if f.alternate() { write!(f, "{}K", (mem + 0x3ff) >> 10) }
 		else { write!(f, "{}", mem) }
 	}	
 }
@@ -146,7 +147,7 @@ impl From<usize> for MemSize {
 	fn from(mem: usize) -> Self { MemSize{mem}}	
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct JobLen {
 	secs: usize,	
 }

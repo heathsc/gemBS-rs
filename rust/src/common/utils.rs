@@ -33,8 +33,15 @@ pub fn get_phys_memory() -> Option<usize> {
 	} else { None }
 }
 
+
 pub enum PipelineOutput<'a> {
-	File(&'a Path),
+	FilePath(&'a Path),
+	File(Option<fs::File>),
+	None,
+}
+
+pub enum PipelineInput {
+	File(Option<fs::File>),
 	None,
 }
 
@@ -45,6 +52,7 @@ where
 {
 	stage: Vec<(&'a Path, Option<I>)>,
 	output: PipelineOutput<'a>,
+	input: PipelineInput,
 	log: Option<PathBuf>,
 	expected_outputs: Vec<&'a Path>,
 }
@@ -55,16 +63,25 @@ where
     S: AsRef<OsStr>,
 {
 	pub fn new() -> Self {
-		Pipeline{stage: Vec::new(), output: PipelineOutput::None, log: None, expected_outputs: Vec::new() }
+		Pipeline{stage: Vec::new(), output: PipelineOutput::None, input: PipelineInput::None, log: None, expected_outputs: Vec::new() }
 	}
 	// Add pipeline stage (command + optional vector of arguments)
 	pub fn add_stage(&mut self, command: &'a Path, args: Option<I>) -> &mut Pipeline<'a, I, S> {
 		self.stage.push((command, args));
 		self
 	}
-	// Send output of pipeline to file
-	pub fn out_file(&mut self, file: &'a Path) -> &mut Pipeline<'a, I, S> {
-		self.output = PipelineOutput::File(file);
+	// Send output of pipeline to File
+	pub fn out_file(&mut self, file: fs::File) -> &mut Pipeline<'a, I, S> {
+		self.output = PipelineOutput::File(Some(file));
+		self
+	}
+	pub fn in_file(&mut self, file: fs::File) -> &mut Pipeline<'a, I, S> {
+		self.input = PipelineInput::File(Some(file));
+		self
+	}
+	// Send output of pipeline to file at Path
+	pub fn out_filepath(&mut self, file: &'a Path) -> &mut Pipeline<'a, I, S> {
+		self.output = PipelineOutput::FilePath(file);
 		self.add_output(file)
 	}
 	// Send stderr of pipeline stages to file
@@ -108,7 +125,9 @@ where
 				cc.stdin(child.stdout.take().unwrap()) 
 			} else {
 				desc.push_str(format!("{}", com.to_string_lossy()).as_str());
-				cc.stdin(Stdio::null())
+				if let PipelineInput::File(optf) = &mut self.input {
+					cc.stdin(Stdio::from(optf.take().expect("No file provided for pipeline input")))
+				} else { cc.stdin(Stdio::null()) }
 			};
 			if let Some(lfile) = log.as_ref() { 
 				if let Ok(f) = lfile.try_clone() { cc = cc.stderr(f) }
@@ -123,13 +142,14 @@ where
 			}
 			len -= 1;
 			if len > 0 { cc = cc.stdout(Stdio::piped()); } else {
-				match self.output {
-					PipelineOutput::File(file) => {
+				match &mut self.output {
+					PipelineOutput::FilePath(file) => {
 						let fname = file.to_string_lossy();
 						let f = fs::File::create(file).map_err(|e| format!("Couldn't open output file {}: {}", fname, e))?;
 						desc.push_str(format!(" > {}", fname).as_str());
 						cc = cc.stdout(Stdio::from(f));
 					},
+					PipelineOutput::File(optf) => cc = cc.stdout(Stdio::from(optf.take().expect("No file provided for pipeline output"))),
 					PipelineOutput::None => (),
 				}
 			}

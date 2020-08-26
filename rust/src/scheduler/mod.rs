@@ -325,7 +325,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 						out_list.iter().for_each(|x| { pipeline.add_output(x); });
 						if let Some(file) = log { pipeline.log_file(file.clone()); }
 						let opath = &qpipe.output.to_owned();
-						if let Some(path) = opath { pipeline.out_file(&path); }
+						if let Some(path) = opath { pipeline.out_filepath(&path); }
 						pipeline.run(qpipe.sig)
 					},
 					QPipeStage::Internal(com) => {

@@ -52,7 +52,7 @@ pub fn make_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<S
 		let args = vec!("-pdf", "-silent", "-cd", "-outdir=.latexwork", &tex_name);
 		let path = Path::new("latexmk");
 		let ofile = output_dir.join("latexmk.log");
-		pipeline.add_stage(&path, Some(args.iter())).log_file(output_dir.join("latexmk.err")).out_file(&ofile);
+		pipeline.add_stage(&path, Some(args.iter())).log_file(output_dir.join("latexmk.err")).out_filepath(&ofile);
 		let tdir = output_dir.join(".latexwork");
 		// Older versions of latexmk need the output directory to exist before running
 		fs::create_dir_all(&tdir).expect("Could not create temporary output directory for latexmk");	

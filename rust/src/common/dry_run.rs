@@ -9,7 +9,7 @@ use crate::cluster_mgmt::slurm;
 
 use std::path::Path;
 
-fn get_arg_string(task: &Task, options: &HashMap<&'static str, DataValue>) -> String {
+pub fn get_arg_string(task: &Task, options: &HashMap<&'static str, DataValue>) -> String {
 	let mut arg_string = task.args().to_owned();
 	for (opt, val) in options {
 		if !(*opt).starts_with('_') {
