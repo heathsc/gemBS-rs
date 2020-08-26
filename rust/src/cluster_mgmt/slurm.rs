@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::fs;
 use std::str::FromStr;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Write, Seek, SeekFrom};
 use std::rc::Rc;
 
@@ -100,6 +100,15 @@ pub fn handle_slurm(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, 
 		tfile.seek(SeekFrom::Start(0)).map_err(|e| format!("{}", e))?;
 		let mut ofile = tempfile::tempfile().expect("Couldn't create temporary slurm output file");
 		let mut sbatch_args = Vec::new();
+		let mut hs = HashSet::new();
+		let mut desc = String::from("gemBS");
+		for ix in jv.task_vec.iter() {
+			let task = &gem_bs.get_tasks()[*ix];
+			if hs.insert(task.command()) {
+				desc.push_str(format!("_{:#}",task.command()).as_str());
+			}
+		}
+		sbatch_args.push(format!("--job-name={}", desc));
 		sbatch_args.push(format!("--cpus-per-task={}", jv.node.cores));
 		sbatch_args.push(format!("--mem={:#}", jv.node.mem));
 		sbatch_args.push(format!("--time={}", jv.node.time));

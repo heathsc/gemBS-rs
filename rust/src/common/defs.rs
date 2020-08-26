@@ -269,20 +269,38 @@ pub enum Command {
 
 impl fmt::Display for Command {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
-			Command::Index => write!(f, "index"),
-			Command::Map => write!(f, "map"),
-			Command::MergeBams => write!(f, "map --merge"),
-			Command::Call => write!(f, "call"),
-			Command::MergeBcfs => write!(f, "call --merge"),
-			Command::Extract => write!(f, "extract"),
-			Command::MapReport => write!(f, "report --mapping"),
-			Command::CallReport => write!(f, "report --calling"),
-			Command::Report => write!(f, "report"),
-			Command::MD5SumMap => write!(f, "map --md5"),
-			Command::MD5SumCall => write!(f, "call --md5"),
-			Command::IndexBcf => write!(f, "call --index"),
-			Command::MergeCallJsons => write!(f, "merge-call-jsons"),
+		if f.alternate() {			
+			match *self {
+				Command::Index => write!(f, "index"),
+				Command::Map => write!(f, "map"),
+				Command::MergeBams => write!(f, "merge-bams"),
+				Command::Call => write!(f, "call"),
+				Command::MergeBcfs => write!(f, "merge-bcfs"),
+				Command::Extract => write!(f, "extract"),
+				Command::MapReport => write!(f, "mapping-report"),
+				Command::CallReport => write!(f, "calling-report"),
+				Command::Report => write!(f, "report"),
+				Command::MD5SumMap => write!(f, "md5_bam"),
+				Command::MD5SumCall => write!(f, "md5_bcf"),
+				Command::IndexBcf => write!(f, "index_bcf"),
+				Command::MergeCallJsons => write!(f, "merge-call-jsons"),
+			}
+		} else {
+			match *self {
+				Command::Index => write!(f, "index"),
+				Command::Map => write!(f, "map"),
+				Command::MergeBams => write!(f, "map --merge"),
+				Command::Call => write!(f, "call"),
+				Command::MergeBcfs => write!(f, "call --merge"),
+				Command::Extract => write!(f, "extract"),
+				Command::MapReport => write!(f, "report --mapping"),
+				Command::CallReport => write!(f, "report --calling"),
+				Command::Report => write!(f, "report"),
+				Command::MD5SumMap => write!(f, "map --md5"),
+				Command::MD5SumCall => write!(f, "call --md5"),
+				Command::IndexBcf => write!(f, "call --index"),
+				Command::MergeCallJsons => write!(f, "merge-call-jsons"),
+			}
 		}
 	}
 }
