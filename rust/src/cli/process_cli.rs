@@ -3,6 +3,9 @@ use std::env;
 use std::path::Path;
 use clap::{App, AppSettings};
 
+#[cfg(feature = "slurm")]
+use clap::Arg;
+
 use crate::commands;
 use crate::config::GemBS;
 use crate::common::defs::{Section, DataValue};
@@ -11,10 +14,14 @@ use super::utils::LogLevel;
 
 pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 	let yaml = load_yaml!("cli.yml");
-    let m = App::from_yaml(yaml)
-        .setting(AppSettings::VersionlessSubcommands)
-		.get_matches();
-		
+
+    let mut app = App::from_yaml(yaml);
+	app = app.setting(AppSettings::VersionlessSubcommands);
+	#[cfg(feature = "slurm")]
+	{
+		app = app.arg(Arg::with_name("slurm").short("s").long("slurm").help("Submit commands to slurm for execution"));
+	}
+	let m = app.get_matches();		
 	// Interpret global command line flags and set up logging
     
     let ts = m.value_of("timestamp").map(|v| {

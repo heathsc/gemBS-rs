@@ -14,7 +14,6 @@ args:
     - gembs_root: {short :r, long: gembs-root, takes_value: true, value_name: DIR, help: set root of gemBS installation}
     - all: {short: a, long: all, help: Consider all tasks required for the requested command}
     - dry_run: {short: d, long: dry-run, help: Output pending commands without execution}
-    - slurm: {short: s, long: slurm, help: Submit pending commands to slurm for execution}
     - json: {short: j, long: json, value_name: JSON_FILE, takes_value: true, help: Output JSON file with details of pending commands}
     - ignore_times: {short: i, long: ignore-times, help: Ignore file modification times when evaluating the status of tasks}
     - ignore_status: {short: I, long: ignore-status, help: Ignore status of tasks when compiling task list}

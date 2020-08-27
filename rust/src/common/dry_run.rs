@@ -5,6 +5,7 @@ use crate::config::GemBS;
 use crate::common::tasks::{Task, JsonTask};
 use crate::common::defs::{Command, DataValue};
 use crate::common::assets::GetAsset;
+#[cfg(feature = "slurm")]
 use crate::cluster_mgmt::slurm;
 
 use std::path::Path;
@@ -69,6 +70,9 @@ fn handle_json_tasks(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>,
 pub fn handle_nonexec(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize]) -> Result<(), String> {
 	if gem_bs.dry_run() { handle_dry_run(gem_bs, &options, &task_list) }
 	if let Some(json_file) = gem_bs.json_out() { handle_json_tasks(gem_bs, &options, &task_list, json_file)?; }
+	
+	#[cfg(feature = "slurm")]
 	if gem_bs.slurm() { slurm::handle_slurm(gem_bs, &options, &task_list)?; }
+	
 	Ok(())
 }

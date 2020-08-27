@@ -8,6 +8,7 @@ mod config;
 mod commands;
 mod common;
 mod scheduler;
+#[cfg(feature = "slurm")]
 mod cluster_mgmt;
 
 fn main() -> Result<(), String> {
