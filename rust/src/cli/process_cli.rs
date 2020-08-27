@@ -34,7 +34,7 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
         .timestamp(ts)
         .init()
         .unwrap();
-
+	gem_bs.set_verbose(verbose);
 	if let Some(f) = m.value_of("dir") {
 		let wd = Path::new(f);
 		env::set_current_dir(&wd).map_err(|e| format!("Can not switch working directory to {}: {}", f, e))?;

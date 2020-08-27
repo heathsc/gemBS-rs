@@ -1,5 +1,6 @@
 use clap::ArgMatches;
 use std::str::FromStr;
+use std::fmt;
 use std::collections::HashMap;
 use crate::config::GemBS;
 use lazy_static::lazy_static;
@@ -153,7 +154,7 @@ lazy_static! {
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct LogLevel {
 	level: usize,
 }
@@ -172,6 +173,14 @@ impl FromStr for LogLevel {
             _ => Err("no match"),
         }
     }
+}
+
+impl fmt::Display for LogLevel {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let level_str = ["error", "warn", "info", "debug", "trace", "none" ];
+		if self.level < 6 { write!(f, "{}", level_str[self.level]) }
+		else { write!(f, "unknown") }
+	}
 }
 
 impl LogLevel {

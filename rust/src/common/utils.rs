@@ -117,7 +117,7 @@ where
 		if self.stage.is_empty() { return Err("Error - Empty pipeline".to_string()); }	
 		let mut len = self.stage.len();
 		let mut cinfo: Vec<(Child, &'a Path)> = Vec::new();
-		let mut desc = "Starting pipeline:\n\t".to_string();
+		let mut desc = "Launch:\n\t".to_string();
 		for (com, args) in self.stage.drain(..) {
 			let mut cc = Command::new(com);
 			let mut cc = if let Some((child, _)) = cinfo.last_mut() { 
@@ -170,7 +170,7 @@ where
 				}
 			},
 			None => {
-				debug!("Pipeline terminated succesfully");
+				debug!("Process terminated succesfully");
 				Ok(())
 			},
 		}

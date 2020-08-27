@@ -74,9 +74,12 @@ fn make_known_var_list() -> KnownVarList {
 	kv_list.add_known_var("memory", VarType::MemSize, vec!(Section::Index, Section::Mapping, Section::Calling, Section::Extract, Section::Report, Section::MD5Sum));
 	kv_list.add_known_var("keep_logs", VarType::Bool, vec!(Section::Index, Section::Mapping, Section::Calling, Section::Extract, Section::Report, Section::MD5Sum));
 	kv_list.add_known_var("merge_threads", VarType::Int, vec!(Section::Mapping, Section::Calling));
+	kv_list.add_known_var("merge_cores", VarType::Int, vec!(Section::Mapping, Section::Calling));
+	kv_list.add_known_var("merge_memory", VarType::MemSize, vec!(Section::Mapping, Section::Calling));
+	kv_list.add_known_var("merge_time", VarType::JobLen, vec!(Section::Mapping, Section::Calling));
 	kv_list.add_known_var("map_threads", VarType::Int, vec!(Section::Mapping));
 	kv_list.add_known_var("sort_threads", VarType::Int, vec!(Section::Mapping));
-	kv_list.add_known_var("sort_memory", VarType::String, vec!(Section::Mapping));
+	kv_list.add_known_var("sort_memory", VarType::MemSize, vec!(Section::Mapping));
 	kv_list.add_known_var("non_stranded", VarType::Bool, vec!(Section::Mapping));
 	kv_list.add_known_var("reverse_conversion", VarType::Bool, vec!(Section::Mapping));
 	kv_list.add_known_var("remove_individual_bams", VarType::Bool, vec!(Section::Mapping));

@@ -11,11 +11,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::{Serialize, Deserialize};
 use std::path::Path;
 use std::rc::Rc;
+use std::str::FromStr;
 
 use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, JobLen, MemSize, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 use crate::common::assets::{Asset, AssetList, AssetType, AssetStatus, GetAsset};
 use crate::common::tasks::{Task, TaskList, TaskStatus, RunningTask};
 use crate::common::utils::{FileLock, timed_wait_for_lock, get_phys_memory};
+use crate::cli::utils::LogLevel;
+
 use std::slice;
 
 pub mod contig;
@@ -53,6 +56,7 @@ pub struct GemBS {
 	all: bool,
 	slurm: bool,
 	dry_run: bool,
+	verbose: LogLevel,
 }
 
 impl GemBS {
@@ -60,7 +64,7 @@ impl GemBS {
 		let total_mem = get_phys_memory().expect("Couldn't get total memory on system");
 		let mut gem_bs = GemBS{var: Vec::new(), fs: None, contig_pool_digest: None, asset_digest: None, 
 			ignore_times: false, ignore_status: false, total_mem,
-			json_out: None, all: false, slurm: false, dry_run: false,
+			json_out: None, all: false, slurm: false, dry_run: false, verbose: LogLevel::from_str("error").unwrap(),
 			assets: AssetList::new(), tasks: TaskList::new(), signal: Arc::new(AtomicUsize::new(0))};
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGTERM, Arc::clone(&gem_bs.signal), SIGTERM);		
 		let _ = signal_hook::flag::register_usize(signal_hook::SIGINT, Arc::clone(&gem_bs.signal), SIGINT);		
@@ -390,6 +394,8 @@ impl GemBS {
 	pub fn ignore_status(&self) -> bool { self.ignore_status }
 	pub fn set_all(&mut self, x: bool) { self.all = x; }
 	pub fn all(&self) -> bool { self.all }
+	pub fn set_verbose(&mut self, verbose: LogLevel) { self.verbose = verbose; }
+	pub fn verbose(&self) -> LogLevel { self.verbose }
 	pub fn set_dry_run(&mut self, x: bool) { self.dry_run = x; }
 	pub fn dry_run(&self) -> bool { self.dry_run }
 	pub fn set_slurm(&mut self, x: bool) { self.slurm = x; }

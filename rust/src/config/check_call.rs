@@ -13,8 +13,11 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 	let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");
 	let (ext, idx_ext) = if make_cram { ("cram", "cram.crai") } else { ("bam", "bam.csi") };
 	let cores = gem_bs.get_config_int(Section::Calling, "cores").map(|x| x as usize).or_else(|| Some(2));
+	let merge_cores = gem_bs.get_config_int(Section::Calling, "merge_cores").map(|x| x as usize).or(cores);
 	let memory = gem_bs.get_config_memsize(Section::Calling, "memory").or_else(|| Some(0x100000000.into())); // 4G
+	let merge_memory = gem_bs.get_config_memsize(Section::Calling, "merge_memory").or(memory);
 	let time = gem_bs.get_config_joblen(Section::Calling, "time").or_else(|| Some(3600.into()));
+	let merge_time = gem_bs.get_config_joblen(Section::Calling, "time").or(time);
 	let samples = gem_bs.get_samples();
 	let pools = contig::get_contig_pools(gem_bs);
 	let mut common_inputs = Vec::new();
@@ -69,7 +72,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 			let merge_task = gem_bs.add_task(&id, format!("Merge BCFs for barcode {}", bcode).as_str(),
 				 	Command::MergeBcfs, format!("--barcode {} --no-md5 --no-index", bcode).as_str());
 			gem_bs.add_task_inputs(merge_task, &out_bcfs).add_outputs(&[out]).set_log(Some(log_index)).set_barcode(bcode)
-				.add_cores(cores).add_memory(memory).add_time(time);
+				.add_cores(merge_cores).add_memory(merge_memory).add_time(merge_time);
 			gem_bs.get_asset_mut(out).unwrap().set_creator(merge_task, &out_bcfs);
 			let id = format!("merge_call_jsons_{}", bcode);
 			let merge_json_task = gem_bs.add_task(&id, format!("Merge JSONs for barcode {}", bcode).as_str(), Command::MergeCallJsons, "");
