@@ -52,7 +52,11 @@ fn get_status_time(path: &Path, asset_type: AssetType) -> (AssetStatus, Option<S
 			(AssetStatus::Present, md.modified().ok())
 		},
 		Err(e) => {
-			if let AssetType::Supplied = asset_type {warn!("Warning: required datafile {} not accessible: {}", path.to_string_lossy(), e)}
+			if let AssetType::Supplied = asset_type {
+				// If pipe then treat as if it is present
+				if path.to_string_lossy().ends_with('|') { return (AssetStatus::Present, None); }
+				warn!("Warning: required datafile {} not accessible: {}", path.to_string_lossy(), e);
+			}
 			(AssetStatus::Absent, None)
 		},
 	}

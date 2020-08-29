@@ -13,11 +13,11 @@ fn make_gem_index(gem_bs: &GemBS, job: usize, bisulfite: bool) -> QPipe
 	let index_base = index.to_string_lossy().clone();
 	let index_base = index_base.trim_end_matches(".gem");
 	let gem_indexer = gem_bs.get_exec_path("gem-indexer");
-	let mut args = format!("-i {} -o {} ", gembs_ref.path().to_string_lossy(), index_base);
-	if bisulfite {args.push_str("--bisulfite-index ")}
-	if let Some(x) = gem_bs.get_config_int(Section::Index, "sampling_rate") { args.push_str(format!("--text-sampling-rate {} ", x).as_str())}
-	if let Some(x) = gem_bs.get_config_int(Section::Index, "threads") { args.push_str(format!("--threads {} ", x).as_str())}
-	if let Some(x) = index.parent() {  args.push_str(format!("--tmp-folder {}", x.to_string_lossy()).as_str())}
+	let mut args = format!("-i\x1e{}\x1e-o\x1e{}\x1e", gembs_ref.path().to_string_lossy(), index_base);
+	if bisulfite {args.push_str("--bisulfite-index\x1e")}
+	if let Some(x) = gem_bs.get_config_int(Section::Index, "sampling_rate") { args.push_str(format!("--text-sampling-rate\x1e{}\x1e", x).as_str())}
+	if let Some(x) = gem_bs.get_config_int(Section::Index, "threads") { args.push_str(format!("--threads\x1e{}\x1e", x).as_str())}
+	if let Some(x) = index.parent() {  args.push_str(format!("--tmp-folder\x1e{}", x.to_string_lossy()).as_str())}
 	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
 	if let Some(x) = gem_bs.get_tasks()[job].log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
 	if gem_bs.get_config_bool(Section::Index, "keep_logs") { pipeline.set_remove_log(false) }

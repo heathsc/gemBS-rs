@@ -135,14 +135,14 @@ pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	let (under, over) = get_conversion_rate(gem_bs, barcode);
 	
 	// Set up bs_call arguments
-	let mut args = format!("--output {} --output-type b --reference {} --sample {} --contig-sizes {} --report-file {} "
+	let mut args = format!("--output\x1e{}\x1e--output-type\x1eb\x1e--reference\x1e{}\x1e--sample\x1e{}\x1e--contig-sizes\x1e{}\x1e--report-file\x1e{}\x1e"
 		, output_bcf.to_string_lossy(), gembs_ref.path().to_string_lossy(), barcode, contig_sizes.to_string_lossy(), report_file.to_string_lossy());
 	if let Some(cp) = contig_pool { 
-		args.push_str(format!("--contig-bed {} ", cp.to_string_lossy()).as_str());
+		args.push_str(format!("--contig-bed\x1e{}\x1e", cp.to_string_lossy()).as_str());
 		pipeline.add_remove_file(&cp);
 	}
-	if let Some(t) = call_threads { args.push_str(format!("--threads {} ", t).as_str()); }
-	args.push_str(format!("--conversion {},{} ", under, over).as_str());
+	if let Some(t) = call_threads { args.push_str(format!("--threads\x1e{}\x1e", t).as_str()); }
+	args.push_str(format!("--conversion\x1e{},{}\x1e", under, over).as_str());
 	super::add_command_opts(gem_bs, &mut args, Section::Calling, &OPT_LIST);
 	args.push_str(&gem_bs.get_asset(in_bam).unwrap().path().to_string_lossy());
 
@@ -163,9 +163,9 @@ pub fn make_merge_bcfs_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, 
 	let output_bcf = gem_bs.get_asset(*task.outputs().next().expect("No output files for call step")).expect("Couldn't get asset").path();
 
 	// Setup arguments	
-	let mut args = format!("concat --output {} --output-type b --naive ", output_bcf.to_string_lossy());
-	if gem_bs.get_config_bool(Section::Calling, "benchmark_mode") { args.push_str("--no-version ")}		
-	if let Some(t) = merge_threads { args.push_str(format!("--threads {} ", t).as_str()); }
+	let mut args = format!("concat\x1e--output\x1e{}\x1e--output-type\x1eb\x1e--naive\x1e", output_bcf.to_string_lossy());
+	if gem_bs.get_config_bool(Section::Calling, "benchmark_mode") { args.push_str("--no-version\x1e")}		
+	if let Some(t) = merge_threads { args.push_str(format!("--threads\x1e{}\x1e", t).as_str()); }
 
 	let remove_bcfs = if let Some(DataValue::Bool(x)) = options.get("remove") { *x } else { 
 	gem_bs.get_config_bool(Section::Calling, "remove_individual_bcfs") };	
@@ -176,7 +176,7 @@ pub fn make_merge_bcfs_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, 
 		if remove_bcfs { pipeline.add_remove_file(&asset.path()); }
 	}
 	v.sort();
-	for s in v.iter() { args.push_str(format!("{} ", s).as_str()) }
+	for s in v.iter() { args.push_str(format!("{}\x1e", s).as_str()) }
 	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
 	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get md5sum output asset").path()); }
 	if gem_bs.get_config_bool(Section::Mapping, "keep_logs") { pipeline.set_remove_log(false) }
@@ -195,8 +195,8 @@ pub fn make_index_bcf_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	let input = gem_bs.get_asset(*task.inputs().next().expect("No input file for index bcf step")).expect("Couldn't get asset").path();
 
 	// Setup arguments	
-	let mut args = String::from("index ");
-	if let Some(t) = merge_threads { args.push_str(format!("--threads {} ", t).as_str()); }
+	let mut args = String::from("index\x1e");
+	if let Some(t) = merge_threads { args.push_str(format!("--threads\x1e{}\x1e", t).as_str()); }
 	args.push_str(format!("{}", input.to_string_lossy()).as_str());
 	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get md5sum output asset").path()); }
 

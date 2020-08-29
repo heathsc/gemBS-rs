@@ -91,7 +91,7 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	let sort_threads = gem_bs.get_config_int(Section::Mapping, "sort_threads").or(mapping_threads);
 	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
 	let mapper_path = gem_bs.get_exec_path("gem-mapper");
-	let mut mapper_args = if let Some(t) = mapping_threads { format!("--threads {} ", t) } else { String::new() };
+	let mut mapper_args = if let Some(t) = mapping_threads { format!("--threads\x1e{}\x1e", t) } else { String::new() };
 	let task = &gem_bs.get_tasks()[job];
 	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
 	// Check type of mapping
@@ -121,24 +121,24 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 			_ => false,
 		}
 	};
-	mapper_args.push_str(format!("-I {} ", index.path().to_string_lossy()).as_str());
+	mapper_args.push_str(format!("-I\x1e{}\x1e", index.path().to_string_lossy()).as_str());
 	if vfile.len() == 2 {
-		mapper_args.push_str(format!("--i1 {} --i2 {} ", vfile[0].path().to_string_lossy(), vfile[1].path().to_string_lossy()).as_str());
+		mapper_args.push_str(format!("--i1\x1e{}\x1e--i2\x1e{}\x1e", vfile[0].path().to_string_lossy(), vfile[1].path().display()).as_str());
 	} else if let Some(FileType::BAM) = ftype {
 		let bam2fq = gem_bs.get_exec_path("samtools");
-		let args = if let Some(t) = mapping_threads { format!("bam2fq {} --threads {}", vfile[0].path().to_string_lossy(), t) } 
+		let args = if let Some(t) = mapping_threads { format!("bam2fq\x1e{}\x1e--threads\x1e{}", vfile[0].path().display(), t) } 
 		else { format!("bam2fq {}", vfile[0].path().to_string_lossy()) };
 		pipeline.add_stage(&bam2fq, &args);
-	} else { mapper_args.push_str(format!("-i {} ", vfile[0].path().to_string_lossy()).as_str()) }
-	if paired { mapper_args.push_str("--paired-end-alignment ")}
-	if gem_bs.get_config_bool(Section::Mapping, "non_stranded") { mapper_args.push_str("--bisulfite-conversion non-stranded ") }
-	else if gem_bs.get_config_bool(Section::Mapping, "reverse_conversion") { mapper_args.push_str("--bisulfite-conversion inferred-G2A-C2T ") }
-	else { mapper_args.push_str("--bisulfite-conversion inferred-C2T-G2A ") }
+	} else { mapper_args.push_str(format!("-i\x1e{}\x1e", vfile[0].path().to_string_lossy()).as_str()) }
+	if paired { mapper_args.push_str("--paired-end-alignment\x1e")}
+	if gem_bs.get_config_bool(Section::Mapping, "non_stranded") { mapper_args.push_str("--bisulfite-conversion non-stranded\x1e") }
+	else if gem_bs.get_config_bool(Section::Mapping, "reverse_conversion") { mapper_args.push_str("--bisulfite-conversion\x1einferred-G2A-C2T\x1e") }
+	else { mapper_args.push_str("--bisulfite-conversion\x1einferred-C2T-G2A\x1e") }
 	
 	super::add_command_opts(gem_bs, &mut mapper_args, Section::Mapping, &OPT_LIST);
 
-	mapper_args.push_str(format!("--report-file {} ", outs[2].unwrap().path().to_string_lossy()).as_str());
-	mapper_args.push_str(format!("--sam-read-group-header {}", read_groups).as_str());
+	mapper_args.push_str(format!("--report-file\x1e{}\x1e", outs[2].unwrap().path().to_string_lossy()).as_str());
+	mapper_args.push_str(format!("--sam-read-group-header\x1e{}", read_groups).as_str());
 	
 	// Setup readNameClean stage
 	let read_name_clean = gem_bs.get_exec_path("readNameClean");
@@ -147,15 +147,15 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	
 	// Setup samtools stage
 	let samtools = gem_bs.get_exec_path("samtools");
-	let mut samtools_args = format!("sort -o {} ", outfile.path().to_string_lossy());
-	if let Some(x) = tmp_dir { samtools_args.push_str(format!("-T {} ", x.to_string_lossy()).as_str())}
-	if let Some(x) = gem_bs.get_config_str(Section::Mapping, "sort_memory") { samtools_args.push_str(format!("-m {} ", x).as_str())}
-	if let Some(x) = sort_threads { samtools_args.push_str(format!("--threads {} ", x).as_str())}
-	if single_bam { samtools_args.push_str("--write-index ") }
-	if cram { samtools_args.push_str("-O CRAM ") }
-	if gem_bs.get_config_bool(Section::Mapping, "benchmark_mode") { samtools_args.push_str("--no-PG ") } else if cram {
+	let mut samtools_args = format!("sort\x1e-o\x1e{}\x1e", outfile.path().to_string_lossy());
+	if let Some(x) = tmp_dir { samtools_args.push_str(format!("-T\x1e{}\x1e", x.to_string_lossy()).as_str())}
+	if let Some(x) = gem_bs.get_config_str(Section::Mapping, "sort_memory") { samtools_args.push_str(format!("-m\x1e{}\x1e", x).as_str())}
+	if let Some(x) = sort_threads { samtools_args.push_str(format!("--threads\x1e{}\x1e", x).as_str())}
+	if single_bam { samtools_args.push_str("--write-index\x1e") }
+	if cram { samtools_args.push_str("-O\x1eCRAM\x1e") }
+	if gem_bs.get_config_bool(Section::Mapping, "benchmark_mode") { samtools_args.push_str("--no-PG\x1e") } else if cram {
 		let gembs_ref = gem_bs.get_asset("gembs_reference").expect("Couldn't find gemBS reference asset");
-		samtools_args.push_str(format!("--reference {} ", gembs_ref.path().to_string_lossy()).as_str());
+		samtools_args.push_str(format!("--reference\x1e{}\x1e", gembs_ref.path().display()).as_str());
 	}
 	samtools_args.push('-');
 	if gem_bs.get_config_bool(Section::Mapping, "keep_logs") { pipeline.set_remove_log(false) }
@@ -173,21 +173,21 @@ pub fn make_merge_bams_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, 
 	let merge_threads = gem_bs.get_config_int(Section::Mapping, "merge_threads").or(threads);
 	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
 	let samtools_path = gem_bs.get_exec_path("samtools");
-	let mut args = String::from("merge --write-index ");
-	if let Some(x) = merge_threads { args.push_str(format!("--threads {} ", x).as_str())}
+	let mut args = String::from("merge\x1e--write-index\x1e");
+	if let Some(x) = merge_threads { args.push_str(format!("--threads\x1e{}\x1e", x).as_str())}
 	let task = &gem_bs.get_tasks()[job];
 	let output = gem_bs.get_asset(*task.outputs().next().expect("No output files for merge step")).expect("Couldn't get asset");
 	let cram = output.id().ends_with(".cram");
-	if cram { args.push_str("-O cram ") }
-	if gem_bs.get_config_bool(Section::Mapping, "benchmark_mode") { args.push_str("--no-PG ") } else if cram {
+	if cram { args.push_str("-O\x1ecram\x1e") }
+	if gem_bs.get_config_bool(Section::Mapping, "benchmark_mode") { args.push_str("--no-PG\x1e") } else if cram {
 		let gembs_ref = gem_bs.get_asset("gembs_reference").expect("Couldn't find gemBS reference asset");
-		args.push_str(format!("--reference {} ", gembs_ref.path().to_string_lossy()).as_str());
+		args.push_str(format!("--reference\x1e{}\x1e", gembs_ref.path().to_string_lossy()).as_str());
 	}
-	args.push_str(format!("-f {} ", output.path().to_string_lossy()).as_str());
+	args.push_str(format!("-f\x1e{}\x1e", output.path().to_string_lossy()).as_str());
 	let remove_bams = if let Some(DataValue::Bool(x)) = options.get("remove") { *x } else { 
 		gem_bs.get_config_bool(Section::Mapping, "remove_individual_bams") };	
 	for asset in task.inputs().map(|x| gem_bs.get_asset(*x).expect("Couldn't get asset")).filter(|x| x.id().ends_with(".bam")) {
-		args.push_str(format!("{} ", asset.path().to_string_lossy()).as_str());
+		args.push_str(format!("{}\x1e", asset.path().to_string_lossy()).as_str());
 		if remove_bams { pipeline.add_remove_file(&asset.path()); }
 	}	
 	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }

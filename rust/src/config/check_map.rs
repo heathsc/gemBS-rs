@@ -95,8 +95,9 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 	let samples = collect_samples(gem_bs)?;
 
 	let handle_file = |gb: &mut GemBS, dt: &str, s: &str, nm: &str, p: &Path, asset: AssetType| {
+		let shell = s.ends_with('|');
 		let tpath = Path::new(s);
-		let path = if tpath.has_root() { tpath.to_owned() } else { [p, tpath].iter().collect()	};
+		let path = if tpath.has_root() || shell { tpath.to_owned() } else { [p, tpath].iter().collect()	};
 		let name = format!("{}{}", dt, nm);
 		gb.insert_asset(&name, &path, asset)
 	}; 

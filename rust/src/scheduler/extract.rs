@@ -40,20 +40,20 @@ fn make_mextr_pipeline(gem_bs: &GemBS, job: usize, bc: &str) -> QPipe {
 	let mextr_path = gem_bs.get_exec_path("mextr");
 	
 	// Set up arg list
-	let mut args = format!("--bgzip --md5 --regions-file {} ", contig_file.to_string_lossy());
+	let mut args = format!("--bgzip\x1e--md5\x1e--regions-file\x1e{}\x1e", contig_file.to_string_lossy());
 	let (mut cpg, mut noncpg, mut bedmethyl) = (false, false, false);
 	for out in task.outputs() {
 		let oname = gem_bs.get_asset(*out).expect("Couldn't get output asset").path().to_string_lossy();
 		if oname.ends_with("non_cpg.txt.gz") { 
 			noncpg = true;
-			args.push_str(format!("--noncpgfile {} ", oname).as_str())
+			args.push_str(format!("--noncpgfile\x1e{}\x1e", oname).as_str())
 		} else if oname.ends_with("cpg.txt.gz") {
 			cpg = true; 
-			args.push_str(format!("--cpgfile {} ", oname).as_str())
+			args.push_str(format!("--cpgfile\x1e{}\x1e", oname).as_str())
 		} else if oname.ends_with("cpg.bed.gz") { 
 			bedmethyl = true;
 			let outbase: PathBuf = [output_dir, Path::new(bc)].iter().collect();	
-			args.push_str(format!("--bed-methyl {} ", outbase.to_string_lossy()).as_str())
+			args.push_str(format!("--bed-methyl\x1e{}\x1e", outbase.to_string_lossy()).as_str())
 		}
 	}
 	let mut opt_list = Vec::new();
@@ -61,14 +61,14 @@ fn make_mextr_pipeline(gem_bs: &GemBS, job: usize, bc: &str) -> QPipe {
    	opt_list.push(("reference_bias", "reference-bias", VarType::Float));
     	opt_list.push(("qual_threshold", "bq-threshold", VarType::Int));
 	if cpg || noncpg { 
-		args.push_str("--tabix ");
+		args.push_str("--tabix\x1e");
 	  	opt_list.push(("phred_threshold", "threshold", VarType::Int));
 		opt_list.push(("min_inform", "inform", VarType::Int));
 		opt_list.push(("allow_het", "select het", VarType::Bool));
 	}
 	if noncpg { opt_list.push(("min_nc", "min-nc", VarType::Int)); }
-	if cpg { opt_list.push(("strand_specific", "mode strand-specific", VarType::Bool)); }
-	if bedmethyl { opt_list.push(("bigwig_strand_specific", "bw-mode strand-specific", VarType::Bool)); }
+	if cpg { opt_list.push(("strand_specific", "mode\x1estrand-specific", VarType::Bool)); }
+	if bedmethyl { opt_list.push(("bigwig_strand_specific", "bw-mode\x1estrand-specific", VarType::Bool)); }
 	super::add_command_opts(gem_bs, &mut args, Section::Extract, &opt_list);
 	args.push_str(&in_bcf.to_string_lossy());
 
@@ -88,7 +88,7 @@ fn make_snpxtr_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
 	let snpxtr_path = gem_bs.get_exec_path("snpxtr");
 
 	// Set up arg list
-	let mut args = format!("--bgzip --md5 --tabix --output {} ", first_out.to_string_lossy());
+	let mut args = format!("--bgzip\x1e--md5\x1e--tabix\x1e--output\x1e{}\x1e", first_out.to_string_lossy());
 	let mut opt_list = Vec::new();
 	opt_list.push(("threads", "threads", VarType::Bool));
 	opt_list.push(("snp_list", "snps", VarType::String));
@@ -120,5 +120,3 @@ pub fn make_extract_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 		_ => panic!("Couldn't parse extract task id"),
 	}
 }
-
-

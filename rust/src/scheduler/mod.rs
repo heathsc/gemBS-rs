@@ -321,7 +321,7 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 				let res = match qpipe.stages {
 					QPipeStage::External(stages) => {
 						let mut pipeline = Pipeline::new();
-						for (path, s) in stages.iter() { pipeline.add_stage(path, Some(s.split_ascii_whitespace())); }
+						for (path, s) in stages.iter() { pipeline.add_stage(path, Some(s.split_terminator('\x1e'))); }
 						out_list.iter().for_each(|x| { pipeline.add_output(x); });
 						if let Some(file) = log { pipeline.log_file(file.clone()); }
 						let opath = &qpipe.output.to_owned();
@@ -569,13 +569,13 @@ pub fn add_command_opts(gem_bs: &GemBS, args: &mut String, sec: Section, opt_lis
 	for (x, y, t) in opt_list.iter() {
 		match t {
 			VarType::Bool => if gem_bs.get_config_bool(sec, x) { 
-				args.push_str(format!("--{} ", y).as_str()) },
+				args.push_str(format!("--{}\x1e", y).as_str()) },
 			VarType::Int => if let Some(i) = gem_bs.get_config_int(sec, x) { 
-				args.push_str(format!("--{} {} ", y, i).as_str()) },
+				args.push_str(format!("--{}\x1e{}\x1e", y, i).as_str()) },
 			VarType::String => if let Some(s) = gem_bs.get_config_str(sec, x) { 
-				args.push_str(format!("--{} {} ", y, s).as_str()) },
+				args.push_str(format!("--{}\x1e{}\x1e", y, s).as_str()) },
 			VarType::Float => if let Some(z) = gem_bs.get_config_float(sec, x) { 
-				args.push_str(format!("--{} {} ", y, z).as_str()) },
+				args.push_str(format!("--{}\x1e{}\x1e", y, z).as_str()) },
 			_ => (),
 		}
 	}
