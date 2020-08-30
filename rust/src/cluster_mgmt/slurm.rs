@@ -2,8 +2,12 @@ use std::path::Path;
 use std::fs;
 use std::str::FromStr;
 use std::collections::{HashMap, HashSet};
-use std::io::{Read, Write, Seek, SeekFrom};
+use std::fmt;
+use std::ffi::OsStr;
 use std::rc::Rc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
+use std::{thread, time};
 
 use regex::Regex;
 use lazy_static::lazy_static;
@@ -40,42 +44,51 @@ impl SlurmJob {
 	}
 }
 
-fn write_sbatch_script(mut file: &fs::File, jv: &SlurmJob, tl: &TaskList,  options: &HashMap<&'static str, DataValue>, verbose: LogLevel) -> std::io::Result<()> {
-	writeln!(file, "#!/bin/sh")?;
+fn write_sbatch_script<T: fmt::Write>(wrt: &mut T, jv: &SlurmJob, tl: &TaskList,  options: &HashMap<&'static str, DataValue>, verbose: LogLevel) -> fmt::Result {
+	writeln!(wrt, "#!/bin/sh")?;
 	let job_array = jv.task_vec.len() > 1;
 	if job_array {
-	writeln!(file, "coms=( \\")?;
+	writeln!(wrt, "coms=( \\")?;
 	for ix in jv.task_vec.iter() {
 			let task = &tl[*ix];
-			writeln!(file,"\"{} {}\" \\",task.command(), dry_run::get_arg_string(task, options))?;			
+			writeln!(wrt,"\"{} {}\" \\",task.command(), dry_run::get_arg_string(task, options))?;			
 		}
-		writeln!(file, ")")?;
-		writeln!(file, "echo gemBS --loglevel {} ${{coms[$SLURM_ARRAY_TASK_ID]}}", verbose)?;
-		writeln!(file, "gemBS --loglevel {} ${{coms[$SLURM_ARRAY_TASK_ID]}}", verbose)?;
+		writeln!(wrt, ")")?;
+		writeln!(wrt, "echo gemBS --loglevel {} ${{coms[$SLURM_ARRAY_TASK_ID]}}", verbose)?;
+		writeln!(wrt, "gemBS --loglevel {} ${{coms[$SLURM_ARRAY_TASK_ID]}}", verbose)?;
 	} else {
 		let task = &tl[jv.task_vec[0]];
-		writeln!(file,"gemBS {} {}",task.command(), dry_run::get_arg_string(task, options))?;			
+		writeln!(wrt,"gemBS {} {}",task.command(), dry_run::get_arg_string(task, options))?;			
 	}
 	Ok(())
 }
 
-fn write_sbatch_rm_script(mut file: &fs::File, logfiles: &[String]) -> std::io::Result<()> {
-	writeln!(file, "#!/bin/sh")?;
-	write!(file, "for f in")?;
+fn write_sbatch_rm_script<T: fmt::Write>(wrt: &mut T, logfiles: &[String]) -> fmt::Result {
+	writeln!(wrt, "#!/bin/sh")?;
+	write!(wrt, "for f in")?;
 	for f in logfiles.iter() {
-		write!(file," \\\n {}", f)?;
+		write!(wrt," \\\n {}", f)?;
 	}
-	writeln!(file,"\ndo\n rm -f slurm_logs/slurm_gemBS-${{f}}.out\ndone\necho Pipeline terminated successfully")
+	writeln!(wrt,"\ndo\n rm -f slurm_logs/slurm_gemBS-${{f}}.out\ndone\necho Pipeline terminated successfully")
 }
 
-fn get_slurm_id(mut file: fs::File) -> Result<usize, String> {
+fn run_sbatch<I, S>(sig: Arc<AtomicUsize>, script: String, args: I) -> Result<usize, String> 
+where
+	I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
 	lazy_static! {
         static ref RE: Regex = Regex::new(r"^Submitted batch job (\d+)").unwrap();
 	}
-	file.seek(SeekFrom::Start(0)).map_err(|e| format!("{}", e))?;
-	let mut content = String::new();
-       file.read_to_string(&mut content).unwrap();
-	if let Some(cap) = RE.captures(content.as_str()) {
+	let mut pipeline = Pipeline::new();		
+	let sbatch_path = Path::new("sbatch");
+	pipeline.add_stage(&sbatch_path, Some(args)).in_string(script).out_string().run(sig)?;
+
+	// We add a short delay here to avoid overloading the slurm process 
+	thread::sleep(time::Duration::from_millis(250));
+	
+	let content = pipeline.out_string_ref().expect("No output from sbatch pipeline");
+	if let Some(cap) = RE.captures(content) {
 		if let Ok(x) = <usize>::from_str(cap.get(1).unwrap().as_str()) { return Ok(x); }
 	}
 	Err(format!("Could not parse output from sbatch: {}", content))
@@ -116,13 +129,10 @@ pub fn handle_slurm(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, 
 		task_hash.insert(*ix, job_ix);
 	}
 	let verbose = gem_bs.verbose();
-	let sbatch_path = Path::new("sbatch");
 	let mut dep_hash = HashSet::new();
 	for jv in job_vec.iter() {
-		let mut tfile = tempfile::tempfile().expect("Couldn't create temporary slurm input file");
-		write_sbatch_script(&tfile, jv, gem_bs.get_tasks(), options, verbose).map_err(|e| format!("Error writing sbatch script: {}", e))?;
-		tfile.seek(SeekFrom::Start(0)).map_err(|e| format!("{}", e))?;
-		let ofile = tempfile::tempfile().expect("Couldn't create temporary slurm output file");
+		let mut script = String::new(); 
+		write_sbatch_script(&mut script, jv, gem_bs.get_tasks(), options, verbose).map_err(|e| format!("Error writing sbatch script: {}", e))?;
 		let mut sbatch_args = Vec::new();
 		let mut hs = HashSet::new();
 		let mut desc = String::from("gemBS");
@@ -155,12 +165,7 @@ pub fn handle_slurm(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, 
 			}
 			sbatch_args.push(t);
 		}
-		let mut pipeline = Pipeline::new();		
-		pipeline.add_stage(&sbatch_path, Some(sbatch_args.iter()))
-				.in_file(tfile)
-				.out_file(ofile.try_clone().expect("Couldn't clone output file descriptor"));
-		pipeline.run(gem_bs.get_signal_clone())?;
-		slurm_id.push(get_slurm_id(ofile)?);
+		slurm_id.push(run_sbatch(gem_bs.get_signal_clone(), script, &sbatch_args)?);
 	}
 	let mut deps = String::new();
 	let mut logfiles = Vec::new();
@@ -180,21 +185,14 @@ pub fn handle_slurm(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, 
 		}
 	}
 	if ! logfiles.is_empty() {
-		let mut tfile = tempfile::tempfile().expect("Couldn't create temporary slurm input file");
-		write_sbatch_rm_script(&tfile, &logfiles).map_err(|e| format!("Error writing sbatch script: {}", e))?;
-		tfile.seek(SeekFrom::Start(0)).map_err(|e| format!("{}", e))?;
+		let mut script = String::new();
+		write_sbatch_rm_script(&mut script, &logfiles).map_err(|e| format!("Error writing sbatch script: {}", e))?;
 		let mut sbatch_args = vec!("--job-name=gemBS_clean_logfiles", "--cpus-per-task=1", "--time=10", "--output=slurm_logs/slurm_gemBS_pipeline.out");
 		if ! deps.is_empty() { 
 			deps = format!("--dependency=afterok{}", deps); 
 			sbatch_args.push(deps.as_str());
 		}
-		let ofile = tempfile::tempfile().expect("Couldn't create temporary slurm output file");
-		let mut pipeline = Pipeline::new();		
-		pipeline.add_stage(&sbatch_path, Some(sbatch_args.iter()))
-				.in_file(tfile)
-				.out_file(ofile.try_clone().expect("Couldn't clone output file descriptor"));
-		pipeline.run(gem_bs.get_signal_clone())?;
-		let _ = get_slurm_id(ofile)?;	
+		let _ = run_sbatch(gem_bs.get_signal_clone(), script, &sbatch_args);
 	}
 	Ok(())
 }

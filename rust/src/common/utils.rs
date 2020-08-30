@@ -10,6 +10,7 @@ use std::env;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::{thread, time};
+use std::convert::AsRef;
 use blake2::{Blake2b, Digest};
 
 use crate::common::defs::{SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
@@ -33,15 +34,16 @@ pub fn get_phys_memory() -> Option<usize> {
 	} else { None }
 }
 
-
 pub enum PipelineOutput<'a> {
 	FilePath(&'a Path),
-	File(Option<fs::File>),
+//	File(Option<fs::File>),
+	String(Option<String>),
 	None,
 }
 
 pub enum PipelineInput {
-	File(Option<fs::File>),
+//	File(Option<fs::File>),
+	String(String),
 	None,
 }
 
@@ -71,13 +73,25 @@ where
 		self
 	}
 	// Send output of pipeline to File
-	pub fn out_file(&mut self, file: fs::File) -> &mut Pipeline<'a, I, S> {
-		self.output = PipelineOutput::File(Some(file));
+//	pub fn out_file(&mut self, file: fs::File) -> &mut Pipeline<'a, I, S> {
+//		self.output = PipelineOutput::File(Some(file));
+//		self
+//	}
+//	pub fn in_file(&mut self, file: fs::File) -> &mut Pipeline<'a, I, S> {
+//		self.input = PipelineInput::File(Some(file));
+//		self
+//	}
+	pub fn in_string(&mut self, s: String) -> &mut Pipeline<'a, I, S> {
+		self.input = PipelineInput::String(s);
 		self
 	}
-	pub fn in_file(&mut self, file: fs::File) -> &mut Pipeline<'a, I, S> {
-		self.input = PipelineInput::File(Some(file));
+	pub fn out_string(&mut self) -> &mut Pipeline<'a, I, S> {
+		self.output = PipelineOutput::String(None);
 		self
+	}
+	pub fn out_string_ref(&self) -> Option<&str> { 
+		if let PipelineOutput::String(Some(s)) = &self.output { Some(&s) }
+		else { None }
 	}
 	// Send output of pipeline to file at Path
 	pub fn out_filepath(&mut self, file: &'a Path) -> &mut Pipeline<'a, I, S> {
@@ -125,8 +139,11 @@ where
 				cc.stdin(child.stdout.take().unwrap()) 
 			} else {
 				desc.push_str(format!("{}", com.to_string_lossy()).as_str());
-				if let PipelineInput::File(optf) = &mut self.input {
-					cc.stdin(Stdio::from(optf.take().expect("No file provided for pipeline input")))
+				if let PipelineInput::String(_) = &self.input {
+					trace!("Setting up stdin pipe");
+					cc.stdin(Stdio::piped())
+//				} else if let PipelineInput::File(optf) = &mut self.input {
+//					cc.stdin(Stdio::from(optf.take().expect("No file provided for pipeline input")))
 				} else { cc.stdin(Stdio::null()) }
 			};
 			if let Some(lfile) = log.as_ref() { 
@@ -149,7 +166,8 @@ where
 						desc.push_str(format!(" > {}", fname).as_str());
 						cc = cc.stdout(Stdio::from(f));
 					},
-					PipelineOutput::File(optf) => cc = cc.stdout(Stdio::from(optf.take().expect("No file provided for pipeline output"))),
+//					PipelineOutput::File(optf) => cc = cc.stdout(Stdio::from(optf.take().expect("No file provided for pipeline output"))),
+					PipelineOutput::String(_) => cc = cc.stdout(Stdio::piped()),
 					PipelineOutput::None => (),
 				}
 			}
@@ -159,6 +177,26 @@ where
 			cinfo.push((child, com));
 		}
 		info!("{}", desc);
+		if let PipelineInput::String(s) = &self.input {
+			// A bit ugly here:
+			// We need to take ownership of child not simply have a reference to it
+			// otherwise the pipe will not be closed after we've finished.
+			// We also take() stdin from child so that we can re-insert child
+			// back into cinfo allowing us to wait for the pipeline to terminate
+			let (mut child, com) = cinfo.remove(0);
+			let mut stdin = child.stdin.take().expect("Failed to open stdin");
+			stdin.write_all(s.as_bytes()).expect("Failed to write to child stdin");
+			cinfo.insert(0, (child, com));
+		}
+		
+		if let PipelineOutput::String(_) = &self.output {
+			let (mut child, com) = cinfo.pop().expect("Empty pipeline");
+			let mut stdout = child.stdout.take().expect("Failed to open stdout");
+			let mut s = String::new();
+			stdout.read_to_string(&mut s).expect("Error reading from pipeline stdout");
+			self.output = PipelineOutput::String(Some(s));
+			cinfo.push((child, com));
+		}
 		match wait_sub_proc(sig.clone(), &mut cinfo) {
 			Some(com) => {
 				match get_signal(sig) {
