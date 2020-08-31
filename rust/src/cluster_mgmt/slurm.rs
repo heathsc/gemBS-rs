@@ -9,6 +9,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::io::Write;
 use std::{thread, time};
+use std::os::unix::fs::PermissionsExt;
 
 use regex::Regex;
 use lazy_static::lazy_static;
@@ -20,7 +21,7 @@ use crate::common::utils::Pipeline;
 use crate::common::tasks::TaskList;
 use crate::cli::utils::LogLevel;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct SlurmDep {
 	job_ix: usize,
 	task_ix: usize,
@@ -145,9 +146,16 @@ pub fn handle_slurm(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, 
 	let mut slurm_id = Vec::new();
 	let mut job_hash: HashMap<Rc<JobNode>, usize> = HashMap::new();
 	let mut task_hash: HashMap<usize, SlurmDep> = HashMap::new();
+	let ferr = |e| {format!("{}", e)};
 	let mut file = if let Some(s) = gem_bs.slurm_script() {
 		match fs::File::create(Path::new(s)) {
-			Ok(f) => Some(f),
+			Ok(f) => {
+		 		let metadata = f.metadata().map_err(ferr)?;
+    			let mut perm = metadata.permissions();
+				perm.set_mode(0o755);
+				f.set_permissions(perm).map_err(ferr)?;
+				Some(f)
+			},
 			Err(e) => return Err(format!("Couldn't open script file {} for output: {}", s, e)),
 		}
 	} else { None };
@@ -158,7 +166,17 @@ pub fn handle_slurm(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, 
 		let depend = {
 			let mut t = Vec::new();
 			for i in task.parents().iter() {
-				if let Some(x) = task_hash.get(i) { t.push(*x); }
+				match task_hash.get(i) {
+					Some(x) => t.push(*x),
+					None => {
+						let ptask = &gem_bs.get_tasks()[*i];
+						if ptask.command() == Command::MergeCallJsons {
+							for j in ptask.parents().iter() {
+								if let Some(x) = task_hash.get(j) { t.push(*x) }
+							}
+						}
+					},
+				}
 			}
 			t
 		};
@@ -182,7 +200,6 @@ pub fn handle_slurm(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, 
 	}
 	let verbose = gem_bs.verbose();
 	let mut dep_hash = HashSet::new();
-	let ferr = |e| {format!("{}", e)};
 	
 	for jv in job_vec.iter() {
 		let mut script = String::new(); 
