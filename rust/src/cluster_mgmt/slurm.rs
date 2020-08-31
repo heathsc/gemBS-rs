@@ -109,7 +109,7 @@ fn write_script_file_prelude(file: &mut fs::File) -> std::io::Result<()> {
 	writeln!(file, "     $s.=\":\".$$sl_id[$d];\n  }}\n  $s;\n}}\n")?;
 	writeln!(file, "sub handle_dep2($$) {{\n  my ($dref, $sl_id) = @_;\n  my $s = \"\";\n  for my $d(@$dref) {{")?;
 	writeln!(file, "     $s.=\":\".$$sl_id[$$d[0]].\"_\".$$d[1];\n  }}\n  $s;\n}}\n")?;
-	writeln!(file, "my @slurm_id = ();\nmy ($script, $sbatch_args);\n")
+	writeln!(file, "my @slurm_id = ();\nmy ($script, $sbatch_args);\nmkdir \"slurm_logs\";\n")
 }
 
 fn write_dep_array_handler<T: fmt::Display>(file: &mut fs::File, d: &[T], name: &str, fn_name: &str) -> std::io::Result<()> {
@@ -200,6 +200,7 @@ pub fn handle_slurm(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, 
 		sbatch_args.push(format!("--cpus-per-task={}", jv.node.cores));
 		sbatch_args.push(format!("--mem={:#}", jv.node.mem));
 		sbatch_args.push(format!("--time={}", jv.node.time));
+		sbatch_args.push("--no-requeue".to_string());
 		if jv.task_vec.len() > 1 { 
 			sbatch_args.push(format!("--array=0-{}", jv.task_vec.len() - 1)); 
 			sbatch_args.push("--output=slurm_logs/slurm_gemBS-%A_%a.out".to_string());
@@ -288,7 +289,7 @@ pub fn handle_slurm(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, 
 	if ! logfiles.is_empty() {
 		let mut script = String::new();
 		write_sbatch_rm_script(&mut script, &logfiles).map_err(|e| format!("Error writing sbatch script: {}", e))?;
-		let mut sbatch_args = vec!("--job-name=gemBS_clean_logfiles", "--cpus-per-task=1", "--time=10", "--output=slurm_logs/slurm_gemBS_pipeline.out");
+		let mut sbatch_args = vec!("--job-name=gemBS_clean_logfiles", "--cpus-per-task=1", "--time=10", "--no-requeue", "--output=slurm_logs/slurm_gemBS_pipeline.out");
 		if let Some(ref mut f) = file {
 			writeln!(f, "print \"Submitting job: clean_logfiles\\n\";").map_err(ferr)?;
 			write_array_as_str(f, &sbatch_args, "$sbatch_args = ").map_err(ferr)?;

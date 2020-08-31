@@ -10,6 +10,7 @@ pub mod extract;
 pub mod md5sum;
 pub mod report;
 pub mod run;
+pub mod clear;
 
 pub fn get_barcode_list<'a>(gem_bs: &'a GemBS, options: &'a HashMap<&'static str, DataValue>) -> Result<Vec<&'a String>, String> {
 	let mut barcodes = Vec::new();

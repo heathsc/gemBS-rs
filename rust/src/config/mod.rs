@@ -449,8 +449,12 @@ impl GemBS {
  					st = TaskStatus::Ready;
 					for ix in tasks[*i].parents() {
 						if !reqd.contains(ix) {
-							st = TaskStatus::Waiting;
-							break;
+							let st1 = tasks[*ix].status().unwrap();
+							if !(st1 == TaskStatus::Complete || st1 == TaskStatus::Running) {
+//								println!("Task {}({}) blocked by parent {}({})", tasks[*i].id(), *i, tasks[*ix].id(), *ix);
+								st = TaskStatus::Waiting;
+								break;
+							}
 						}
 					}
 				}
@@ -484,7 +488,7 @@ impl GemBS {
 	}
 }
 
-fn get_running_tasks(lock: &FileLock) -> Result<Vec<RunningTask>, String> {
+pub fn get_running_tasks(lock: &FileLock) -> Result<Vec<RunningTask>, String> {
 	let running: Vec<RunningTask> = if lock.path().exists() {		
 		let reader = lock.reader().map_err(|e| format!("Error: Could not open JSON config file {} for reading: {}", lock.path().to_string_lossy(), e))?;
 		serde_json::from_reader(reader).map_err(|e| format!("Error: failed to read JSON config file {}: {}", lock.path().to_string_lossy(), e))?

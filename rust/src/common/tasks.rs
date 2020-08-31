@@ -161,7 +161,7 @@ impl<'a> JsonTask<'a> {
 	}
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunningTask {
 	id: Rc<String>,
 	command: String,

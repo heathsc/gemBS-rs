@@ -150,6 +150,8 @@ lazy_static! {
       	m.push(("mapping", OptionType::Special("_mapping", VarType::Bool)));
       	m.push(("calling", OptionType::Special("_calling", VarType::Bool)));
      	m.push(("pdf", OptionType::Special("_pdf", VarType::Bool)));
+     	m.push(("confirm", OptionType::Special("_confirm", VarType::Bool)));
+     	m.push(("force", OptionType::Special("_force", VarType::Bool)));
         m
     };
 }

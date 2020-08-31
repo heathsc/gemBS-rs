@@ -91,7 +91,11 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 		},
 		("run", Some(m_sum)) => {
 			commands::run::run_command(m_sum, gem_bs)
-		},		_ => {
+		},
+		("clear", Some(m_sum)) => {
+			commands::clear::clear_command(m_sum, gem_bs)
+		},
+		_ => {
 			Err("Unknown subcommand".to_string())
 		},
 	}

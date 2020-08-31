@@ -45,7 +45,8 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 		let bcf_path = Path::new(&tmp_bcf_dir);	
 		if pools.len() > 1 {
 			let mut out_bcfs = Vec::new();
-			let mut out_jsons = Vec::new();
+			let out = handle_file(gem_bs, format!("{}.bcf", bcode), None, bcf_path, AssetType::Derived);
+			let mut out_jsons = vec!(out); // Add bcf file as input requirement for JSON merge so that we don't do the merge step until the merge BCF step is complete
 			for pool in pools.iter() {
 				let mut in_vec = common_inputs.clone();
 				in_vec.push(bam);
@@ -64,7 +65,6 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 					.add_cores(cores).add_memory(memory).add_time(time);
 				[out, out1].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(call_task, &in_vec));
 			}
-			let out = handle_file(gem_bs, format!("{}.bcf", bcode), None, bcf_path, AssetType::Derived);
 			let out1 = handle_file(gem_bs, format!("{}_call.json", bcode), None, bcf_path, AssetType::Derived);
 			let id = format!("bcf_mergecall_{}", bcode);
 			let (lname, lpath) = assets::make_ext_asset(&id, bcf_path, "log");
@@ -78,6 +78,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 			let merge_json_task = gem_bs.add_task(&id, format!("Merge JSONs for barcode {}", bcode).as_str(), Command::MergeCallJsons, "");
 			gem_bs.add_task_inputs(merge_json_task, &out_jsons).add_outputs(&[out1]).set_barcode(bcode);
 			gem_bs.get_asset_mut(out1).unwrap().set_creator(merge_json_task, &out_jsons);
+			
 		} else {
 			let mut in_vec = common_inputs.clone();
 			in_vec.push(bam);

@@ -115,7 +115,9 @@ pub fn make_merge_call_jsons_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
 	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get merge-call-jsons output asset").path()); }
 	let bc = task.barcode().expect("No barcode set for merge-call-jsons task");
-	let json_files: Vec<_> = task.inputs().map(|x| {
+	let mut it = task.inputs();
+	let _ = it.next(); // Throw array first element as this is the BCF file
+	let json_files: Vec<_> = it.map(|x| {
 		let asset = gem_bs.get_asset(*x).expect("Couldn't find JSON file asset");
 		pipeline.add_remove_file(asset.path());
 		(asset.id().to_owned(), asset.path().to_owned())
@@ -127,7 +129,9 @@ pub fn make_merge_call_jsons_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 
 pub fn merge_call_jsons(sig: Arc<AtomicUsize>, outputs: &[PathBuf], sfiles: &MergeJsonFiles) -> Result<(), String> {
 	let mut combined_stats: Option<CallJson> = None;
-	for (_, path) in sfiles.json_files.iter() {
+	let mut it = sfiles.json_files.iter();
+	let _ = it.next(); // Throw array first element as this is the BCF file
+	for (_, path) in it {
 		utils::check_signal(Arc::clone(&sig))?;
 		let rdr = compress::open_bufreader(path).map_err(|e| format!("{}", e))?;
 		let jstats = CallJson::from_reader(rdr)?;

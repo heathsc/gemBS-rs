@@ -173,6 +173,10 @@ subcommands:
           - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
     - run:
-        setting: DeriveDisplayOrder
         about: Run all pending pipeline commands
- 
+    - clear:
+        setting: DeriveDisplayOrder
+        about: Clear up incomplete files after aborted run
+        args:
+          - confirm: {short:y, long: yes, help: Do not ask for confirmation}
+          - force: {short:f, long: force, help: Continue even if lock file found}

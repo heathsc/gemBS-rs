@@ -261,7 +261,7 @@ pub fn get_user_host_string() -> String {
 	format!("{}@{}.{}", user, hname.to_string_lossy(), pid)
 }
 
-fn get_lock_path(path: &Path) -> Result<PathBuf, String> {
+fn get_lock_path(path: &Path, force: bool) -> Result<PathBuf, String> {
 	let lstring = get_user_host_string();
 	let tfile = path.file_name().ok_or(format!("Invalid file {:?} for LockedWriter::new()", path))?.to_string_lossy().to_string();
 	let file = if tfile.starts_with('.') {	format!("{}#gemBS_lock", tfile) } else { format!(".{}#gemBS_lock", tfile) };
@@ -269,6 +269,7 @@ fn get_lock_path(path: &Path) -> Result<PathBuf, String> {
 		Some(parent) => { [parent, Path::new(&file)].iter().collect() },
 		None => PathBuf::from(file)
 	};
+	if force { let _ = fs::remove_file(path); }
 	if let Err(e) = symlink(Path::new(&lstring), &lock_path) {
 		return match e.kind() {
 			ErrorKind::AlreadyExists => { 
@@ -289,8 +290,12 @@ pub struct FileLock<'a> {
 
 impl<'a> FileLock<'a> {
 	pub fn new(path: &'a Path) -> Result<Self, String> {
-		let lock_path = get_lock_path(path)?;
+		let lock_path = get_lock_path(path, false)?;
 		Ok(FileLock{lock_path, path})
+	}
+	pub fn new_force(path: &'a Path) -> Result<Self, String> {
+		let lock_path = get_lock_path(path, true)?;
+		Ok(FileLock{lock_path, path})		
 	}
 	pub fn path(&self) -> &'a Path { self.path }
 	pub fn writer(&self) -> Result<Box<dyn Write>, String> {
