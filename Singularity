@@ -20,5 +20,5 @@ From: ubuntu:xenial
     curl https://sh.rustup.rs -sSf > rust.sh && sh rust.sh -y
     mkdir -p /usr/local/build; cd /usr/local/build
     git clone --recursive https://github.com/heathsc/gemBS-rs.git
-    (cd gemBS-rs; PATH=$PATH:/root/.cargo/bin make install)
+    (cd gemBS-rs; PATH=$PATH:/root/.cargo/bin GEMBS_CONTAINER=1 make install)
     rm -rf /usr/local/build

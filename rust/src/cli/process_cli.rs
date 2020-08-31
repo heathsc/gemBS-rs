@@ -19,10 +19,13 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 	app = app.setting(AppSettings::VersionlessSubcommands);
 	#[cfg(feature = "slurm")]
 	{
-		app = app.arg(Arg::with_name("slurm").short("S").long("slurm").help("Submit commands to slurm for execution"))
-		.arg(Arg::with_name("slurm_script").short("s").long("slurm-script").takes_value(true)
-			.value_name("SCRIPT_FILE").help("Generate PERL script to submit commands to slurm for execution"))
-		.group(ArgGroup::with_name("slurm_opts").args(&["slurm", "slurm_script"]));
+		let container: Option<&'static str> = option_env!("GEMBS_CONTAINER");
+		app = app.arg(Arg::with_name("slurm_script").short("s").long("slurm-script").takes_value(true)
+			.value_name("SCRIPT_FILE").help("Generate PERL script to submit commands to slurm for execution"));
+		if container.is_none() {
+			app = app.arg(Arg::with_name("slurm").short("S").long("slurm").help("Submit commands to slurm for execution"))
+			.group(ArgGroup::with_name("slurm_opts").args(&["slurm", "slurm_script"]));
+		}
 	}
 	let m = app.get_matches();		
 	// Interpret global command line flags and set up logging
