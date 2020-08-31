@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use std::env;
 use std::path::Path;
-use clap::{App, AppSettings};
+use clap::{App, AppSettings, ArgGroup};
 
 #[cfg(feature = "slurm")]
 use clap::Arg;
@@ -19,7 +19,10 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 	app = app.setting(AppSettings::VersionlessSubcommands);
 	#[cfg(feature = "slurm")]
 	{
-		app = app.arg(Arg::with_name("slurm").short("s").long("slurm").help("Submit commands to slurm for execution"));
+		app = app.arg(Arg::with_name("slurm").short("S").long("slurm").help("Submit commands to slurm for execution"))
+		.arg(Arg::with_name("slurm_script").short("s").long("slurm-script").takes_value(true)
+			.value_name("SCRIPT_FILE").help("Generate PERL script to submit commands to slurm for execution"))
+		.group(ArgGroup::with_name("slurm_opts").args(&["slurm", "slurm_script"]));
 	}
 	let m = app.get_matches();		
 	// Interpret global command line flags and set up logging
@@ -57,6 +60,7 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 	if m.is_present("dry_run") { gem_bs.set_dry_run(true); }
 	if m.is_present("slurm") { gem_bs.set_slurm(true); }
 	if let Some(s) = m.value_of("json") { gem_bs.set_json_out(s); }
+	if let Some(s) = m.value_of("slurm_script") { gem_bs.set_slurm_script(s); }
 
 	let mem = (gem_bs.total_mem() as f64) / 1073741824.0;
 	info!("Total memory detected: {:.1} GB", mem);

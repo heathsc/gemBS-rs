@@ -72,7 +72,7 @@ pub fn handle_nonexec(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>
 	if let Some(json_file) = gem_bs.json_out() { handle_json_tasks(gem_bs, &options, &task_list, json_file)?; }
 	
 	#[cfg(feature = "slurm")]
-	if gem_bs.slurm() { slurm::handle_slurm(gem_bs, &options, &task_list)?; }
+	if gem_bs.slurm() || gem_bs.slurm_script().is_some() { slurm::handle_slurm(gem_bs, &options, &task_list)?; }
 	
 	Ok(())
 }
