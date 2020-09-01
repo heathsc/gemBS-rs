@@ -1,2 +1,2 @@
 # gemBS-rs
-Highly experimental rust port of gemBS
+A rewrite of the gemBS pipeline framework from Python into Rust.
