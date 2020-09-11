@@ -21,7 +21,7 @@ fn get_required_asset_list(gem_bs: &GemBS, options: &HashMap<&'static str, DataV
 
 pub fn extract_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.setup_fs(false)?;
-	gem_bs.read_json_config()?;
+	gem_bs.read_config()?;
 	
 	let options = handle_options(m, gem_bs, Section::Extract);
 	let task_path = gem_bs.get_task_file_path();

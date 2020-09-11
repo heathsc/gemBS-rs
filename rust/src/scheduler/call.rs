@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 
 use crate::config::GemBS;
 use crate::common::assets::GetAsset;
-use crate::common::defs::{DataValue, Section, ContigInfo, ContigData, VarType};
+use crate::common::defs::{DataValue, Section, VarType};
 use crate::common::tasks::Task;
 use crate::common::json_map_stats::{MapJson, BaseCounts, Counts};
 use super::QPipe;
@@ -38,13 +38,13 @@ fn make_pool_file(gem_bs: &GemBS, barcode: &str, pool: Option<&str>, output: &Pa
 	if let Some(p) = pool {
 		let parent = output.parent().unwrap_or_else(|| Path::new("."));
 		let ctg_path: PathBuf = [parent, Path::new(format!("{}_{}_ctgs.bed", barcode, p).as_str())].iter().collect();
-		let hr_ctg = gem_bs.get_contig_hash().get(&ContigInfo::Contigs).expect("No Contig defs entry");
-		let hr_pool = gem_bs.get_contig_hash().get(&ContigInfo::ContigPools).expect("No Contig pools entry");
-		let cpool = if let ContigData::ContigPool(x) = hr_pool.get(&p.to_owned()).expect("Unknown pool") {x} else {panic!("Wrong datatype")};
+		let vr_ctg = gem_bs.get_contigs();
+		let hr_pool = gem_bs.get_contig_pool_hash();
+		let cpool = hr_pool.get(&p.to_owned()).expect("Unknown pool");
 		let mut wr = BufWriter::new(fs::File::create(&ctg_path)
 			.unwrap_or_else(|e| panic!("Couldn't open contig_sizes file {} for output: {}", ctg_path.to_string_lossy(), e)));
-		for ctg_name in cpool.contigs.iter() {
-			let ctg = if let ContigData::Contig(x) = hr_ctg.get(ctg_name).expect("No contig entry") {x} else {panic!("Wrong datatype")};
+		for ctg_ix in cpool.contigs.iter() {
+			let ctg = vr_ctg.get(*ctg_ix).expect("No contig entry");
 			writeln!(wr, "{}\t0\t{}", ctg.name, ctg.len)
 				.unwrap_or_else(|e| panic!("Error writing to file {}: {}", ctg_path.to_string_lossy(), e));
 		}

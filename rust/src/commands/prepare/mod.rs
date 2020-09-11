@@ -28,5 +28,5 @@ pub fn prepare_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String>
 	gem_bs.setup_assets_and_tasks(&flock)?;
 	
 	// Dump JSON config file to disk
-	gem_bs.write_json_config()
+	gem_bs.write_config()
 }

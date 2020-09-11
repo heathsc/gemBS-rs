@@ -5,14 +5,15 @@ use std::process;
 use std::path::{Path, PathBuf};
 use std::ffi::{OsString, OsStr};
 use std::io::prelude::*;
-use std::io::{BufReader, BufRead, BufWriter, ErrorKind};
+use std::io::{BufRead, BufWriter, ErrorKind};
 use std::env;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::{thread, time};
 use std::convert::AsRef;
-use blake2::{Blake2b, Digest};
+// use blake2::{Blake2b, Digest};
 
+use super::compress::{open_bufreader, open_pipe_writer};
 use crate::common::defs::{SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 
 pub fn get_inode(name: &str) -> Option<u64> {
@@ -246,10 +247,10 @@ fn wait_sub_proc(sig: Arc<AtomicUsize>, cinfo: &mut Vec<(Child, &Path)>) -> Opti
 	err_com
 }
 		
-pub fn calc_digest<'a>(x: impl Iterator<Item=&'a [u8]>) -> String {
-    x.fold(Blake2b::new(), |h, a| h.chain(a))	
-		.result().iter().fold(String::new(), |mut s, x| { s.push_str(format!("{:02x}", x).as_str()); s})
-}
+//pub fn calc_digest<'a>(x: impl Iterator<Item=&'a [u8]>) -> String {
+//   x.fold(Blake2b::new(), |h, a| h.chain(a))	
+//		.result().iter().fold(String::new(), |mut s, x| { s.push_str(format!("{:02x}", x).as_str()); s})
+//}
 
 pub fn get_user_host_string() -> String {
 	let pid = process::id();
@@ -306,13 +307,11 @@ impl<'a> FileLock<'a> {
 		let writer = Box::new(BufWriter::new(ofile));
 		Ok(writer)
 	}
+	pub fn pipe_writer(&self, prog: &Path) -> Result<Box<dyn Write>, String> {
+		open_pipe_writer(self.path, prog).map_err(|e| format!("Couldn't open pipe using {} for writing to {}: {}", prog.display(), self.path.display(), e))
+	}
 	pub fn reader(&self) -> Result<Box<dyn BufRead>, String> {
-		let file = match fs::File::open(self.path) {
-			Err(e) => return Err(format!("Couldn't open {}: {}", self.path.to_string_lossy(), e)),
-			Ok(f) => f,
-		};
-		let reader = Box::new(BufReader::new(file));
-		Ok(reader)
+		open_bufreader(self.path).map_err(|e| format!("{}", e))
 	}
 }
 
@@ -369,5 +368,3 @@ impl<'a> Drop for FileLock<'a> {
 		let _ = fs::remove_file(&self.lock_path);
     }
 }
-
-

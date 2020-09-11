@@ -10,8 +10,8 @@ use crate::common::assets::GetAsset;
 
 pub fn clear_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.setup_fs(false)?;
-	// Get JSON config file from disk
-	gem_bs.read_json_config()?;
+	// Get config file from disk
+	gem_bs.read_config()?;
 	
 	let options = handle_options(m, gem_bs, Section::Report);
 	if !options.contains_key("_confirm") {

@@ -9,7 +9,7 @@ args:
     - quiet: {short: q, long: quiet, help: Silence all output}
     - timestamp: {short: t, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
     - loglevel: {short: l, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
-    - json_file: {short: J, long: json-file, takes_value: true, value_name: gemBS_JSON_FILE, help: Location of gemBS JSON file}
+    - config_file: {short: c, long: config-file, takes_value: true, value_name: CONFIG_FILE, help: Location of gemBS config file}
     - dir: {short: d, long: dir, takes_value: true, value_name: DIR, help: set working directory}
     - gembs_root: {short :r, long: gembs-root, takes_value: true, value_name: DIR, help: set root of gemBS installation}
     - all: {short: a, long: all, help: Consider all tasks required for the requested command}

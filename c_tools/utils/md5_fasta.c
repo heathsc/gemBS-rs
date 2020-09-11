@@ -174,10 +174,16 @@ static void process_file(FILE * const fp, FILE * const fout, const bool stream, 
 	ssize_t l;
 	char *ctg = NULL;
 	MD5_CTX ctx;
+	errno = 0;
 	// Process header lines - no conversion
 	while(1) {
 		l = getline(&buf, &buf_size, fp);
-		if(l < 0) break;
+		if(l < 0) {
+			if(errno) {
+				fprintf(stderr, "md5_fasta:process_file error reading from reference: %s\n", strerror(errno));
+				exit(-1);
+			}
+		}
 		if(stream) fputs(buf, stdout);
 		if(buf[0] == '>') {
 			if(ctg) {

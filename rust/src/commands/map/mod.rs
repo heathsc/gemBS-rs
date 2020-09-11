@@ -74,7 +74,7 @@ fn gen_map_command(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataValue
 
 pub fn map_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.setup_fs(false)?;
-	gem_bs.read_json_config()?;
+	gem_bs.read_config()?;
 	
 	let mut options = handle_options(m, gem_bs, Section::Mapping);
 	if options.contains_key("_no_merge") { options.insert("_no_md5", DataValue::Bool(true)); }

@@ -54,7 +54,7 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 		debug!("Moved working directory to {}", f);
 	}	
 
-	if let Some(s) = m.value_of("json_file") { gem_bs.set_config(Section::Default, "json_file", DataValue::String(s.to_string())); }
+	if let Some(s) = m.value_of("config_file") { gem_bs.set_config(Section::Default, "config_file", DataValue::String(s.to_string())); }
 	if let Some(s) = m.value_of("gembs_root") { gem_bs.set_config(Section::Default, "gembs_root", DataValue::String(s.to_string())); }
 	if m.is_present("keep_logs") { gem_bs.set_config(Section::Default, "keep_logs", DataValue::Bool(true)); }
 	if m.is_present("ignore_times") { gem_bs.set_ignore_times(true); }

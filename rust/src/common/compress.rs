@@ -1,8 +1,10 @@
 use std::fs::File;
 use std::io::prelude::*;
-use std::io::{BufReader, BufWriter, Error, ErrorKind, Result};
-use std::process::{Command, Stdio, ChildStdout};
+use std::io::{BufReader, BufRead, BufWriter, Error, ErrorKind, Result};
+use std::process::{Command, Stdio, ChildStdout, ChildStdin};
 use std::path::Path;
+
+use flate2::read::GzDecoder;
 
 #[derive(Debug)]
 pub enum CompressType {
@@ -16,9 +18,10 @@ pub enum CompressType {
 pub enum ReadType {
 	Pipe(ChildStdout),
 	File(File),	
+	FlateGz(File),
 }
 
-pub fn new_filter_from_pipe(prog: &str, pipe: Stdio) -> Result<ChildStdout> {
+pub fn new_read_filter_from_pipe(prog: &str, pipe: Stdio) -> Result<ChildStdout> {
 
     match Command::new(prog).arg("-d")
         .stdin(pipe)
@@ -27,6 +30,13 @@ pub fn new_filter_from_pipe(prog: &str, pipe: Stdio) -> Result<ChildStdout> {
             Ok(proc) => Ok(proc.stdout.expect("pipe problem")),
             Err(error) => Err(Error::new(ErrorKind::Other, format!("Error executing pipe command '{} -d': {}", prog, error))),
         }
+}
+
+pub fn open_write_filter(file: std::fs::File, prog: &Path) -> Result<ChildStdin> {
+	match Command::new(prog).stdin(Stdio::piped()).stdout(file).spawn() {
+			Ok(proc) => Ok(proc.stdin.expect("pipe problem")),
+			Err(error) => Err(Error::new(ErrorKind::Other, format!("Error exectuing pipe command '{}': {}", prog.display(), error))),
+		}
 }
 
 fn test_open_file(path: &Path) -> Result<std::fs::File> {
@@ -67,9 +77,10 @@ pub fn open_reader(name: &Path) -> Result<ReadType> {
 	let f = test_open_file(name)?;
 	match ctype {
 		CompressType::UNCOMPRESSED => Ok(ReadType::File(f)),
-       	CompressType::BZIP2 => new_filter_from_pipe(&"bzip", Stdio::from(f)).map(ReadType::Pipe),
-        CompressType::XZ => new_filter_from_pipe(&"xz", Stdio::from(f)).map(ReadType::Pipe),
-        _ => new_filter_from_pipe(&"gzip", Stdio::from(f)).map(ReadType::Pipe),
+       	CompressType::BZIP2 => new_read_filter_from_pipe(&"bzip", Stdio::from(f)).map(ReadType::Pipe),
+        CompressType::XZ => new_read_filter_from_pipe(&"xz", Stdio::from(f)).map(ReadType::Pipe),
+		CompressType::GZIP => Ok(ReadType::FlateGz(f)),
+        _ => new_read_filter_from_pipe(&"gzip", Stdio::from(f)).map(ReadType::Pipe),
 	}
 }
 
@@ -77,6 +88,7 @@ pub fn open_bufreader(name: &Path) -> Result<Box<dyn BufRead>> {
 	match open_reader(name)? {
 		ReadType::File(file) => Ok(Box::new(BufReader::new(file))),
 		ReadType::Pipe(pipe) => Ok(Box::new(BufReader::new(pipe))),
+		ReadType::FlateGz(file) => Ok(Box::new(BufReader::new(GzDecoder::new(file)))),
 	}
 }
 
@@ -85,3 +97,7 @@ pub fn open_bufwriter(path: &Path) -> Result<Box<dyn Write>> {
 	Ok(Box::new(BufWriter::new(file)))
 }
 
+pub fn open_pipe_writer(path: &Path, prog: &Path) -> Result<Box<dyn Write>> {
+	let file = File::create(path)?;
+	Ok(Box::new(BufWriter::new(open_write_filter(file, prog)?)))	
+}

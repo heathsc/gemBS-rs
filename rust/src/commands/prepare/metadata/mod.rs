@@ -90,6 +90,7 @@ lazy_static! {
 		m.push("bsseq");
 		m.push("oxbs-seq");
 		m.push("customcapturebs-seq");
+		m.push("wg-em-seq");
 		m.push("other-bs");
         m
     };

@@ -2,7 +2,7 @@
 // Make gemBS reference if required
 // Make asset list for refererences, indicies and other associated files
 
-use crate::common::defs::{Section, Metadata, DataValue, Command, ContigInfo, ContigData};
+use crate::common::defs::{Section, Metadata, DataValue, Command};
 use crate::config::GemBS;
 use crate::common::utils::Pipeline;
 use crate::common::{assets, compress};
@@ -184,15 +184,13 @@ pub fn make_contig_sizes(gem_bs: &mut GemBS) -> Result<(), String> {
 		let omit_ctgs = if let Some(DataValue::StringVec(v)) = gem_bs.get_config(Section::Index, "omit_ctgs") {
 			v.iter().fold(HashSet::new(), |mut h, x| { h.insert(x.as_str()); h })
 		} else { HashSet::new() };
-		let hr = gem_bs.get_contig_hash().get(&ContigInfo::Contigs).expect("No Contig defs entry");
+		let ctgs = gem_bs.get_contigs();
 		let mut wr = BufWriter::new(fs::File::create(&contig_sizes)
 			.map_err(|e| format!("Couldn't open contig_sizes file {} for output: {}", contig_sizes.to_string_lossy(), e))?);
 		gem_bs.check_signal()?;
-		for (_, ctgdat) in hr.iter() {
-			if let ContigData::Contig(ctg) = ctgdat {
-				if !omit_ctgs.contains(ctg.name.as_str()) { writeln!(wr, "{}\t{}", ctg.name, ctg.len)
-						.map_err(|e| format!("Error writing to file {}: {}", contig_sizes.to_string_lossy(), e))?;
-				}
+		for ctg in ctgs.iter() {
+			if !omit_ctgs.contains(ctg.name.as_str()) { writeln!(wr, "{}\t{}", ctg.name, ctg.len)
+					.map_err(|e| format!("Error writing to file {}: {}", contig_sizes.to_string_lossy(), e))?;
 			}
 		}			
 	}

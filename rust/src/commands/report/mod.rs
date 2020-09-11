@@ -19,8 +19,8 @@ fn collect_assets(gem_bs: &GemBS, id: &str) -> Result<Vec<usize>, String> {
 
 pub fn report_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	gem_bs.setup_fs(false)?;
-	// Get JSON config file from disk
-	gem_bs.read_json_config()?;
+	// Get config file from disk
+	gem_bs.read_config()?;
 	
 	let mut options = handle_options(m, gem_bs, Section::Report);
 	// If neither mappng or calling option specified by user, do both

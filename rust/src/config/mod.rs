@@ -12,11 +12,14 @@ use serde::{Serialize, Deserialize};
 use std::path::Path;
 use std::rc::Rc;
 use std::str::FromStr;
+use std::time::Instant;
 
-use crate::common::defs::{Section, ContigInfo, ContigData, Metadata, DataValue, JobLen, MemSize, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
+use crate::common::defs::{Section, Metadata, DataValue, JobLen, MemSize, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 use crate::common::assets::{Asset, AssetList, AssetType, AssetStatus, GetAsset};
 use crate::common::tasks::{Task, TaskList, TaskStatus, RunningTask};
 use crate::common::utils::{FileLock, timed_wait_for_lock, get_phys_memory};
+use crate::common::unix_utils::find_exec_path;
+use crate::config::contig::{Contig, ContigPool};
 use crate::cli::utils::LogLevel;
 
 use std::slice;
@@ -29,25 +32,25 @@ mod check_call;
 mod check_extract;
 
 #[derive(Serialize, Deserialize, Debug)]
-enum GemBSHash {
+enum GemBSData {
 	Config(HashMap<Section, HashMap<String, DataValue>>),
 	SampleData(HashMap<String, HashMap<Metadata, DataValue>>),
-	Contig(HashMap<ContigInfo, HashMap<Rc<String>, ContigData>>),
+	Contigs(Vec<Contig>),
+	ContigPools(HashMap<Rc<String>, ContigPool>),
 }
 
 struct GemBSFiles {
 	config_dir: PathBuf,
-	json_file: PathBuf,
+	config_file: PathBuf,
 	gem_bs_root: PathBuf,		
 }
 
 pub struct GemBS {
-	var: Vec<GemBSHash>,
+	var: [GemBSData; 4],
 	fs: Option<GemBSFiles>,
 	assets: AssetList,
 	tasks: TaskList,
-	contig_pool_digest: Option<String>,
-	asset_digest: Option<String>,
+//	asset_digest: Option<String>,
 	total_mem: usize,
 	signal: Arc<AtomicUsize>,
 	ignore_times: bool,
@@ -63,18 +66,24 @@ pub struct GemBS {
 impl GemBS {
 	pub fn new() -> Self {
 		let total_mem = get_phys_memory().expect("Couldn't get total memory on system");
-		let mut gem_bs = GemBS{var: Vec::new(), fs: None, contig_pool_digest: None, asset_digest: None, 
+		let var = [
+			GemBSData::Config(HashMap::new()),
+			GemBSData::SampleData(HashMap::new()),
+			GemBSData::Contigs(Vec::new()),
+			GemBSData::ContigPools(HashMap::new()),			
+		];
+		let gem_bs = GemBS{var, fs: None, 
 			ignore_times: false, ignore_status: false, total_mem,
 			json_out: None, all: false, slurm: false, slurm_script: None, dry_run: false, verbose: LogLevel::from_str("error").unwrap(),
 			assets: AssetList::new(), tasks: TaskList::new(), signal: Arc::new(AtomicUsize::new(0))};
-		let _ = signal_hook::flag::register_usize(signal_hook::SIGTERM, Arc::clone(&gem_bs.signal), SIGTERM);		
-		let _ = signal_hook::flag::register_usize(signal_hook::SIGINT, Arc::clone(&gem_bs.signal), SIGINT);		
-		let _ = signal_hook::flag::register_usize(signal_hook::SIGQUIT, Arc::clone(&gem_bs.signal), SIGQUIT);		
-		let _ = signal_hook::flag::register_usize(signal_hook::SIGHUP, Arc::clone(&gem_bs.signal), SIGHUP);		
-		gem_bs.var.push(GemBSHash::Config(HashMap::new()));
-		gem_bs.var.push(GemBSHash::SampleData(HashMap::new()));
-		gem_bs.var.push(GemBSHash::Contig(HashMap::new()));
+		gem_bs.mask_signals();
 		gem_bs
+	}
+	pub fn mask_signals(&self) {
+		let _ = signal_hook::flag::register_usize(signal_hook::SIGTERM, Arc::clone(&self.signal), SIGTERM);		
+		let _ = signal_hook::flag::register_usize(signal_hook::SIGINT, Arc::clone(&self.signal), SIGINT);		
+		let _ = signal_hook::flag::register_usize(signal_hook::SIGQUIT, Arc::clone(&self.signal), SIGQUIT);		
+		let _ = signal_hook::flag::register_usize(signal_hook::SIGHUP, Arc::clone(&self.signal), SIGHUP);				
 	}
 	pub fn total_mem(&self) -> usize { self.total_mem }
 	pub fn get_signal_clone(&self) -> Arc<AtomicUsize> { Arc::clone(&self.signal) }
@@ -91,34 +100,38 @@ impl GemBS {
 		self.signal.swap(s, Ordering::Relaxed)
 	}
 	pub fn set_config(&mut self, section: Section, name: &str, val: DataValue) {
-		if let GemBSHash::Config(href) = &mut self.var[0] {
+		if let GemBSData::Config(href) = &mut self.var[0] {
 			debug!("Setting {:?}:{} to {:?}", section, name, val);
 			href.entry(section).or_insert_with(HashMap::new).insert(name.to_string(), val);
 		} else { panic!("Internal error!"); }
 	}
 	pub fn set_sample_data(&mut self, dataset: &str, mt: Metadata, val: DataValue) {
-		if let GemBSHash::SampleData(href) = &mut self.var[1] {
+		if let GemBSData::SampleData(href) = &mut self.var[1] {
 			href.entry(dataset.to_string()).or_insert_with(HashMap::new).insert(mt, val);
 		} else { panic!("Internal error!"); }
 	}
-	fn get_contig_hash_mut(&mut self) -> &mut HashMap<ContigInfo, HashMap<Rc<String>, ContigData>> {
-		if let GemBSHash::Contig(href) = &mut self.var[2] {	href } else { panic!("Internal error!"); }
+	fn get_contigs_mut(&mut self) -> &mut Vec<Contig> {
+		if let GemBSData::Contigs(vref) = &mut self.var[2] { vref } else { panic!("Internal error!"); }
 	}
-	pub fn get_contig_hash(&self) -> &HashMap<ContigInfo, HashMap<Rc<String>, ContigData>> {
-		if let GemBSHash::Contig(href) = &self.var[2] {	href } else { panic!("Internal error!"); }
+	pub fn get_contigs(&self) -> &Vec<Contig> {
+		if let GemBSData::Contigs(vref) = &self.var[2] { vref } else { panic!("Internal error!"); }
+	}
+	pub fn get_contig_pool_hash(&self) -> &HashMap<Rc<String>, ContigPool> {
+		if let GemBSData::ContigPools(href) = &self.var[3] { href } else { panic!("Internal error!"); }
+	}
+	fn get_contig_pool_hash_mut(&mut self) -> &mut HashMap<Rc<String>, ContigPool> {
+		if let GemBSData::ContigPools(href) = &mut self.var[3] { href } else { panic!("Internal error!"); }
 	}
 	pub fn set_contig_def(&mut self, ctg: contig::Contig) {
-		let href = self.get_contig_hash_mut();
-		let name = Rc::clone(&ctg.name);
-		href.entry(ContigInfo::Contigs).or_insert_with(HashMap::new).insert(name, ContigData::Contig(ctg));
+		self.get_contigs_mut().push(ctg);
 	}
 	pub fn set_contig_pool_def(&mut self, pool: contig::ContigPool) {
-		let href = self.get_contig_hash_mut();
+		let href = self.get_contig_pool_hash_mut();
 		let name = Rc::clone(&pool.name);
-		href.entry(ContigInfo::ContigPools).or_insert_with(HashMap::new).insert(name, ContigData::ContigPool(pool));
+		href.insert(name, pool);
 	}
 	pub fn get_config(&self, section: Section, name: &str) -> Option<&DataValue> {
-		if let GemBSHash::Config(href) = &self.var[0] {
+		if let GemBSData::Config(href) = &self.var[0] {
 			if let Some(h) = href.get(&section) { 
 				if let Some(s) = h.get(name) { return Some(s); } 
 			}		
@@ -127,7 +140,7 @@ impl GemBS {
 		None
 	}
 	pub fn get_config_strict(&self, section: Section, name: &str) -> Option<&DataValue> {
-		if let GemBSHash::Config(href) = &self.var[0] {
+		if let GemBSData::Config(href) = &self.var[0] {
 			if let Some(h) = href.get(&section) { 
 				if let Some(s) = h.get(name) { return Some(s); } 
 			}		
@@ -156,7 +169,7 @@ impl GemBS {
 		if let Some(DataValue::MemSize(x)) = self.get_config(section, name) { Some(*x) } else { None }
 	}	
 	pub fn get_sample_data_ref(&self) ->  &HashMap<String, HashMap<Metadata, DataValue>> {
-		if let GemBSHash::SampleData(href) = &self.var[1] { &href }
+		if let GemBSData::SampleData(href) = &self.var[1] { &href }
 		else { panic!("Internal error!"); }
 	}
 	pub fn insert_asset(&mut self, id: &str, path: &Path, asset_type: AssetType) -> usize {
@@ -181,30 +194,41 @@ impl GemBS {
 		self.tasks.get_idx(child).add_parent(parent);
 	}	
 	// This will panic if called before fs is set, which is fine
-	pub fn write_json_config(&self) -> Result<(), String> {
+	pub fn write_config(&self) -> Result<(), String> {
 		self.check_signal()?;
-		let json_file = &self.fs.as_ref().unwrap().json_file;
-		let lock = FileLock::new(json_file).map_err(|e| format!("Error: Could not obtain lock on JSON config file: {}", e))?;
-		let writer = lock.writer().map_err(|e| format!("Error: Could not open JSON config file {} for writing: {}", json_file.to_string_lossy(), e))?;
-		serde_json::to_writer_pretty(writer, &self.var).map_err(|e| format!("Error: failed to write JSON config file {}: {}", json_file.to_string_lossy(), e))?;
-		trace!("JSON config file written out to {:?}", json_file);
+		let config_file = &self.fs.as_ref().unwrap().config_file;		
+		let lock = FileLock::new(config_file).map_err(|e| format!("Error: Could not obtain lock on gemBS config file: {}", e))?;
+		let mut writer = {
+			match find_exec_path("pigz").or_else(|| find_exec_path("gzip")) {
+				Some(p) => lock.pipe_writer(&p),
+				None => lock.writer(),
+			}.map_err(|e| format!("Error: Could not open gemBS config file {} for writing: {}", config_file.to_string_lossy(), e))
+		}?;
+//		let mut writer = lock.pipe_writer(Path::new("pigz")).map_err(|e| format!("Error: Could not open gemBS config file {} for writing: {}", config_file.to_string_lossy(), e))?;
+		debug!("Writing out config file {}", config_file.display());
+		let now = Instant::now();
+		rmp_serde::encode::write(&mut writer, &self.var).map_err(|e| format!("Error: failed to write RMP config file {}: {}", config_file.to_string_lossy(), e))?;		
+		debug!("Config file written out to {} in {}ms", config_file.display(), now.elapsed().as_millis());
 		Ok(())
 	}
-	pub fn read_json_config(&mut self) -> Result<(), String> {
+	pub fn read_config(&mut self) -> Result<(), String> {
 		self.check_signal()?;
-		let json_file = &self.fs.as_ref().unwrap().json_file;
-		let lock = timed_wait_for_lock(self.get_signal_clone(), json_file).map_err(|e| format!("Error: Could not obtain lock on JSON config file: {}", e))?;
-		let reader = lock.reader().map_err(|e| format!("Error: Could not open JSON config file {} for reading: {}", json_file.to_string_lossy(), e))?;
-		self.var = serde_json::from_reader(reader).map_err(|e| format!("Error: failed to read JSON config file {}: {}", json_file.to_string_lossy(), e))?;
-		trace!("JSON config file read from {:?}", json_file);
+		let config_file = &self.fs.as_ref().unwrap().config_file;
+		let lock = timed_wait_for_lock(self.get_signal_clone(), config_file).map_err(|e| format!("Error: Could not obtain lock on JSON config file: {}", e))?;
+		let reader = lock.reader().map_err(|e| format!("Error: Could not open JSON config file {} for reading: {}", config_file.to_string_lossy(), e))?;
+		debug!("Reading in config file {}", config_file.display());
+		let now = Instant::now();
+		self.var = rmp_serde::decode::from_read(reader).map_err(|e| format!("Error: failed to read MP config file {}: {}", config_file.to_string_lossy(), e))?;
+		debug!("config file read from {} in {}ms", config_file.display(), now.elapsed().as_millis());
+		self.check_signal()?;
 		Ok(())
 	}
 
 	pub fn setup_fs(&mut self, initial: bool) -> Result<(), String> {
 		self.check_signal()?;
 		let cdir = ".gemBS";
-		let json_file = if let Some(DataValue::String(x)) = self.get_config(Section::Default, "json_file") { PathBuf::from(x) } else { 
-			[cdir, "gemBS.json"].iter().collect()
+		let config_file = if let Some(DataValue::String(x)) = self.get_config(Section::Default, "config_file") { PathBuf::from(x) } else { 
+			[cdir, "gemBS.mp"].iter().collect()
 		};
 		let compile_root: Option<&'static str> = option_env!("GEMBS_INSTALL_ROOT");
 		let gem_bs_root = if let Some(DataValue::String(x)) = self.get_config(Section::Default, "gembs_root") { PathBuf::from(x) } 
@@ -222,11 +246,11 @@ impl GemBS {
 				}
 			} else if std::fs::create_dir(&config_dir).is_err() { return Err(format!("Could not create config directory {:?}", config_dir)); }
 		} else {
-			if !config_dir.is_dir() { return Err(format!("Config directory {:?} does not exist (or is not accessible)", config_dir)); }
-			if !json_file.exists() { return Err(format!("Config JSON file {:?} does not exist (or is not accessible)", json_file)); }
+			if !config_dir.is_dir() { return Err(format!("Config directory {} does not exist (or is not accessible)", config_dir.display())); }
+			if !config_file.exists() { return Err(format!("Config file {} does not exist (or is not accessible)", config_file.display())); }
 		}
 		debug!("gem_bs_root set to {}", gem_bs_root.display());
-		self.fs = Some(GemBSFiles{config_dir: config_dir.to_path_buf(), json_file, gem_bs_root});	
+		self.fs = Some(GemBSFiles{config_dir: config_dir.to_path_buf(), config_file, gem_bs_root});	
 		Ok(())
 	}
 	
@@ -284,7 +308,7 @@ impl GemBS {
 		self.check_signal()?;
 		// Assets are inserted in order so we know that a parent asset will always have a lower index than any child
 		check_ref::check_ref_and_indices(self)?;
-		self.contig_pool_digest = Some(contig::setup_contigs(self)?);
+		contig::setup_contigs(self)?;
 		check_ref::make_contig_sizes(self)?;		
 		check_map::check_map(self)?;
 		check_report::check_map_report(self)?;
@@ -292,8 +316,8 @@ impl GemBS {
 		check_report::check_call_report(self)?;
 		check_extract::check_extract(self)?;
 		check_report::check_report(self)?;
-		self.asset_digest = Some(self.assets.get_digest());
-		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());
+//		self.asset_digest = Some(self.assets.get_digest());
+//		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());
 		self.assets.calc_mod_time_ances();
 		self.assets.check_delete_status();
 		self.rescan_assets_and_tasks(lock)

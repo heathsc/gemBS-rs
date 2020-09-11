@@ -1,32 +1,31 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::fs;
-use std::rc::Rc;
 use std::io::{BufWriter, Write};
 use regex::Regex;
 use lazy_static::lazy_static;
 
 use crate::config::GemBS;
 use crate::common::assets::GetAsset;
-use crate::common::defs::{Section, ContigInfo, ContigData, VarType};
+use crate::common::defs::{Section, VarType};
 use super::QPipe;
 
 fn make_contig_file(gem_bs: &GemBS, barcode: &str, output_dir: &Path) -> PathBuf {
 	let ctg_path: PathBuf = [output_dir, Path::new(format!("{}_mextr_ctgs.bed", barcode).as_str())].iter().collect();
-	let hr_ctg = gem_bs.get_contig_hash().get(&ContigInfo::Contigs).expect("No Contig defs entry");
+	let vr_ctg = gem_bs.get_contigs();
 	let omit_hash = {
 		if let Some(oc) = gem_bs.get_config_stringvec(Section::Index, "omit_ctgs") {
 			oc.iter().fold(HashSet::new(), |mut h, x| { h.insert(x.clone()); h })	
 		} else { HashSet::new() }
 	};
-	let mut ctg_list: Vec<_> = hr_ctg.keys().filter(|x| !omit_hash.contains((*x).as_str())).map(|x| Rc::clone(x)).collect();
-	ctg_list.sort();
+//	let mut ctg_list: Vec<_> = vr_ctg.iter().filter(|x| !omit_hash.contains((x.name).as_str())).map(|x| Rc::clone(&x.name)).collect();
+//	ctg_list.sort();
 	let mut wr = BufWriter::new(fs::File::create(&ctg_path)
 		.unwrap_or_else(|e| panic!("Couldn't open contig_sizes file {} for output: {}", ctg_path.to_string_lossy(), e)));
-	for ctg_name in ctg_list.iter() {
-		let ctg = if let ContigData::Contig(x) = hr_ctg.get(ctg_name).expect("No contig entry") {x} else {panic!("Wrong datatype")};
+	for ctg in vr_ctg.iter().filter(|x| !omit_hash.contains(x.name.as_str())) {
+//		let ctg = if let ContigData::Contig(x) = hr_ctg.get(ctg_name).expect("No contig entry") {x} else {panic!("Wrong datatype")};
 		writeln!(wr, "{}\t0\t{}", ctg.name, ctg.len)
-			.unwrap_or_else(|e| panic!("Error writing to file {}: {}", ctg_path.to_string_lossy(), e))
+			.unwrap_or_else(|e| panic!("Error writing to file {}: {}", ctg_path.display(), e))
 	}
 	ctg_path
 }

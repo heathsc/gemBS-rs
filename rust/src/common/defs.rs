@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use regex::Regex;
 use lazy_static::lazy_static;
 
-use crate::config::contig;
 use super::latex_utils::PageSize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -28,17 +27,6 @@ impl FromStr for Section {
             _ => Err("no match"),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ContigInfo {
-	Contigs, ContigPools,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ContigData {
-	Contig(contig::Contig),
-	ContigPool(contig::ContigPool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
