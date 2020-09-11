@@ -204,7 +204,6 @@ impl GemBS {
 				None => lock.writer(),
 			}.map_err(|e| format!("Error: Could not open gemBS config file {} for writing: {}", config_file.to_string_lossy(), e))
 		}?;
-//		let mut writer = lock.pipe_writer(Path::new("pigz")).map_err(|e| format!("Error: Could not open gemBS config file {} for writing: {}", config_file.to_string_lossy(), e))?;
 		debug!("Writing out config file {}", config_file.display());
 		let now = Instant::now();
 		rmp_serde::encode::write(&mut writer, &self.var).map_err(|e| format!("Error: failed to write RMP config file {}: {}", config_file.to_string_lossy(), e))?;		
@@ -316,8 +315,6 @@ impl GemBS {
 		check_report::check_call_report(self)?;
 		check_extract::check_extract(self)?;
 		check_report::check_report(self)?;
-//		self.asset_digest = Some(self.assets.get_digest());
-//		debug!("Asset name digest = {}", self.asset_digest.as_ref().unwrap());
 		self.assets.calc_mod_time_ances();
 		self.assets.check_delete_status();
 		self.rescan_assets_and_tasks(lock)
