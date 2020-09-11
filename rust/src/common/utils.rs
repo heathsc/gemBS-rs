@@ -11,7 +11,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::{thread, time};
 use std::convert::AsRef;
-// use blake2::{Blake2b, Digest};
 
 use super::compress::{open_bufreader, open_pipe_writer};
 use crate::common::defs::{SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
@@ -247,11 +246,6 @@ fn wait_sub_proc(sig: Arc<AtomicUsize>, cinfo: &mut Vec<(Child, &Path)>) -> Opti
 	err_com
 }
 		
-//pub fn calc_digest<'a>(x: impl Iterator<Item=&'a [u8]>) -> String {
-//   x.fold(Blake2b::new(), |h, a| h.chain(a))	
-//		.result().iter().fold(String::new(), |mut s, x| { s.push_str(format!("{:02x}", x).as_str()); s})
-//}
-
 pub fn get_user_host_string() -> String {
 	let pid = process::id();
 	let hname = hostname::get().unwrap_or_else(|_| OsString::from("localhost"));

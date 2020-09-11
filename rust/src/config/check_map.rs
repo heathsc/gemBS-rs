@@ -149,7 +149,7 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 					}
 					if !thash.is_empty() { break; }
 				}
-				// Check that the files we found are compatible iwth themselves and other information
+				// Check that the files we found are compatible with themselves and other information
 				if thash.contains_key(&Metadata::FilePath1) || thash.contains_key(&Metadata::FilePath2) {
 					if thash.contains_key(&Metadata::FilePath) { return Err(format!("Mixture of paired and single sequence files found for dataset {} in {}", dat, sdir)); }
 					if thash.contains_key(&Metadata::FilePath1) && thash.contains_key(&Metadata::FilePath2) {
@@ -168,8 +168,9 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 						Metadata::FilePath2 => "read2",
 						_ => panic!("Unexpected metadata type"),
 					};
-					gem_bs.set_sample_data(dat, *md, DataValue::String(format!("{}", p.display())));
-					in_vec.push(gem_bs.insert_asset(format!("{}_{}", dat, ext).as_str(), &p, AssetType::Supplied));		
+					let p_abs = p.canonicalize().expect("Could not get absolute path");
+					gem_bs.set_sample_data(dat, *md, DataValue::String(format!("{}", p_abs.display())));
+					in_vec.push(gem_bs.insert_asset(format!("{}_{}", dat, ext).as_str(), &p_abs, AssetType::Supplied));		
 				}
 			}
 			if in_vec.is_empty() { return Err(format!("No datafiles for dataset {}", dat)); }
