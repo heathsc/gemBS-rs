@@ -7,7 +7,8 @@ use std::collections::{HashMap, HashSet};
 
 use plotters::prelude::*;
 
-use crate::common::{utils, compress};
+use crate::common::utils::check_signal;
+use utils::compress;
 use crate::common::json_call_stats::{CallJson, FSReadLevelType, FSBaseLevelType, FSCounts, Counts, QCCounts, MutCounts};
 use crate::scheduler::report::CallJsonFiles;
 use super::report_utils::*;
@@ -1137,7 +1138,7 @@ fn prepare_jobs(svec: &[CallJsonFiles], project: &str, summary: Arc<Mutex<HashMa
 }
 
 pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Option<String>, css: &Path, n_cores: usize, svec: Vec<CallJsonFiles>) -> Result<(), String> {
-	utils::check_signal(Arc::clone(&sig))?;
+	check_signal(Arc::clone(&sig))?;
 	info!("Making calling Report");
 
 	let project = project.unwrap_or_else(|| "gemBS".to_string());
@@ -1165,7 +1166,7 @@ pub fn make_call_report(sig: Arc<AtomicUsize>, outputs: &[PathBuf], project: Opt
 	}
 	let mut abort = false;
 	loop {
-		utils::check_signal(Arc::clone(&sig))?;
+		check_signal(Arc::clone(&sig))?;
 		let worker_ix = avail.pop();
 		let (job_ix, waiting) = if worker_ix.is_some() {
 			let mut x = None;

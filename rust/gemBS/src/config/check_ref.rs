@@ -5,7 +5,8 @@
 use crate::common::defs::{Section, Metadata, DataValue, Command};
 use crate::config::GemBS;
 use crate::common::utils::Pipeline;
-use crate::common::{assets, compress};
+use crate::common::assets;
+use utils::compress;
 use crate::common::assets::{AssetType, GetAsset};
 
 use std::str::FromStr;

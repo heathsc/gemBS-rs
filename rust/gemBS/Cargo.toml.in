@@ -23,6 +23,7 @@ custom_error = "1.7.1"
 plotters = {version = "^0.2.15", default_features = false, features = ["image_encoder", "line_series"]}
 regex = "1"
 flate2 = { version = "1.0.17", features = ["zlib"], default-features = false }
+utils = { path = "../utils" }
 
 [features]
 slurm = []

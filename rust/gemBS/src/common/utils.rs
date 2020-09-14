@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::{thread, time};
 use std::convert::AsRef;
 
-use super::compress::{open_bufreader, open_pipe_writer};
+use utils::compress::{open_bufreader, open_pipe_writer};
 use crate::common::defs::{SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 
 pub fn get_inode(name: &str) -> Option<u64> {

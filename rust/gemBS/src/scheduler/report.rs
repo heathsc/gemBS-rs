@@ -8,8 +8,8 @@ use crate::common::defs::{Section, Metadata, DataValue, Command};
 use crate::common::assets::GetAsset;
 use crate::common::json_call_stats::CallJson;
 use super::{QPipe, QPipeCom};
-use crate::common::compress;
-use crate::common::utils;
+use utils::compress;
+use crate::common::utils::check_signal;
 use crate::common::latex_utils::PageSize;
 
 #[derive(Debug)]
@@ -132,13 +132,13 @@ pub fn merge_call_jsons(sig: Arc<AtomicUsize>, outputs: &[PathBuf], sfiles: &Mer
 	let mut it = sfiles.json_files.iter();
 	let _ = it.next(); // Throw array first element as this is the BCF file
 	for (_, path) in it {
-		utils::check_signal(Arc::clone(&sig))?;
+		check_signal(Arc::clone(&sig))?;
 		let rdr = compress::open_bufreader(path).map_err(|e| format!("{}", e))?;
 		let jstats = CallJson::from_reader(rdr)?;
 		combined_stats = if let Some(mut st) = combined_stats { st.merge(&jstats); Some(st) }
 		else { Some(jstats) }
 	}
-	utils::check_signal(sig)?;
+	check_signal(sig)?;
 	if let Some(st) = combined_stats {
 		let output = outputs.first().expect("No output file for merge JSON command");
 		let wrt = compress::open_bufwriter(&output).map_err(|e| format!("{}", e))?;

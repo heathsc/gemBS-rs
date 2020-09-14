@@ -419,6 +419,7 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "stderrlog",
+ "utils",
 ]
 
 [[package]]
@@ -1048,6 +1049,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "382810877fe448991dfc7f0dd6e3ae5d58088fd0ea5e35189655f84e6814fa56"
 dependencies = [
  "void",
+]
+
+[[package]]
+name = "utils"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "libc",
 ]
 
 [[package]]

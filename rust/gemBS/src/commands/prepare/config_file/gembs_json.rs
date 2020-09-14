@@ -3,7 +3,7 @@ use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use lazy_static::lazy_static;
 
-use crate::common::compress;
+use utils::compress;
 use crate::common::defs::{Section, DataValue, VarType};
 use crate::commands::prepare::config_file::KnownVarList;
 use crate::config::GemBS;
