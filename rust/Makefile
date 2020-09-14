@@ -1,24 +1,28 @@
 include ../gemBS_config.mk
-.PHONY: ctoml all clean distclean
+.PHONY: all clean distclean
 
-all: ctoml bin
+BINDIR=bin
+GEMBSDIR=gemBS
+GEMBS_CTOML=$(GEMBSDIR)/Cargo.toml
+
+all: $(GEMBS_CTOML) $(BINDIR)
 	GEMBS_INSTALL_ROOT=$(GEMBS_INSTALL_ROOT) cargo build --release 
-	cp target/release/gem_bs bin/gemBS
+	cp target/release/gem_bs $(BINDIR)/gemBS
 
 ifeq ($(SLURM_SUPPORT),yes)
-ctoml: Cargo.toml.in
-	cp Cargo.toml.in Cargo.toml
-	echo default = [\"slurm\"] >> Cargo.toml
+$(GEMBS_CTOML): $(GEMBSDIR)/Cargo.toml.in
+	cp $(GEMBSDIR)/Cargo.toml.in $(GEMBS_CTOML)
+	echo default = [\"slurm\"] >> $(GEMBS_CTOML)
 else
-ctoml: Cargo.toml.in
-	cp Cargo.toml.in Cargo.toml
+$(GEMBS_CTOML): $(GEMBSDIR)/Cargo.toml.in
+	cp $(GEMBSDIR)/Cargo.toml.in $(GEMBS_CTOML)
 endif
 
-bin:
-	mkdir bin
+$(BINDIR):
+	mkdir $(BINDIR)
 
 clean:
-	rm -rf target Cargo.toml
+	rm -rf target $(GEMBS_CTOML)
 
 distclean: clean
-	rm -rf bin
+	rm -rf $(BINDIR)
