@@ -22,6 +22,18 @@ pub enum ReadType {
 	FlateGz(File),
 }
 
+pub fn open_read_filter<P: AsRef<Path>, I, S>(prog: P, args: I) -> Result<ChildStdout> 
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>, 
+{
+	let path: &Path = prog.as_ref();
+	match Command::new(path).args(args).stdout(Stdio::piped()).spawn() {
+		Ok(proc) => Ok(proc.stdout.expect("pipe problem")),
+		Err(error) => Err(Error::new(ErrorKind::Other, format!("Error exectuing pipe command '{}': {}", path.display(), error))),
+	}
+}
+
 pub fn new_read_filter_from_pipe<P: AsRef<Path> + std::fmt::Debug + Copy>(prog: P, pipe: Stdio) -> Result<ChildStdout> {
 	let path: &Path = prog.as_ref();
     match Command::new(path).arg("-d")

@@ -2,6 +2,7 @@ use utils::compress;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{fmt, env, fs};
+use std::io::{BufRead, BufReader};
 use std::ffi::OsStr;
 use std::str::FromStr;
 
@@ -56,7 +57,7 @@ impl Md5Digest {
 			self.digest[..16].clone_from_slice(&x[..16]);
 			Ok(())
 		} else {
-			Err("Md5Digest::set requires [u8; 16]".to_string())
+			Err(format!("Md5Digest::set requires [u8; 16].  Found [u8; {}]", x.len()))
 		}
 	}
 }
@@ -90,7 +91,7 @@ impl Md5Contig {
 		Md5Contig{name: name.as_ref().to_owned(), md5: Md5Digest::new(), len: 0}
 	}
 	fn handle_cache(&self, cache: &mut RefCache) -> Result<(), String> {
-		let fname = cache.get_fname(format!("{}", self.md5).as_str())?;
+		let fname = get_fname(&cache.path_str, format!("{}", self.md5).as_str())?;
 		if !fname.exists() {
 			// Make cache directories if required
 			if let Some(d) = &fname.parent() { fs::create_dir_all(d).map_err(|e| format!("Couldn't create cache directory {}: {}", d.display(), e))? }
@@ -99,6 +100,42 @@ impl Md5Contig {
 		}
 		cache.buf.clear();
 		Ok(())
+	}
+	fn check_cache<T: AsRef<Path>>(&self, gem_bs: &GemBS, path_str: &str, gref: T) -> Result<(), String> {
+		let fname = get_fname(path_str, format!("{}", self.md5).as_str())?;
+		if !fname.exists() {
+			// Read in sequence information from gref
+			let faidx_args = vec!("faidx", gref.as_ref().to_str().unwrap(), &self.name);
+			let samtools_path = gem_bs.get_exec_path("samtools");
+			println!("Creating cache for contig {} with md5 {}", self.name, self.md5);
+			let mut rdr = BufReader::new(compress::open_read_filter(&samtools_path, &faidx_args).
+				map_err(|e| format!("Couldn't get sequence data for contig {} from {}: {}", self.name, gref.as_ref().display(), e))?);
+			let mut read_header = false;
+			let mut line = String::with_capacity(128);
+			let mut buf: Vec<u8> = Vec::with_capacity(16384);
+			let filt_tab = init_filter();
+			loop {
+				gem_bs.check_signal()?;
+				match rdr.read_line(&mut line) {
+					Ok(0) => break,
+					Ok(_) => {
+						if let Some(ctg) = line.strip_prefix('>') {
+							if read_header { return Err("Error - no FASTA header found".to_string()) }
+							let name = ctg.trim_end();
+							if name != self.name { return Err(format!("Expecting {}: read in {}", self.name, name)) }
+							read_header = true;						
+						} else if read_header {
+							line.as_bytes().iter().filter(|x| filt_tab[**x as usize] != 0).for_each(|x| buf.push(*x));
+						} else { return Err("Error: no FASTA sequence header line".to_string()) }
+						line.clear();
+					},
+					Err(e) => return Err(format!("Error reading from file {}: {}", gref.as_ref().display(), e)),
+				}
+			}
+			let mut wrt = compress::open_bufwriter(&fname).map_err(|e| format!("Couldn't open cache file {} for writing: {}", &fname.display(), e))?;
+			wrt.write_all(&buf).map_err(|e| format!("Error writing to cache file {}: {}", &fname.display(), e))?;			
+		}
+		Ok(())	
 	}
 //	pub fn name(&self) -> &str { &self.name }
 //	pub fn len(&self) -> usize { self.len }
@@ -109,32 +146,35 @@ struct RefCache {
 	buf: Vec<u8>,	
 }
 
-impl RefCache {
-	// Replace %s or %ds where d is an integer by sections of the md5 string to make a filename
-	fn get_fname(&self, md5: &str) -> Result<PathBuf, String> {
-		lazy_static! { static ref RE: Regex = Regex::new(r"([^%]*)%(\d*)s([^%]*)").unwrap(); }
-		let mut fname = String::new();
-		let mut ix = 0;
-		for c in RE.captures_iter(&self.path_str) {
-			fname.push_str(&c[1]);
-			let n = if c[2].is_empty() {
-				32 - ix	
-			} else if let Ok(x) = <usize>::from_str(&c[2]) {
-				if x + ix > 32 { 32 - ix } else { x }
-			} else { 
-				return Err(format!("Illegal format string for cache path: {}", &self.path_str)) 
-			};
-			if n > 0 {
-				let ix1 = ix + n;
-				fname.push_str(&md5[ix..ix1]);
-				ix = ix1;
-			}
-			fname.push_str(&c[3]);
+// Replace %s or %ds where d is an integer by sections of the md5 string to make a filename
+fn get_fname(path_str: &str, md5: &str) -> Result<PathBuf, String> {
+	lazy_static! { static ref RE: Regex = Regex::new(r"([^%]*)%(\d*)s([^%]*)").unwrap(); }
+	let mut fname = String::new();
+	let mut ix = 0;
+	for c in RE.captures_iter(path_str) {
+		fname.push_str(&c[1]);
+		let n = if c[2].is_empty() {
+			32 - ix	
+		} else if let Ok(x) = <usize>::from_str(&c[2]) {
+			if x + ix > 32 { 32 - ix } else { x }
+		} else { 
+			return Err(format!("Illegal format string for cache path: {}", path_str)) 
+		};
+		if n > 0 {
+			let ix1 = ix + n;
+			fname.push_str(&md5[ix..ix1]);
+			ix = ix1;
 		}
-		Ok(PathBuf::from(&fname))
+		fname.push_str(&c[3]);
 	}
+	Ok(PathBuf::from(&fname))
 }
 
+// Read reference fastas.  
+// Write out bgzipped concatenated version to output_ref.  
+// Calculate len and md5 for each contig and write out to ctg_md5. 
+// If populate cache option set then save reference in cache using the 
+// same naming logic as htslib
 pub fn md5_fasta<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(gem_bs: &GemBS, in_files: &[P], output_ref: Q, ctg_md5: R) -> Result<(), String> {
 	let mut cache = if gem_bs.get_config_bool(Section::Index, "populate_cache") { 
 		let cp = get_cache_path();
@@ -191,5 +231,58 @@ pub fn md5_fasta<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(gem_bs: &GemBS,
 		}	
 		debug!("File processed in {}ms", now.elapsed().as_millis());
 	}
+	Ok(())
+}
+
+fn hex_val(x: u8) -> Result<u8, String> {
+	match x {
+		b'a'..=b'f' => Ok(x - b'a' + 10),
+		b'A'..=b'F' => Ok(x - b'A' + 10),
+		b'0'..=b'9' => Ok(x - b'0'),
+		_ => Err(format!("Unrecognized hex digit {}", x)),
+	}
+}
+
+fn get_from_hex<T: AsRef<[u8]>>(v: T) -> Result<Vec<u8>, String> {
+	let v = v.as_ref();
+	if v.len() & 1 != 0 { return Err("Couldn't convert from hex - odd number of digits".to_string()); }
+	v.chunks(2).map(|v| Ok(hex_val(v[0])? << 4 | hex_val(v[1])?)).collect()
+}
+
+// Check if reference cache is populated and populate with any contigs not present in the cache.
+pub fn check_reference_cache<P: AsRef<Path>, Q: AsRef<Path>>(gem_bs: &GemBS, gref: P, ctg_md5: Q) -> Result<(), String> {
+	let mut rdr = compress::open_bufreader(ctg_md5.as_ref()).map_err(|x| format!("{}",x))?;
+	debug!("Checking reference cache");
+	let cp = get_cache_path();
+	let now = Instant::now();
+	let mut line = String::with_capacity(1024);
+	loop {
+		gem_bs.check_signal()?;
+		match rdr.read_line(&mut line) {
+			Ok(0) => break,
+			Ok(_) => {
+				let mut iter = line.split_ascii_whitespace();
+				let e = if let Some(name) = iter.next() {
+					let mut found = false;
+					for f in iter {
+						if f.starts_with("M5:") && f.len() >= 35 {
+							let md5 = get_from_hex(&f.as_bytes()[3..])?;
+							let mut c = Md5Contig::new(&name);
+							c.md5.set(&md5)?;
+							c.check_cache(gem_bs, &cp, &gref)?;
+							found = true;
+							break;
+						}
+					}
+					!found
+				} else { true };
+				if e  { return Err(format!("Error reading from file {}", ctg_md5.as_ref().display())) }
+				line.clear();
+			},
+			Err(e) => return Err(format!("Error reading from file {}: {}", ctg_md5.as_ref().display(), e)),
+		}
+	}
+	debug!("Reference cache checked in {}ms", now.elapsed().as_millis());		
+
 	Ok(())
 }

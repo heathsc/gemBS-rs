@@ -8,6 +8,7 @@ use crate::common::utils::Pipeline;
 use crate::common::assets;
 use utils::compress;
 use crate::common::assets::{AssetType, GetAsset};
+use super::md5_fasta;
 
 use std::str::FromStr;
 use std::path::{Path, PathBuf};
@@ -210,23 +211,22 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 	let tpath = Path::new(Path::new(reference).file_stem().unwrap()).with_extension("gemBS.contig_md5");
 	let mut ctg_md5 = PathBuf::from(index_dir);
 	ctg_md5.push(tpath);
+	let mut populate_cache = gem_bs.get_config_bool(Section::Index, "populate_cache");
 	// Create gemBS reference if it does not already exist		
 	if !(gref.exists() && ctg_md5.exists()) {
 		gem_bs.check_signal()?;
 		info!("Creating gemBS compressed reference and calculating md5 sums of contigs");
 		let _ = fs::remove_file(&gref_fai);
 		let _ = fs::remove_file(&gref_gzi);
-//		let mut md5_args = vec!("-o", ctg_md5.to_str().unwrap(), "-s");
-//		let populate_cache = if let Some(DataValue::Bool(x)) = gem_bs.get_config(Section::Index, "populate_cache") { *x } else { false };
-//		if populate_cache { md5_args.push("-p"); }
 		let mut in_vec = vec!(reference);
 		if let Some(s) = gem_bs.get_config_str(Section::Index, "extra_references") { in_vec.push(s); }
-		if let Err(e) = super::md5_fasta::md5_fasta(gem_bs, &in_vec, &gref, &ctg_md5) {
+		if let Err(e) = md5_fasta::md5_fasta(gem_bs, &in_vec, &gref, &ctg_md5) {
 			debug!("Generation of gemBS compressed reference failed - removing output files");
 			let _ = fs::remove_file(&gref);
 			let _ = fs::remove_file(&ctg_md5);
 			return Err(e);
 		}
+		populate_cache = false;
 	}
 	// Create faidx index if required		
 	if !(gref_fai.exists() && gref_gzi.exists()) {
@@ -239,6 +239,7 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 				.add_output(&gref_fai).add_output(&gref_gzi);
 		pipeline.run(gem_bs.get_signal_clone())?;
 	}
+	if populate_cache { md5_fasta::check_reference_cache(gem_bs, &gref, &ctg_md5)?; }
 	gem_bs.insert_asset("gembs_reference", &gref, AssetType::Derived);			
 	gem_bs.insert_asset("gembs_reference_fai", &gref_fai, AssetType::Derived);			
 	gem_bs.insert_asset("gembs_reference_gzi", &gref_gzi, AssetType::Derived);			
