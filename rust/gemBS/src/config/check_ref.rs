@@ -216,20 +216,17 @@ fn make_gem_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 		info!("Creating gemBS compressed reference and calculating md5 sums of contigs");
 		let _ = fs::remove_file(&gref_fai);
 		let _ = fs::remove_file(&gref_gzi);
-		let mut md5_args = vec!("-o", ctg_md5.to_str().unwrap(), "-s");
-		let populate_cache = if let Some(DataValue::Bool(x)) = gem_bs.get_config(Section::Index, "populate_cache") { *x } else { false };
-		if populate_cache { md5_args.push("-p"); }
-		md5_args.push(reference);
-		if let Some(DataValue::String(s)) = gem_bs.get_config(Section::Index, "extra_references") { md5_args.push(s); }
-		let md5_path = gem_bs.get_exec_path("md5_fasta");
-		let thr = gem_bs.get_threads(Section::Index).to_string();
-		let bgzip_args = vec!("-@", &thr);
-		let bgzip_path = gem_bs.get_exec_path("bgzip");
-		let mut pipeline = Pipeline::new();
-		pipeline.add_stage(&md5_path, Some(md5_args.iter()))
-			    .add_stage(&bgzip_path, Some(bgzip_args.iter()))
-				.out_filepath(&gref).add_output(&ctg_md5);
-		pipeline.run(gem_bs.get_signal_clone())?;
+//		let mut md5_args = vec!("-o", ctg_md5.to_str().unwrap(), "-s");
+//		let populate_cache = if let Some(DataValue::Bool(x)) = gem_bs.get_config(Section::Index, "populate_cache") { *x } else { false };
+//		if populate_cache { md5_args.push("-p"); }
+		let mut in_vec = vec!(reference);
+		if let Some(s) = gem_bs.get_config_str(Section::Index, "extra_references") { in_vec.push(s); }
+		if let Err(e) = super::md5_fasta::md5_fasta(gem_bs, &in_vec, &gref, &ctg_md5) {
+			debug!("Generation of gemBS compressed reference failed - removing output files");
+			let _ = fs::remove_file(&gref);
+			let _ = fs::remove_file(&ctg_md5);
+			return Err(e);
+		}
 	}
 	// Create faidx index if required		
 	if !(gref_fai.exists() && gref_gzi.exists()) {

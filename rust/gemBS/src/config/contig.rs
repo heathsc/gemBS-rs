@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use crate::common::defs::{Section, DataValue, CONTIG_POOL_SIZE};
 use crate::common::assets::{AssetStatus, GetAsset};
 use utils::compress;
-use crate::config::GemBS;
+use super::GemBS;
+
 use std::collections::{BinaryHeap, HashSet};
 use std::io::BufRead;
 use std::rc::Rc;
@@ -95,9 +96,9 @@ pub fn setup_contigs(gem_bs: &mut GemBS) -> Result<(), String> {
 	} 
 
 	let mut rdr = compress::open_bufreader(ctg_md5).map_err(|x| format!("{}",x))?;
-	debug!("Reading contig list from {:?}", ctg_md5);
+	debug!("Reading contig list from {}", ctg_md5.display());
 	let now = Instant::now();
-	let mut contigs = Vec::new();	
+	let mut contigs = Vec::new();
 	let mut line = String::with_capacity(1024);
 	loop {
 		gem_bs.check_signal()?;
@@ -120,26 +121,7 @@ pub fn setup_contigs(gem_bs: &mut GemBS) -> Result<(), String> {
 			Err(e) => return Err(format!("Error reading from file {}: {}", ctg_md5.display(), e)),
 		}
 	}
-/*		
-	for (i, line) in rdr.lines().enumerate() {
-		gem_bs.check_signal()?;
-		if let Ok(st) = line {
-			let mut iter = st.split('\t');
-			let e = if let Some(name) = iter.next() {
-				if let Some(s) = iter.next() {
-					if s.starts_with("LN:") {
-						let len = s[3..].parse::<usize>().map_err(|e| format!("{}", e))?;
-						contigs.push(Contig{name: Rc::new(name.to_owned()), len, omit: omit_ctg.contains(name)});
-						false
-					} else { true }
-				} else { true }
-			} else { true };
-			if e  { return Err(format!("Error reading from file {} at line {}", ctg_md5.display(), i)) }
-		}
-	}
-*/ 
-	debug!("File {} read in {}ms", ctg_md5.display(), now.elapsed().as_millis());
-		
+	debug!("File {} read in {}ms", ctg_md5.display(), now.elapsed().as_millis());		
 	let ctg_pools_limit = if let Some(DataValue::Int(x)) = gem_bs.get_config(Section::Calling, "contig_pool_limit") { *x as usize } else { 
 		let x = CONTIG_POOL_SIZE;
 		gem_bs.set_config(Section::Calling, "contig_pool_limit", DataValue::Int(x as isize));

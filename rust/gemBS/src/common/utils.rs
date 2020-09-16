@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, env, iter};
 use std::os::unix::fs::{symlink, MetadataExt};
 use std::process::{Command, Stdio, Child};
 use std::process;
@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use std::ffi::{OsString, OsStr};
 use std::io::prelude::*;
 use std::io::{BufRead, BufWriter, ErrorKind};
-use std::env;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::{thread, time};
@@ -301,8 +300,8 @@ impl<'a> FileLock<'a> {
 		let writer = Box::new(BufWriter::new(ofile));
 		Ok(writer)
 	}
-	pub fn pipe_writer(&self, prog: &Path) -> Result<Box<dyn Write>, String> {
-		open_pipe_writer(self.path, prog).map_err(|e| format!("Couldn't open pipe using {} for writing to {}: {}", prog.display(), self.path.display(), e))
+	pub fn pipe_writer<P: AsRef<Path>>(&self, prog: P) -> Result<Box<dyn Write>, String> {
+		open_pipe_writer(self.path, prog.as_ref(), iter::empty::<&OsStr>()).map_err(|e| format!("Couldn't open pipe using {} for writing to {}: {}", prog.as_ref().display(), self.path.display(), e))
 	}
 	pub fn reader(&self) -> Result<Box<dyn BufRead>, String> {
 		open_bufreader(self.path).map_err(|e| format!("{}", e))

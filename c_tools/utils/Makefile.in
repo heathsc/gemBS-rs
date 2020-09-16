@@ -13,7 +13,7 @@ CC=@CC@
 
 ROOT_PATH=..
 
-TOOLS= readNameClean md5_fasta mextr snpxtr
+TOOLS= readNameClean mextr snpxtr
 FOLDER_BIN=../bin
 TOOLS_BIN=$(addprefix $(FOLDER_BIN)/, $(TOOLS))
 LIBS:= $(LDFLAGS) -lm
@@ -57,9 +57,6 @@ clean:
 
 distclean: clean
 	rm -f Makefile config.status
-
-$(FOLDER_BIN)/md5_fasta: md5_fasta.c common/utils.c
-	$(CC) $(TOOLS_FLAGS) -o $@ md5_fasta.c common/utils.c $(LIB_PATH_FLAGS) $(INCLUDE_FLAGS) $(LIBS) $(EXTRA_LIBS)-lcrypto
 
 $(FOLDER_BIN)/readNameClean: readNameClean/readNameClean.c common/utils.c
 	$(CC) $(TOOLS_FLAGS) -o $@ readNameClean/readNameClean.c common/utils.c $(LIB_PATH_FLAGS) $(INCLUDE_FLAGS) $(LIBS) $(EXTRA_LIBS)

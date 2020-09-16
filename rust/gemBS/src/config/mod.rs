@@ -30,6 +30,7 @@ mod check_map;
 mod check_report;
 mod check_call;
 mod check_extract;
+mod md5_fasta;
 
 #[derive(Serialize, Deserialize, Debug)]
 enum GemBSData {
@@ -50,7 +51,6 @@ pub struct GemBS {
 	fs: Option<GemBSFiles>,
 	assets: AssetList,
 	tasks: TaskList,
-//	asset_digest: Option<String>,
 	total_mem: usize,
 	signal: Arc<AtomicUsize>,
 	ignore_times: bool,
@@ -535,7 +535,7 @@ impl GetAsset<&str> for GemBS {
 }
 
 fn check_root(path: &PathBuf) -> bool {
-	let apps = ["md5_fasta", "mextr", "readNameClean", "snpxtr", "bs_call", "dbSNP_idx",
+	let apps = ["mextr", "readNameClean", "snpxtr", "bs_call", "dbSNP_idx",
 		"gem-indexer", "gem-mapper", "samtools", "bcftools", "bgzip"];
 	
 	trace!("Checking for gemBS root in {:?}", path);
