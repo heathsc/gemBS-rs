@@ -121,15 +121,15 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 			_ => false,
 		}
 	};
-	mapper_args.push_str(format!("-I\x1e{}\x1e", index.path().to_string_lossy()).as_str());
+	mapper_args.push_str(format!("-I\x1e{}\x1e", index.path().display()).as_str());
 	if vfile.len() == 2 {
-		mapper_args.push_str(format!("--i1\x1e{}\x1e--i2\x1e{}\x1e", vfile[0].path().to_string_lossy(), vfile[1].path().display()).as_str());
+		mapper_args.push_str(format!("--i1\x1e{}\x1e--i2\x1e{}\x1e", vfile[0].path().display(), vfile[1].path().display()).as_str());
 	} else if let Some(FileType::BAM) = ftype {
 		let bam2fq = gem_bs.get_exec_path("samtools");
 		let args = if let Some(t) = mapping_threads { format!("bam2fq\x1e{}\x1e--threads\x1e{}", vfile[0].path().display(), t) } 
-		else { format!("bam2fq {}", vfile[0].path().to_string_lossy()) };
+		else { format!("bam2fq {}", vfile[0].path().display()) };
 		pipeline.add_stage(&bam2fq, &args);
-	} else { mapper_args.push_str(format!("-i\x1e{}\x1e", vfile[0].path().to_string_lossy()).as_str()) }
+	} else { mapper_args.push_str(format!("-i\x1e{}\x1e", vfile[0].path().display()).as_str()) }
 	if paired { mapper_args.push_str("--paired-end-alignment\x1e")}
 	if gem_bs.get_config_bool(Section::Mapping, "non_stranded") { mapper_args.push_str("--bisulfite-conversion non-stranded\x1e") }
 	else if gem_bs.get_config_bool(Section::Mapping, "reverse_conversion") { mapper_args.push_str("--bisulfite-conversion\x1einferred-G2A-C2T\x1e") }
@@ -137,18 +137,18 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	
 	super::add_command_opts(gem_bs, &mut mapper_args, Section::Mapping, &OPT_LIST);
 
-	mapper_args.push_str(format!("--report-file\x1e{}\x1e", outs[2].unwrap().path().to_string_lossy()).as_str());
+	mapper_args.push_str(format!("--report-file\x1e{}\x1e", outs[2].unwrap().path().display()).as_str());
 	mapper_args.push_str(format!("--sam-read-group-header\x1e{}", read_groups).as_str());
 	
-	// Setup readNameClean stage
-	let read_name_clean = gem_bs.get_exec_path("readNameClean");
+	// Setup read_filter stage
+	let read_filter = gem_bs.get_exec_path("read_filter");
 	let contig_md5 = gem_bs.get_asset("contig_md5").expect("Couldn't find contig md5 asset");
-	let read_name_clean_args = format!("{}", contig_md5.path().to_string_lossy());
+	let read_filter_args = format!("{}", contig_md5.path().display());
 	
 	// Setup samtools stage
 	let samtools = gem_bs.get_exec_path("samtools");
-	let mut samtools_args = format!("sort\x1e-o\x1e{}\x1e", outfile.path().to_string_lossy());
-	if let Some(x) = tmp_dir { samtools_args.push_str(format!("-T\x1e{}\x1e", x.to_string_lossy()).as_str())}
+	let mut samtools_args = format!("sort\x1e-o\x1e{}\x1e", outfile.path().display());
+	if let Some(x) = tmp_dir { samtools_args.push_str(format!("-T\x1e{}\x1e", x.display()).as_str())}
 	if let Some(x) = gem_bs.get_config_str(Section::Mapping, "sort_memory") { samtools_args.push_str(format!("-m\x1e{}\x1e", x).as_str())}
 	if let Some(x) = sort_threads { samtools_args.push_str(format!("--threads\x1e{}\x1e", x).as_str())}
 	if single_bam { samtools_args.push_str("--write-index\x1e") }
@@ -162,7 +162,7 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get md5sum output asset").path()); }
 
 	pipeline.add_stage(&mapper_path, &mapper_args)
-			.add_stage(&read_name_clean, &read_name_clean_args)
+			.add_stage(&read_filter, &read_filter_args)
 			.add_stage(&samtools, &samtools_args);
 	pipeline
 }
@@ -181,13 +181,13 @@ pub fn make_merge_bams_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, 
 	if cram { args.push_str("-O\x1ecram\x1e") }
 	if gem_bs.get_config_bool(Section::Mapping, "benchmark_mode") { args.push_str("--no-PG\x1e") } else if cram {
 		let gembs_ref = gem_bs.get_asset("gembs_reference").expect("Couldn't find gemBS reference asset");
-		args.push_str(format!("--reference\x1e{}\x1e", gembs_ref.path().to_string_lossy()).as_str());
+		args.push_str(format!("--reference\x1e{}\x1e", gembs_ref.path().display()).as_str());
 	}
-	args.push_str(format!("-f\x1e{}\x1e", output.path().to_string_lossy()).as_str());
+	args.push_str(format!("-f\x1e{}\x1e", output.path().display()).as_str());
 	let remove_bams = if let Some(DataValue::Bool(x)) = options.get("remove") { *x } else { 
 		gem_bs.get_config_bool(Section::Mapping, "remove_individual_bams") };	
 	for asset in task.inputs().map(|x| gem_bs.get_asset(*x).expect("Couldn't get asset")).filter(|x| x.id().ends_with(".bam")) {
-		args.push_str(format!("{}\x1e", asset.path().to_string_lossy()).as_str());
+		args.push_str(format!("{}\x1e", asset.path().display()).as_str());
 		if remove_bams { pipeline.add_remove_file(&asset.path()); }
 	}	
 	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
