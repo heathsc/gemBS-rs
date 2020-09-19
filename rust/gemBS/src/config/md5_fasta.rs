@@ -2,7 +2,7 @@ use utils::compress;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{fmt, env, fs};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write, Error, ErrorKind};
 use std::ffi::OsStr;
 use std::str::FromStr;
 
@@ -90,16 +90,15 @@ impl Md5Contig {
 	fn new<T: AsRef<str>>(name: T) -> Self {
 		Md5Contig{name: name.as_ref().to_owned(), md5: Md5Digest::new(), len: 0}
 	}
-	fn handle_cache(&self, cache: &mut RefCache) -> Result<(), String> {
-		let fname = get_fname(&cache.path_str, format!("{}", self.md5).as_str())?;
+	fn handle_cache(&self, cache_path: &str, cache_buf: Vec<u8>) -> std::io::Result<Vec<u8>> {
+		let fname = get_fname(cache_path, format!("{}", self.md5).as_str()).map_err(|e| Error::new(ErrorKind::Other, e))?;
 		if !fname.exists() {
 			// Make cache directories if required
-			if let Some(d) = &fname.parent() { fs::create_dir_all(d).map_err(|e| format!("Couldn't create cache directory {}: {}", d.display(), e))? }
-			let mut wrt = compress::open_bufwriter(&fname).map_err(|e| format!("Couldn't open cache file {} for writing: {}", &fname.display(), e))?;
-			wrt.write_all(&cache.buf).map_err(|e| format!("Error writing to cache file {}: {}", &fname.display(), e))?;			
+			if let Some(d) = &fname.parent() { fs::create_dir_all(d)? }
+			let mut wrt = compress::open_bufwriter(&fname)?;
+			wrt.write_all(&cache_buf)?;
 		}
-		cache.buf.clear();
-		Ok(())
+		Ok(cache_buf)
 	}
 	fn check_cache<T: AsRef<Path>>(&self, gem_bs: &GemBS, path_str: &str, gref: T) -> Result<(), String> {
 		let fname = get_fname(path_str, format!("{}", self.md5).as_str())?;
@@ -137,14 +136,27 @@ impl Md5Contig {
 		}
 		Ok(())	
 	}
-//	pub fn name(&self) -> &str { &self.name }
-//	pub fn len(&self) -> usize { self.len }
+	fn process_ctg(&mut self, cache_path: &Option<String>, min_contig_size: &Option<usize>, md5_data: &mut Md5Data) -> std::io::Result<()> {
+		let skip = if let Some(x) = min_contig_size { self.len < *x	} else { false };
+		if !skip {
+			writeln!(md5_data.output_md5, "{}", self)?;
+			if let Some(path) = cache_path { md5_data.cache_buf = Some(self.handle_cache(path, md5_data.cache_buf.take().unwrap())?); }
+			if let Some(buf) = &md5_data.cache_buf {
+				writeln!(md5_data.output, ">{}", self.name)?;
+				let l = buf.len();
+				let mut i = 0;
+				while i < l {
+					let i1 = if l - i > 60 { i + 60 } else { l }; 
+				 	md5_data.output.write_all(&buf[i..i1])?;
+					writeln!(md5_data.output)?;
+					i = i1;
+				}
+			}
+		} 
+		Ok(())	
+	}
 }
 
-struct RefCache {
-	path_str: String,
-	buf: Vec<u8>,	
-}
 
 // Replace %s or %ds where d is an integer by sections of the md5 string to make a filename
 fn get_fname(path_str: &str, md5: &str) -> Result<PathBuf, String> {
@@ -170,25 +182,36 @@ fn get_fname(path_str: &str, md5: &str) -> Result<PathBuf, String> {
 	Ok(PathBuf::from(&fname))
 }
 
+struct Md5Data {
+	output: Box<dyn Write>,
+	output_md5: Box<dyn Write>,
+	cache_buf: Option<Vec<u8>>,
+}
+
 // Read reference fastas.  
 // Write out bgzipped concatenated version to output_ref.  
 // Calculate len and md5 for each contig and write out to ctg_md5. 
 // If populate cache option set then save reference in cache using the 
 // same naming logic as htslib
 pub fn md5_fasta<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(gem_bs: &GemBS, in_files: &[P], output_ref: Q, ctg_md5: R) -> Result<(), String> {
-	let mut cache = if gem_bs.get_config_bool(Section::Index, "populate_cache") { 
+
+	let cache_path = if gem_bs.get_config_bool(Section::Index, "populate_cache") { 
 		let cp = get_cache_path();
 		debug!("reference cache_path = {}", cp);
-		Some(RefCache{path_str: cp, buf: Vec::with_capacity(16384)})
+		Some(cp)
 	} else { None };
+	let mut min_contig_size = gem_bs.get_config_int(Section::Index, "min_contig_size").map(|x| x as usize);
+	let cache_buf: Option<Vec<u8>> = if cache_path.is_some() || min_contig_size.is_some() { Some(Vec::with_capacity(16384)) } else { None };
 	let opath = output_ref.as_ref();
 	let threads = gem_bs.get_threads(Section::Index);
 	let bgzip_path = gem_bs.get_exec_path("bgzip");
 	let filt_tab = init_filter();
-	let mut output = compress::open_pipe_writer(opath, &bgzip_path, &["-@", format!("{}", threads).as_str()])
+	let output = compress::open_pipe_writer(opath, &bgzip_path, &["-@", format!("{}", threads).as_str()])
 		.map_err(|e| format!("Couldn't open output {}: {}", opath.display(), e))?;
-	let mut output_md5 = compress::open_bufwriter(ctg_md5.as_ref())
+	let output_md5 = compress::open_bufwriter(ctg_md5.as_ref())
 		.map_err(|e| format!("Couldn't open output {}: {}", ctg_md5.as_ref().display(), e))?;
+	let mut md5_data = Md5Data{output, output_md5, cache_buf};
+	
 	debug!("Creating gemBS reference {}", opath.display());
 	let mut current_ctg: Option<Md5Contig> = None;
 	let mut line = String::with_capacity(128);
@@ -207,8 +230,8 @@ pub fn md5_fasta<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(gem_bs: &GemBS,
 						let name = ctg.trim_end();
 						if let Some(mut c) = current_ctg.take() {
 							c.md5.set(&md5_hasher.finalize_reset())?;
-							writeln!(output_md5, "{}", c).map_err(|e| format!("{}", e))?;
-							if let Some(r) = &mut cache { c.handle_cache(r)?; }
+							c.process_ctg(&cache_path, &min_contig_size, &mut md5_data).map_err(|e| format!("{}", e))?;
+							if let Some(buf) = &mut md5_data.cache_buf { buf.clear() }
 						}	
 						current_ctg = Some(Md5Contig::new(name));									
 					} else if let Some(ctg) = &mut current_ctg { 
@@ -216,9 +239,9 @@ pub fn md5_fasta<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(gem_bs: &GemBS,
 						line.as_bytes().iter().filter(|x| filt_tab[**x as usize] != 0).for_each(|x| md5_buf.push(*x));
 						ctg.len += md5_buf.len();
 						md5_hasher.update(&md5_buf);
-						if let Some(r) = &mut cache { r.buf.extend_from_slice(&md5_buf) }
+						if let Some(buf) = &mut md5_data.cache_buf { buf.extend_from_slice(&md5_buf) }
 					} else { return Err(format!("Error reading {}: no FASTA sequence header line", p.as_ref().display())) }
-					output.write(line.as_bytes()).map_err(|e| format!("{}", e))?;
+					if md5_data.cache_buf.is_none() { md5_data.output.write(line.as_bytes()).map_err(|e| format!("{}", e))?; }
 					line.clear();
 				},
 				Err(e) => return Err(format!("Error reading from file {}: {}", p.as_ref().display(), e)),
@@ -226,10 +249,11 @@ pub fn md5_fasta<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(gem_bs: &GemBS,
 		}
 		if let Some(mut c) = current_ctg.take() {
 			c.md5.set(&md5_hasher.finalize_reset())?;
-			writeln!(output_md5, "{}", c).map_err(|e| format!("{}", e))?;
-			if let Some(r) = &mut cache { c.handle_cache(r)?; }
+			c.process_ctg(&cache_path, &min_contig_size, &mut md5_data).map_err(|e| format!("{}", e))?;
 		}	
 		debug!("File processed in {}ms", now.elapsed().as_millis());
+		// Only apply contig size limit to first file (main reference file)
+		min_contig_size = None;
 	}
 	Ok(())
 }

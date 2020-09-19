@@ -40,6 +40,7 @@ subcommands:
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - all available memory)}
           - time: {short: T, long: time, value_name: TIME, takes_value: true, help: Time required for a job}
           - sampling: {short: s, long: sampling-rate, value_name: SAMPLING_RATE, takes_value: true, help: Text sampling rate - increasing will decrease index size but also performance}
+          - min_contig_size: {short: M, long: min-contig-size, value_name: MIN_CONTIG_SIZE, takes_value: true, help: Contigs smaller than this will be filtered out during index generation}
           - make_bs_index: {short: b, long: bs-index, help: Generate bisulfite index}
           - make_nonbs_index: {short: n, long: nonbs-index, help: Generate non-bisulfite (regular) index}
           - make_dbsnp_index: {short: D, long: dbsnp-index, help: Generate dbSNP index}
