@@ -974,7 +974,7 @@ fn create_summary(dir: &Path, summary: Arc<Mutex<HashMap<String, CallSummary>>>,
 	let mut body = HtmlElement::new("BODY", None, true);
 	let mut table = HtmlTable::new("hor-zebra");
 	let f = |x| {
-		if x > 1_000_000_000 { format!("{:.2} Tb", (x as f64) / 1_000_000_000.0)}
+		if x > 1_000_000_000 { format!("{:.2} Gb", (x as f64) / 1_000_000_000.0)}
 		else if x > 1_000_000 { format!("{:.2} Mb", (x as f64) / 1_000_000.0)}
 		else if x > 1_000 { format!("{:.2} Kb", (x as f64) / 1_000.0)}
 		else {format!("{}", x)}
