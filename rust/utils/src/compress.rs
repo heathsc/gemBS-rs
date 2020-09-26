@@ -5,7 +5,7 @@ use std::process::{Command, Stdio, ChildStdout, ChildStdin};
 use std::path::Path;
 use std::ffi::OsStr;
 
-use flate2::read::GzDecoder;
+// use flate2::read::GzDecoder;
 
 #[derive(Debug)]
 pub enum CompressType {
@@ -19,7 +19,7 @@ pub enum CompressType {
 pub enum ReadType {
 	Pipe(ChildStdout),
 	File(File),	
-	FlateGz(File),
+//	FlateGz(File),
 }
 
 pub fn open_read_filter<P: AsRef<Path>, I, S>(prog: P, args: I) -> Result<ChildStdout> 
@@ -105,7 +105,7 @@ pub fn open_bufreader<P: AsRef<Path>>(name: P) -> Result<Box<dyn BufRead>> {
 	match open_reader(name)? {
 		ReadType::File(file) => Ok(Box::new(BufReader::new(file))),
 		ReadType::Pipe(pipe) => Ok(Box::new(BufReader::new(pipe))),
-		ReadType::FlateGz(file) => Ok(Box::new(BufReader::new(GzDecoder::new(file)))),
+//		ReadType::FlateGz(file) => Ok(Box::new(BufReader::new(GzDecoder::new(file)))),
 	}
 }
 

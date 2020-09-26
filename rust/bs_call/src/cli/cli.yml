@@ -1,0 +1,36 @@
+name: bs_call
+version: "3.0.0"
+author: Simon Heath <simon.heath@gmail.com>
+about: bs_call is an application for calling methylation values and SNV from bisulfite treated sequence data
+setting: GlobalVersion
+setting: DeriveDisplayOrder
+args:
+    - reference: {short: r, long: reference, required: true, takes_value: true, value_name: FILE, help: Specify genomic reference (FASTA) }
+    - quiet: {short: q, long: quiet, help: Silence all output}
+    - timestamp: {short: T, long: time, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
+    - loglevel: {short: L, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
+    - haploid: {short: '1', long: quiet, help: Assume genome is haploid}
+    - keep_duplicates: {short: k, long: keep-duplicates, help: Don't merge duplicate reads}
+    - ignore_duplicates: {short: e, long: ignore-duplicates, help: Ignore duplicate record flag from SAM}
+    - keep_unmatched: {short: k, long: keep-unmatched, help: Don't discard reads that don't form proper pairs}
+    - right_trim: {short: R, long: right-trim, takes_value: true, value_name: BASES, help: Bases to trim from right of read pair}
+    - left_trim: {short: L, long: left-trim, takes_value: true, value_name: BASES, help: Bases to trim from left of read pair}
+    - blank_trim: {short: B, long: blank-trim, help: Don't use trimmed bases for genotype estimation}
+    - mapq_threshold: {short: q, long: mapq-threshold, takes_value: true, value_name: MAPQ, help: "Set mapq threshold for reads (default: 20)"}
+    - bq_threshold: {short: Q, long: bq-threshold, takes_value: true, value_name: BQ, help: "Set base quality threshold for bases (default: 20)" }
+    - max_template_length: {short: l, long: max-template-length, takes_value: true, value_name: LEN, help: "Set maximum template length for a pair (default: 1000)" }
+    - output_type: {short: O, long: output-type, takes_value: true, value_name: TYPE, case_insensitive: true, possible_values: [b, u, z, v], help: "Set output type - b: compressed BCF (default); u: uncompressed BCF; v: uncompressed VCF, z: compressed VCF" }
+    - output: {short: o, long: output, takes_value: true, value_name: FILE, help: Set output file name }
+    - report_file: {short: j, long: report-file, takes_value: true, value_name: FILE, help: Output JSON file with statistics of the analysis }
+    - sample: {short: n, long: sample, takes_value: true, value_name: SAMPLE, help: Set sample name }
+    - contig_bed: {short: C, long: contig-bed, takes_value: true, value_name: FILE, help: BED file with contigs to be processed}
+    - contig_exclude: {short: s, long: contig-exclude, takes_value: true, value_name: FILE, help: List of contigs to be excluded}
+    - filter_contigs: {short: F, long: filter-contigs, requires: contig_bed, help: Only include contigs found in the contig-bed file in the output header}
+    - dbsnp: {short: D, long: dbsnp, takes_value: true, value_name: FILE, help: dbSNP processed index file}
+    - all_positions: {short: A, long: all-positions, help: Output all covered positions }
+    - benchmark_mode: {short: B, long: benchmark-mode, help: Benchmark mode (omits date / time/ version numbers from output }
+    - conversion: {short:c, long: conversion, takes_value: true, number_of_values: 2, require_delimiter: true, value_name: "UNDER,OVER", help: "Set under and over conversion rates (default: 0.01,0.05)"}
+    - reference_bias: {short: R, long: reference-bias, takes_value: true, value_name: BIAS, help: "Set bias to reference homozygote (default: 2)"}
+    - threads: {short: t, long: threads, takes_value: true, value_name: "THREADS", help: "Set number of additional threads (default: number of cores)"} 
+    - input: {value_name: FILE, help: "Input SAM/BAM/CRAM file (default: <stdin>)" }
+    

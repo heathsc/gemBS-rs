@@ -1,3 +1,6 @@
 [workspace]
-members = ["gemBS", "read_filter"]
+members = ["gemBS", "read_filter", "bs_call"]
 
+[profile.release]
+# lto = true
+panic = 'abort'

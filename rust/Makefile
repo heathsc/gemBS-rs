@@ -9,6 +9,8 @@ all: $(GEMBS_CTOML) $(BINDIR)
 	GEMBS_INSTALL_ROOT=$(GEMBS_INSTALL_ROOT) cargo build --release 
 	cp target/release/gem_bs $(BINDIR)/gemBS
 	cp target/release/read_filter $(BINDIR)/
+	cp target/release/bs_call $(BINDIR)/
+	strip $(BINDIR)/*
 
 ifeq ($(SLURM_SUPPORT),yes)
 $(GEMBS_CTOML): $(GEMBSDIR)/Cargo.toml.in
