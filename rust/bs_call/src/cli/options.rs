@@ -3,7 +3,7 @@ use std::io;
 use std::collections::HashMap;
 
 use crate::config::*;
-use crate::{sam, reference, htslib, defs};
+use crate::{sam, vcf, reference, htslib, defs};
 use super::cli_utils;
 
 use clap::ArgMatches;
@@ -32,7 +32,7 @@ pub const OPTS: [(&str, ConfVar);21] = [
 	("report_file", ConfVar::String(None)),	
 ];
 
-fn distribute_threads(conf_hash: &mut HashMap<&'static str, ConfVar>, in_file: &mut htslib::HtsFile) -> io::Result<()> {
+fn distribute_threads(conf_hash: &mut HashMap<&'static str, ConfVar>, in_file: &mut htslib::SamFile, out_file: &mut htslib::VcfFile) -> io::Result<()> {
 	let format = in_file.format();
 	let input_compressed = format.is_compressed();
 	let otype = if let Some(ConfVar::OType(x)) = conf_hash.get(&"output_type") { *x } else { panic!("Output_type config var not set"); };
@@ -41,12 +41,12 @@ fn distribute_threads(conf_hash: &mut HashMap<&'static str, ConfVar>, in_file: &
 	let mut k = if let Some(ConfVar::Int(x)) = conf_hash.get(&"threads") { *x } else { panic!("Integer config var threads not set"); };
 	if !input_compressed { nn -= 5 }
 	if !output_compressed { nn -= 5 }
-	let input_threads = if input_compressed {
+	let output_threads = if output_compressed {
 		let x = k * 5 / nn;
 		k -= x;
 		x
 	} else { 0 };
-	let output_threads = if output_compressed {
+	let input_threads = if input_compressed {
 		let x = k * 5 / nn;
 		k -= x;
 		x
@@ -56,6 +56,7 @@ fn distribute_threads(conf_hash: &mut HashMap<&'static str, ConfVar>, in_file: &
 	conf_hash.insert(&"input_threads", ConfVar::Int(input_threads));
 	conf_hash.insert(&"output_threads", ConfVar::Int(output_threads));	
 	if input_threads > 0 { in_file.set_threads(input_threads)? }
+	if output_threads > 0 { out_file.set_threads(output_threads)? }
 	Ok(())
 }
 
@@ -75,8 +76,8 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<BsCallConfig> {
 	
 	// Output type - if not set we try to guess from output file name (if supplied), otherwise use VCF format
 	let output = if let ConfVar::String(x) = conf_hash.get(&"output").unwrap() { x.as_deref().map(|x| x.to_owned() ) } else { panic!("String variable output not set") };
-	
-	conf_hash.insert(&"output_type", ConfVar::OType(if let Some(x) = m.value_of("output_type") {
+	let ocopy = output.clone();
+	let otype = if let Some(x) = m.value_of("output_type") {
 		let ot = <OType>::from_str(x).map_err(|e| new_err(format!("Couldn't parse output type argument '{}' for option output_type: {}", x, e)))?;
 		if !ot.eq_u32(htslib::FT_VCF) && output.is_none() && unsafe { libc::isatty(libc::STDOUT_FILENO) == 1 } {
 			warn!("Will not output binary and/or compressed data to terminal");
@@ -86,14 +87,18 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<BsCallConfig> {
 		if x.ends_with(".bcf") || x.ends_with(".bcf.gz") { OType::new(htslib::FT_BCF_GZ) }
 		else if x.ends_with(".vcf.gz") { OType::new(htslib::FT_VCF_GZ) }
 		else { OType::new(htslib::FT_VCF) }
-	} else { OType::new(htslib::FT_VCF) }));
+	} else { OType::new(htslib::FT_VCF) };
+	conf_hash.insert(&"output_type", ConfVar::OType(otype));
 	
 	// Input file
-	let (mut in_file, sam_idx, sam_hdr) = sam::open_sam_input(m.value_of("input"))?;
-
+	let mut in_file= sam::open_sam_input(m.value_of("input"))?;
+	
+	// Output file
+	let mut out_file = vcf::open_vcf_output(ocopy.as_deref(), otype)?;
+	
 	// Threads
 	conf_hash.insert(&"threads", cli_utils::get_option(m, "threads", ConfVar::Int(num_cpus::get()))?);
-	distribute_threads(&mut conf_hash, &mut in_file)?;
+	distribute_threads(&mut conf_hash, &mut in_file, &mut out_file)?;
 	
 	let chash = ConfHash::new(conf_hash);
 	// Reference
@@ -101,11 +106,11 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<BsCallConfig> {
 	let ref_idx = reference::handle_reference(rf.unwrap(), &mut in_file)?;
 	
 	// Set up contigs and contig regions
-	let (mut ctgs, mut ctg_regions) = defs::setup_contigs(&chash, &sam_hdr, &ref_idx)?;
+	let (mut ctgs, mut ctg_regions) = defs::setup_contigs(&chash, &in_file, &ref_idx)?;
 	
-	let mut bs_cfg = BsCallConfig::new(chash, in_file, sam_idx, sam_hdr, ref_idx);
+	in_file.add_regions(&mut ctg_regions);
+	let mut bs_cfg = BsCallConfig::new(chash, in_file, out_file, ref_idx);
 	bs_cfg.add_contigs(&mut ctgs);
-	bs_cfg.add_contig_regions(&mut ctg_regions);
 	
 	Ok(bs_cfg)
 }

@@ -7,12 +7,16 @@ mod cli_utils;
 mod options;
 
 use cli_utils::LogLevel;
-use super::config::BsCallConfig;
+use super::vcf;
+use crate::config::BsCallConfig;
 
 pub fn process_cli() -> io::Result<BsCallConfig> {
 	let yaml = load_yaml!("cli/cli.yml");
     let app = App::from_yaml(yaml);
-
+	let mut vbuf: Vec<u8> = Vec::new();
+	app.write_version(&mut vbuf).expect("Error getting version from clap");
+	let version = std::str::from_utf8(&vbuf).expect("Version string not utf8");
+	
 	// Setup logging
 	let m = app.get_matches();	
 	    let ts = m.value_of("timestamp").map(|v| {
@@ -34,5 +38,10 @@ pub fn process_cli() -> io::Result<BsCallConfig> {
         .unwrap();
 
 	// Process arguments
-	options::handle_options(&m)
+	let mut bs_cfg = options::handle_options(&m)?;
+
+	// Write Output header
+	vcf::write_vcf_header(&mut bs_cfg, version)?;
+
+	Ok(bs_cfg)	
 }

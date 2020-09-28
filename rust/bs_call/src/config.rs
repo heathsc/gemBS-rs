@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::io;
+use std::{io, fmt};
 use std::io::{Error, ErrorKind};
 
 // use rust_htslib::htslib as hts;
 use crate::htslib;
-use crate::defs::{CtgInfo, CtgRegion};
+use crate::defs::CtgInfo;
 
 pub fn new_err(s: String) -> io::Error {
 	Error::new(ErrorKind::Other, s)	
@@ -36,6 +36,17 @@ impl FromStr for OType {
             "v" => Ok(OType(htslib::FT_VCF)),
             _ => Err("no match"),
         }
+    }
+}
+
+impl fmt::Display for OType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", match self.0 {
+			htslib::FT_BCF_GZ => "wb", 
+			htslib::FT_BCF => "wbu",
+			htslib::FT_VCF_GZ => "wz",
+			_ => "w",
+		})
     }
 }
 
@@ -77,18 +88,16 @@ impl ConfHash {
 }
 
 pub struct BsCallConfig {
-	conf_hash: ConfHash,
-	sam_input: htslib::HtsFile,
-	sam_index: htslib::HtsIndex,
-	sam_header: htslib::SamHeader,
-	ref_index: htslib::Faidx,
-	contigs: Vec<CtgInfo>,
-	contig_regions: Vec<CtgRegion>,
+	pub conf_hash: ConfHash,
+	pub sam_input: htslib::SamFile,
+	pub ref_index: htslib::Faidx,
+	pub vcf_output: htslib::VcfFile,
+	pub contigs: Vec<CtgInfo>,
 }
 
 impl BsCallConfig {
-	pub fn new(conf_hash: ConfHash, sam_input: htslib::HtsFile, sam_index: htslib::HtsIndex, sam_header: htslib::SamHeader, ref_index: htslib::Faidx) -> Self { 
-		Self{conf_hash, sam_input, sam_index, sam_header, ref_index, contigs: Vec::new(), contig_regions: Vec::new()} 
+	pub fn new(conf_hash: ConfHash, sam_input: htslib::SamFile, vcf_output: htslib::VcfFile, ref_index: htslib::Faidx) -> Self { 
+		Self{conf_hash, sam_input, vcf_output, ref_index, contigs: Vec::new()} 
 	}
 	
 	pub fn set_conf(&mut self, key: &'static str, var: ConfVar) -> Option<ConfVar> {
@@ -103,16 +112,16 @@ impl BsCallConfig {
 	pub fn get_conf_otype(&self) -> OType { self.conf_hash.get_otype() }
 	
 	pub fn ref_index(&self) -> &htslib::Faidx { &self.ref_index }	
-	pub fn sam_input(&self) -> &htslib::HtsFile { &self.sam_input }
-	pub fn sam_index(&self) -> &htslib::HtsIndex { &self.sam_index }
-	pub fn sam_header(&self) -> &htslib::SamHeader { &self.sam_header }
+	pub fn sam_input(&self) -> &htslib::SamFile { &self.sam_input }
+	pub fn vcf_output(&mut self) -> &mut htslib::VcfFile { &mut self.vcf_output }
 	
 	pub fn add_contigs(&mut self, ctgs: &mut[CtgInfo]) { self.contigs.extend_from_slice(ctgs); }
-	pub fn add_contig_regions(&mut self, creg: &mut[CtgRegion]) { self.contig_regions.extend_from_slice(creg); }
-
 	pub fn ctg_in_header(&self, idx: usize) -> bool { self.contigs[idx].in_header() }
-	pub fn n_ctgs(&self) -> usize { self.sam_header.nref() }
-	pub fn ctg_name(&self, idx: usize) -> &str { self.sam_header.tid2name(idx) }
-	pub fn ctg_len(&self, idx: usize) -> usize { self.sam_header.tid2len(idx) }
-	pub fn ctg_id<S: AsRef<str>>(&self, seq: S) -> Option<usize> { self.sam_header.name2tid(seq) }
+
+	pub fn ctg_vcf_id(&self, idx: usize) -> Option<usize> { self.contigs[idx].vcf_id() }
+	pub fn ctg_ref_id(&self, idx: usize) -> Option<usize> { self.contigs[idx].ref_id() }
+	pub fn n_ctgs(&self) -> usize { self.sam_input.nref() }
+	pub fn ctg_name(&self, idx: usize) -> &str { self.sam_input.tid2name(idx) }
+	pub fn ctg_len(&self, idx: usize) -> usize { self.sam_input.tid2len(idx) }
+	pub fn ctg_id<S: AsRef<str>>(&self, seq: S) -> Option<usize> { self.sam_input.name2tid(seq) }
 }

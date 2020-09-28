@@ -7,17 +7,21 @@ mod cli;
 pub mod defs;
 pub mod config;
 pub mod sam;
+pub mod vcf;
 pub mod reference;
 pub mod htslib;
+pub mod process;
 
 fn main() -> Result<(), &'static str> {
 	let bs_cfg = match cli::process_cli() {
-		Ok(c) => c,
 		Err(e) => {
-			error!("bs_call exited with error: {}", e);
-			return Err("Stopped");
-		}
+			error!("bs_call initialization failed with error: {}", e);
+			return Err("Failed");
+		},
+		Ok(x) => x,
 	};
-	
-	Ok(())
+	if let Err(e) = process::process(&bs_cfg) {
+		error!("bs_call ended with error: {}", e);
+		Err("Failed")
+	} else { Ok(()) }
 }
