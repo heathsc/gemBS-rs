@@ -3,7 +3,7 @@ use std::io;
 use std::collections::HashMap;
 
 use crate::config::*;
-use crate::{sam, vcf, reference, htslib, defs};
+use crate::{process, reference, htslib, defs};
 use super::cli_utils;
 
 use clap::ArgMatches;
@@ -91,10 +91,10 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<BsCallConfig> {
 	conf_hash.insert(&"output_type", ConfVar::OType(otype));
 	
 	// Input file
-	let mut in_file= sam::open_sam_input(m.value_of("input"))?;
+	let mut in_file= process::open_sam_input(m.value_of("input"))?;
 	
 	// Output file
-	let mut out_file = vcf::open_vcf_output(ocopy.as_deref(), otype)?;
+	let mut out_file = process::open_vcf_output(ocopy.as_deref(), otype)?;
 	
 	// Threads
 	conf_hash.insert(&"threads", cli_utils::get_option(m, "threads", ConfVar::Int(num_cpus::get()))?);

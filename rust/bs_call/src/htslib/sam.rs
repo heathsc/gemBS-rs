@@ -78,7 +78,11 @@ impl SamFile {
 
 
 pub struct SamItr {
-	itr: NonNull<htslib::hts_itr_t>,
+	inner: NonNull<htslib::hts_itr_t>,
+}
+
+impl Drop for SamItr {
+	fn drop(&mut self) { unsafe { htslib::hts_itr_destroy(self.inner.as_ptr()) }; }
 }
 
 pub struct RegionItr<'a> {
@@ -97,7 +101,7 @@ impl <'a> RegionItr<'a> {
 		if let Some(itr) = it {
 			if let Some(r) = reg { trace!("Got SAM iterator for {}:{}-{}", self.hdr.tid2name(r.sam_tid), r.start + 1, r.stop + 1); } 
 			else { trace!("Got SAM iterator for entire file"); }
-			SamItr{itr}
+			SamItr{inner: itr}
 		} else { panic!("Failed to obtain sam iterator"); }
 	}
 } 

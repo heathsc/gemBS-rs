@@ -7,7 +7,7 @@ mod cli_utils;
 mod options;
 
 use cli_utils::LogLevel;
-use super::vcf;
+use super::process;
 use crate::config::BsCallConfig;
 
 pub fn process_cli() -> io::Result<BsCallConfig> {
@@ -41,7 +41,7 @@ pub fn process_cli() -> io::Result<BsCallConfig> {
 	let mut bs_cfg = options::handle_options(&m)?;
 
 	// Write Output header
-	vcf::write_vcf_header(&mut bs_cfg, version)?;
+	process::write_vcf_header(&mut bs_cfg, version)?;
 
 	Ok(bs_cfg)	
 }

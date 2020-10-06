@@ -6,8 +6,6 @@ extern crate clap;
 mod cli;
 pub mod defs;
 pub mod config;
-pub mod sam;
-pub mod vcf;
 pub mod reference;
 pub mod htslib;
 pub mod process;
