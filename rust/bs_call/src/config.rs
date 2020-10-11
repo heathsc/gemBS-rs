@@ -5,7 +5,7 @@ use std::io::{Error, ErrorKind};
 
 // use rust_htslib::htslib as hts;
 use crate::htslib;
-use crate::defs::CtgInfo;
+use crate::defs::{CtgRegion, CtgInfo};
 
 pub fn new_err(s: String) -> io::Error {
 	Error::new(ErrorKind::Other, s)	
@@ -93,11 +93,12 @@ pub struct BsCallConfig {
 	pub ref_index: htslib::Faidx,
 	pub vcf_output: htslib::VcfFile,
 	pub contigs: Vec<CtgInfo>,
+	pub regions: Vec<CtgRegion>,
 }
 
 impl BsCallConfig {
 	pub fn new(conf_hash: ConfHash, sam_input: htslib::SamFile, vcf_output: htslib::VcfFile, ref_index: htslib::Faidx) -> Self { 
-		Self{conf_hash, sam_input, vcf_output, ref_index, contigs: Vec::new()} 
+		Self{conf_hash, sam_input, vcf_output, ref_index, contigs: Vec::new(), regions: Vec::new()} 
 	}
 	
 	pub fn set_conf(&mut self, key: &'static str, var: ConfVar) -> Option<ConfVar> {
@@ -116,6 +117,7 @@ impl BsCallConfig {
 	pub fn vcf_output(&mut self) -> &mut htslib::VcfFile { &mut self.vcf_output }
 	
 	pub fn add_contigs(&mut self, ctgs: &mut[CtgInfo]) { self.contigs.extend_from_slice(ctgs); }
+	pub fn add_regions(&mut self, regions: &mut[CtgRegion]) { self.regions.extend_from_slice(regions); }
 	pub fn ctg_in_header(&self, idx: usize) -> bool { self.contigs[idx].in_header() }
 
 	pub fn ctg_vcf_id(&self, idx: usize) -> Option<usize> { self.contigs[idx].vcf_id() }

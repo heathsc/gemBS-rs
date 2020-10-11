@@ -10,7 +10,8 @@ args:
     - timestamp: {short: T, long: time, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
     - loglevel: {short: L, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
     - haploid: {short: '1', long: quiet, help: Assume genome is haploid}
-    - keep_duplicates: {short: k, long: keep-duplicates, help: Don't merge duplicate reads}
+    - keep_duplicates: {short: d, long: keep-duplicates, help: Don't merge duplicate reads}
+    - keep_supplementary: {short: S, long: keep-supplementary, help: Don't discard supplementary (split) alignments}
     - ignore_duplicates: {short: e, long: ignore-duplicates, help: Ignore duplicate record flag from SAM}
     - keep_unmatched: {short: k, long: keep-unmatched, help: Don't discard reads that don't form proper pairs}
     - right_trim: {short: R, long: right-trim, takes_value: true, value_name: BASES, help: Bases to trim from right of read pair}

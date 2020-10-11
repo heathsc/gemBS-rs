@@ -1,6 +1,6 @@
 pub use r_htslib::*;
 
 pub mod vcf;
-pub use vcf::VcfFile;
+pub use vcf::*;
 pub mod sam;
-pub use sam::{SamFile, RegionItr};
+pub use sam::*;

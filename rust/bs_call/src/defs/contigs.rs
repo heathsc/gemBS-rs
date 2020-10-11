@@ -156,7 +156,6 @@ pub fn setup_contigs(chash: &ConfHash, sam_file: &SamFile, ref_idx: &Faidx) -> i
 	
 	Ok((ctgs, ctg_regions))
 }
-//fn add_seq_info(hd: &mut VcfHeader, ctgs: &[contigs::CtgInfo], sam_file: &SamFile) -> io::Result<()> {
 
 pub fn set_contig_vcf_ids(vcf_hdr: &VcfHeader, ctgs: &mut [CtgInfo], sam_file: &SamFile) {
 	let mut vcf_ids = Vec::with_capacity(sam_file.nref());
@@ -169,6 +168,5 @@ pub fn set_contig_vcf_ids(vcf_hdr: &VcfHeader, ctgs: &mut [CtgInfo], sam_file: &
 			if vid.is_none() { panic!("Contig not found in BCF/VCF header"); }
 			ctgs[tid].vcf_id = *vid;
 		}
-		println!("{} {:?}", tid, ctgs[tid].vcf_id);
 	}
 }

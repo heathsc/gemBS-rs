@@ -8,9 +8,10 @@ use super::cli_utils;
 
 use clap::ArgMatches;
 
-pub const OPTS: [(&str, ConfVar);21] = [
+pub const OPTS: [(&str, ConfVar);22] = [
 	("haploid", ConfVar::Bool(false)),
 	("keep_duplicates", ConfVar::Bool(false)),
+	("keep_supplementary", ConfVar::Bool(false)),
 	("ignore_duplicates", ConfVar::Bool(false)),
 	("keep_unmatched", ConfVar::Bool(false)),
 	("blank_trim", ConfVar::Bool(false)),
@@ -108,10 +109,9 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<BsCallConfig> {
 	// Set up contigs and contig regions
 	let (mut ctgs, mut ctg_regions) = defs::setup_contigs(&chash, &in_file, &ref_idx)?;
 	
-	in_file.add_regions(&mut ctg_regions);
 	let mut bs_cfg = BsCallConfig::new(chash, in_file, out_file, ref_idx);
 	bs_cfg.add_contigs(&mut ctgs);
-	
+	bs_cfg.add_regions(&mut ctg_regions);
 	Ok(bs_cfg)
 }
 
