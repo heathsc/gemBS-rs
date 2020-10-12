@@ -18,7 +18,7 @@ args:
     - left_trim: {short: L, long: left-trim, takes_value: true, value_name: BASES, help: Bases to trim from left of read pair}
     - blank_trim: {short: B, long: blank-trim, help: Don't use trimmed bases for genotype estimation}
     - mapq_threshold: {short: q, long: mapq-threshold, takes_value: true, value_name: MAPQ, help: "Set mapq threshold for reads (default: 20)"}
-    - bq_threshold: {short: Q, long: bq-threshold, takes_value: true, value_name: BQ, help: "Set base quality threshold for bases (default: 20)" }
+    - bq_threshold: {short: Q, long: bq-threshold, takes_value: true, value_name: BQ, help: "Set base quality threshold for bases (default: 13)" }
     - max_template_length: {short: l, long: max-template-length, takes_value: true, value_name: LEN, help: "Set maximum template length for a pair (default: 1000)" }
     - output_type: {short: O, long: output-type, takes_value: true, value_name: TYPE, case_insensitive: true, possible_values: [b, u, z, v], help: "Set output type - b: compressed BCF (default); u: uncompressed BCF; v: uncompressed VCF, z: compressed VCF" }
     - output: {short: o, long: output, takes_value: true, value_name: FILE, help: Set output file name }

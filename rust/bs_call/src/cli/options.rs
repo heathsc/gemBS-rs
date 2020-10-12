@@ -20,8 +20,8 @@ pub const OPTS: [(&str, ConfVar);22] = [
 	("filter_contigs", ConfVar::Bool(false)),
 	("right_trim", ConfVar::Int(0)),
 	("left_trim", ConfVar::Int(0)),
-	("mapq_threshold", ConfVar::Int(0)),
-	("bq_threshold", ConfVar::Int(0)),
+	("mapq_threshold", ConfVar::Int(20)),
+	("bq_threshold", ConfVar::Int(13)),
 	("max_template_length", ConfVar::Int(1000)),
 	("reference_bias", ConfVar::Float(2.0)),
 	("sample", ConfVar::String(None)),
@@ -65,7 +65,11 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<BsCallConfig> {
 	
 	let mut conf_hash: HashMap<&'static str, ConfVar> = HashMap::new();
 	// Handle simple options
-	for (opt, val) in OPTS.iter()  { conf_hash.insert(opt, cli_utils::get_option(m, opt, val.clone())?); }
+	for (opt, val) in OPTS.iter()  { 
+		let x = cli_utils::get_option(m, opt, val.clone())?;
+		trace!("Inserting config option {} with value {:?}", opt, x);
+		conf_hash.insert(opt, x);
+	}
 	
 	// And now the odd options
 	

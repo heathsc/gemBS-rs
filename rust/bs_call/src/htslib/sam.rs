@@ -4,10 +4,10 @@ use r_htslib::*;
 use crate::defs::CtgRegion;
 
 pub struct SamFile {
-	file: HtsFile, 
-	index: HtsIndex,
-	hdr: SamHeader,
-	itr: Option<HtsItr>,
+	pub file: HtsFile, 
+	pub index: HtsIndex,
+	pub hdr: SamHeader,
+	pub itr: Option<HtsItr>,
 }
 
 impl SamFile {

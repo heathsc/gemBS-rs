@@ -11,7 +11,7 @@ pub fn new_err(s: String) -> io::Error {
 	Error::new(ErrorKind::Other, s)	
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct OType(u32);
 
 impl OType {
@@ -50,7 +50,7 @@ impl fmt::Display for OType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug,Clone)]
 pub enum ConfVar {
 	Bool(bool),
 	Int(usize),
