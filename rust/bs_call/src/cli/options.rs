@@ -116,6 +116,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<BsCallConfig> {
 	let mut bs_cfg = BsCallConfig::new(chash, in_file, out_file, ref_idx);
 	bs_cfg.add_contigs(&mut ctgs);
 	bs_cfg.add_regions(&mut ctg_regions);
+
 	Ok(bs_cfg)
 }
 

@@ -6,6 +6,7 @@ use std::io::{Error, ErrorKind};
 // use rust_htslib::htslib as hts;
 use crate::htslib;
 use crate::defs::{CtgRegion, CtgInfo};
+use crate::stats::Stats;
 
 pub fn new_err(s: String) -> io::Error {
 	Error::new(ErrorKind::Other, s)	
@@ -94,11 +95,12 @@ pub struct BsCallConfig {
 	pub vcf_output: htslib::VcfFile,
 	pub contigs: Vec<CtgInfo>,
 	pub regions: Vec<CtgRegion>,
+	pub stats: Option<Stats>,
 }
 
 impl BsCallConfig {
 	pub fn new(conf_hash: ConfHash, sam_input: htslib::SamFile, vcf_output: htslib::VcfFile, ref_index: htslib::Faidx) -> Self { 
-		Self{conf_hash, sam_input, vcf_output, ref_index, contigs: Vec::new(), regions: Vec::new()} 
+		Self{conf_hash, sam_input, vcf_output, ref_index, contigs: Vec::new(), regions: Vec::new(), stats: None} 
 	}
 	
 	pub fn set_conf(&mut self, key: &'static str, var: ConfVar) -> Option<ConfVar> {

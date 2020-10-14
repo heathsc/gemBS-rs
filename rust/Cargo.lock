@@ -110,6 +110,8 @@ dependencies = [
  "log",
  "num_cpus",
  "r_htslib",
+ "serde",
+ "serde_json",
  "stderrlog",
  "utils",
 ]

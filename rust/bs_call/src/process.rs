@@ -3,10 +3,11 @@ use std::collections::HashMap;
 
 use crate::htslib::*;
 use crate::config::BsCallConfig;
-use crate::records::{ReadEnd, Map};
+use records::{ReadEnd, Map};
 
 pub mod vcf;
 pub mod sam;
+pub mod records;
 pub use vcf::*;
 pub use sam::*;
 

@@ -9,6 +9,7 @@ mod options;
 use cli_utils::LogLevel;
 use super::process;
 use crate::config::BsCallConfig;
+use crate::stats;
 
 pub fn process_cli() -> io::Result<BsCallConfig> {
 	let yaml = load_yaml!("cli/cli.yml");
@@ -40,8 +41,17 @@ pub fn process_cli() -> io::Result<BsCallConfig> {
 	// Process arguments
 	let mut bs_cfg = options::handle_options(&m)?;
 
-	// Write Output header
-	process::write_vcf_header(&mut bs_cfg, version)?;
+	let chash = &bs_cfg.conf_hash;
+	let source = format!("{},under_conversion={},over_conversion={},mapq_thresh={},bq_thresh={}", version,
+			chash.get_float("under_conversion"), chash.get_float("over_conversion"),
+			chash.get_int("mapq_threshold"), chash.get_int("bq_threshold"));
 
+	// Write Output header
+	process::write_vcf_header(&mut bs_cfg, &source)?;
+	
+	// Initialize Stats
+	if let Some(s) = bs_cfg.get_conf_str("report_file") {
+		bs_cfg.stats = Some(stats::Stats::new(s, &source))
+	}
 	Ok(bs_cfg)	
 }

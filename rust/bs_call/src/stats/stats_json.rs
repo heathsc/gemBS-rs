@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::clone::Clone;
 use std::ops::{AddAssign, Add, Sub};
-use std::io::{Read, Write};
+use std::io::Write;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -221,24 +221,7 @@ pub struct FSType {
 }
 
 impl FSType {
-	fn merge(&mut self, other: &Self) {
-		// read_level
-		for (key, ct) in other.read_level.iter() { *(self.read_level.entry(*key).or_insert_with(FSCounts::new)) += *ct; }
-		// base level
-		for (key, ct) in other.base_level.iter() { *(self.base_level.entry(*key).or_insert(0)) += ct; }
-	}
-	pub fn read_level(&self) -> &HashMap<FSReadLevelType, FSCounts> { &self.read_level }
-	pub fn base_level(&self) -> &HashMap<FSBaseLevelType, usize> { &self.base_level }
-	pub fn read_level_totals(&self) -> FSCounts {
-		let mut t = FSCounts::new();
-		for x in self.read_level.values() { t += *x }
-		t
-	}
-	pub fn base_level_totals(&self) -> usize {
-		let mut t = 0;
-		for x in self.base_level.values() { t += *x }
-		t
-	}
+	fn new() -> Self { Self{read_level: HashMap::new(), base_level: HashMap::new()}}
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -251,14 +234,13 @@ pub struct QCDist {
 }
 
 impl QCDist {
-	fn merge(&mut self, other: &Self) {
-		// fisher_strand
-		for (key, ct) in other.fisher_strand.iter() { *(self.fisher_strand.entry(*key).or_insert(0)) += ct; }
-		// quality_by_depth
-		for (key, ct) in other.quality_by_depth.iter() { *(self.quality_by_depth.entry(*key).or_insert_with(QCCounts::new)) += *ct; }
-		// rms_mapping_quality
-		for (key, ct) in other.rms_mapping_quality.iter() { *(self.rms_mapping_quality.entry(*key).or_insert_with(QCCounts::new)) += *ct; }
-	}	
+	fn new() -> Self { 
+		Self{ 
+			fisher_strand: HashMap::new(),
+			quality_by_depth: HashMap::new(),
+			rms_mapping_quality: HashMap::new(),
+		}
+	}
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -280,23 +262,17 @@ pub struct Coverage {
 }
 
 impl Coverage {
-	fn merge(&mut self, other: &Self) {
-		
-		// Standard fields are hashes of usize
-		for (key, ct) in other.all.iter() { *(self.all.entry(*key).or_insert(0)) += ct; }
-		for (key, ct) in other.variant.iter() { *(self.variant.entry(*key).or_insert(0)) += ct; }
-		for (key, ct) in other.ref_cpg.iter() { *(self.ref_cpg.entry(*key).or_insert(0)) += ct; }
-		for (key, ct) in other.ref_cpg_inf.iter() { *(self.ref_cpg_inf.entry(*key).or_insert(0)) += ct; }
-		for (key, ct) in other.non_ref_cpg.iter() { *(self.non_ref_cpg.entry(*key).or_insert(0)) += ct; }
-		for (key, ct) in other.non_ref_cpg_inf.iter() { *(self.non_ref_cpg_inf.entry(*key).or_insert(0)) += ct; }
-		
-		// GC is a hash of vectors
-		for (key, ct) in other.gc.iter() { add_assign_vec(self.gc.entry(*key).or_insert_with(Vec::new), ct, 0); }
+	fn new() -> Self { 
+		Self{ 
+			all: HashMap::new(),
+			variant: HashMap::new(),
+			ref_cpg: HashMap::new(),
+			ref_cpg_inf: HashMap::new(),
+			non_ref_cpg: HashMap::new(),
+			non_ref_cpg_inf: HashMap::new(),
+			gc: HashMap::new()
+		}
 	}
-}
-pub fn add_assign_vec<T: Clone + Copy + AddAssign>(a: &mut Vec<T>, b: &[T], zero: T) {
-	if b.len() > a.len() { a.resize(b.len(), zero); }
-	for (i, x) in b.iter().enumerate() { a[i] += *x }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -312,13 +288,15 @@ pub struct Quality {
 }
 
 impl Quality {
-	fn merge(&mut self, other: &Self) {
-		add_assign_vec(&mut self.all, &other.all, 0);
-		add_assign_vec(&mut self.variant, &other.variant, 0);
-		add_assign_vec(&mut self.ref_cpg, &other.ref_cpg, 0);
-		add_assign_vec(&mut self.non_ref_cpg, &other.non_ref_cpg, 0);
+	fn new() -> Self { 
+		Self{ 
+			all: Vec::new(),
+			variant: Vec::new(),
+			ref_cpg: Vec::new(),
+			non_ref_cpg: Vec::new(),
+		}
 	}
-} 
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -333,23 +311,13 @@ pub struct Methylation {
 }
 
 impl Methylation {
-	fn merge(&mut self, other: &Self) {
-		// Vec<f64>
-		add_assign_vec(&mut self.all_ref_cpg, &other.all_ref_cpg, 0.0);
-		add_assign_vec(&mut self.passed_ref_cpg, &other.passed_ref_cpg, 0.0);
-		add_assign_vec(&mut self.all_non_ref_cpg, &other.all_non_ref_cpg, 0.0);
-		add_assign_vec(&mut self.passed_non_ref_cpg, &other.passed_non_ref_cpg, 0.0);
-		
-		// Non CpG Read Profile
-		if let Some(b) = &other.non_cpg_read_profile {
-			if let Some(a) = &mut self.non_cpg_read_profile {
-				if b.len() > a.len() { a.resize(b.len(), [0, 0, 0, 0])}
-				for (i, x) in b.iter().enumerate() { for (k, y) in x.iter().enumerate() { a[i][k] += y }} 
-			} else {
-				let mut a = Vec::new();
-				for x in b.iter() { a.push(*x) }
-				self.non_cpg_read_profile = Some(a);
-			}
+	fn new() -> Self { 
+		Self{ 
+			all_ref_cpg: Vec::new(),
+			passed_ref_cpg: Vec::new(),
+			all_non_ref_cpg: Vec::new(),
+			passed_non_ref_cpg: Vec::new(),
+			non_cpg_read_profile: None,
 		}
 	}
 }
@@ -379,17 +347,6 @@ impl BasicStats {
 	pub fn non_ref_cpg(&self) -> &Counts { &self.non_ref_cpg }
 }
 
-impl AddAssign for BasicStats {
-	fn add_assign(&mut self, other: Self) {
-		self.snps += other.snps;
-		self.indels += other.indels;
-		self.multiallelic += other.multiallelic;
-		self.ref_cpg += other.ref_cpg;
-		self.non_ref_cpg += other.non_ref_cpg;
-	}
-}
-
-
 #[derive(Clone, Copy, Serialize, Deserialize)]
 struct CSType { 
 	#[serde(flatten)]
@@ -405,19 +362,6 @@ struct CSType {
 impl CSType {
 	fn new() -> Self {
 		Self{basic_stats: BasicStats::new(), dbsnp_sites: None, dbsnp_variants: None }
-	}
-}
-impl AddAssign for CSType {
-	fn add_assign(&mut self, other: Self) {
-		let add_option_counts = |x, y| {
-			if let Some(b) = y {
-				if let Some(a) = x { Some(a + b) } else { y }
-			} else { x }
-		};
-		// Basic Stats
-		self.basic_stats += other.basic_stats;		
-		self.dbsnp_sites = add_option_counts(self.dbsnp_sites, other.dbsnp_sites);
-		self.dbsnp_variants = add_option_counts(self.dbsnp_variants, other.dbsnp_variants);		
 	}
 }
 
@@ -442,29 +386,18 @@ struct TSType {
 }
 
 impl TSType {
-	fn merge(&mut self, other: &Self) {
-		let add_option_counts = |x, y| {
-			if let Some(b) = y {
-				if let Some(a) = x { Some(a + b) } else { y }
-			} else { x }
-		};
-		// Basic Stats
-		self.basic_stats += other.basic_stats;		
-		self.dbsnp_sites = add_option_counts(self.dbsnp_sites, other.dbsnp_sites);
-		self.dbsnp_variants = add_option_counts(self.dbsnp_variants, other.dbsnp_variants);		
-		// Merge QC Distributions
-		self.qc_distributions.merge(&other.qc_distributions);
-		// Merge VCF Filter Stats
-		for (key, ct) in other.vcf_filter_stats.iter() { *(self.vcf_filter_stats.entry(key.to_owned()).or_insert_with(QCCounts::new)) += *ct; }	
-		// Merge Coverage
-		self.coverage.merge(&other.coverage);
-		// Merge Quality
-		self.quality.merge(&other.quality);
-		// Mutations
-		for (key, ct) in other.mutations.iter() { *(self.mutations.entry(key.to_owned()).or_insert_with(MutCounts::new)) += *ct; }
-		// Methylation
-		self.methylation.merge(&other.methylation);
-	}	
+	fn new() -> Self { 
+		Self{
+			basic_stats: BasicStats::new(),
+			dbsnp_sites: None, dbsnp_variants: None,
+			qc_distributions: QCDist::new(),
+			vcf_filter_stats: HashMap::new(),
+			coverage: Coverage::new(),
+			quality: Quality::new(),
+			mutations: HashMap::new(),
+			methylation: Methylation::new()
+		}
+	}
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -478,23 +411,17 @@ pub struct CallJson {
 }
 
 impl CallJson {
-	pub fn from_reader<T: Read>(rdr: T) -> Result<Self, String> {
-		serde_json::from_reader(rdr).map_err(|e| format!("Couldn't parse call JSON file {}", e))
+	pub fn new<S: AsRef<str>, T: AsRef<str>>(source: S, date: T) -> Self {
+		Self {
+			source: source.as_ref().to_owned(),
+			date: date.as_ref().to_owned(),
+			filter_stats: FSType::new(),
+			contig_stats: HashMap::new(),
+			total_stats: TSType::new(),
+		}
 	}
 	pub fn to_writer<T: Write>(&self, wrt: T) -> Result<(), String> {
 		serde_json::to_writer_pretty(wrt, self).map_err(|e| format!("Error: failed to write JSON file: {}", e))		
-	}
-	pub fn merge(&mut self, other: &Self) {
-		// We don't touch the source or date fields
-		
-		// Merge filter stats
-		self.filter_stats.merge(&other.filter_stats);
-		
-		// Merge total stats
-		self.total_stats.merge(&other.total_stats);
-		
-		// Merge contig stats
-		for (ctg, ct) in other.contig_stats.iter() { *(self.contig_stats.entry(ctg.to_owned()).or_insert_with(CSType::new)) += *ct; }
 	}
 	pub fn coverage(&self) -> &Coverage { &self.total_stats.coverage }
 	pub fn quality(&self) -> &Quality { &self.total_stats.quality }

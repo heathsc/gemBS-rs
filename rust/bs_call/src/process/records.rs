@@ -1,6 +1,6 @@
 use std::str::{FromStr, from_utf8};
-use super::htslib::*;
-use super::config::ConfHash;
+use crate::htslib::*;
+use crate::config::ConfHash;
 
 #[derive(Copy,Clone,PartialEq,Eq)]
 pub struct MapPos {

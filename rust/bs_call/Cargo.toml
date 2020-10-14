@@ -14,4 +14,6 @@ num_cpus = "1.13.0"
 libc = "0.2"
 chrono = "0.4"
 utils = { path = "../utils" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 r_htslib = { path = "../r_htslib" }

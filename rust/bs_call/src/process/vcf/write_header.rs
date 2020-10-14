@@ -84,7 +84,7 @@ fn add_seq_info(hd: &mut VcfHeader, ctgs: &[contigs::CtgInfo], sam_file: &SamFil
 	Ok(())
 }
 
-pub fn write_vcf_header(bs_cfg: &mut BsCallConfig, version: &str) -> io::Result<()> {
+pub fn write_vcf_header(bs_cfg: &mut BsCallConfig, source: &str) -> io::Result<()> {
 	let mut hd = &mut bs_cfg.vcf_output.hdr;
 	let sam_file = &bs_cfg.sam_input;
 	let chash = &bs_cfg.conf_hash;
@@ -94,9 +94,7 @@ pub fn write_vcf_header(bs_cfg: &mut BsCallConfig, version: &str) -> io::Result<
 	if !benchmark {
 		sbuf = format!("##fileDate(dd/mm/yyyy)={}", Local::now().format("%d/%m/%Y"));
 		hd.append(&sbuf)?;
-		sbuf = format!("##source={},under_conversion={},over_conversion={},mapq_thresh={},bq_thresh={}", version,
-			chash.get_float("under_conversion"), chash.get_float("over_conversion"),
-			chash.get_int("mapq_threshold"), chash.get_int("bq_threshold"));
+		sbuf = format!("##source={}", source);
 		hd.append(&sbuf)?;
         // TODO - should add dbSNP header info here
 	}

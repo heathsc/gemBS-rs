@@ -9,7 +9,7 @@ pub mod config;
 pub mod reference;
 pub mod htslib;
 pub mod process;
-pub mod records;
+pub mod stats;
 
 fn main() -> Result<(), &'static str> {
 	let mut bs_cfg = match cli::process_cli() {
