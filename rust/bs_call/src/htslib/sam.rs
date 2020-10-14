@@ -35,7 +35,7 @@ impl SamFile {
 		self.itr = Some(self.index.sam_itr_regarray(&mut self.hdr, &reg_str)?);
 		Ok(())
 	}
-	pub fn get_next(&self, brec: &BamRec) -> SamReadResult {
+	pub fn get_next(&self, brec: &mut BamRec) -> SamReadResult {
 		if let Some(itr) = &self.itr {
 			itr.sam_itr_next(&self.file, brec)
 		} else { SamReadResult::Error }
