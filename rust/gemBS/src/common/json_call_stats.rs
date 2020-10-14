@@ -154,6 +154,7 @@ pub enum FSReadLevelType {
 	#[serde(rename = "QC_Flags")]
 	QCFlags,
 	SecondaryAlignment,
+	SupplementaryAlignment,
 	NoPosition,
 	NoMatePosition,
 	MisMatchContig,

@@ -142,7 +142,7 @@ impl AddAssign for FSCounts {
 }
 
 impl FSCounts {
-	fn new() -> Self { Self{reads: 0, bases: 0} }
+	pub fn new() -> Self { Self{reads: 0, bases: 0} }
 	pub fn reads(&self) -> usize { self.reads }
 	pub fn bases(&self) -> usize { self.bases }
 }
@@ -154,6 +154,7 @@ pub enum FSReadLevelType {
 	#[serde(rename = "QC_Flags")]
 	QCFlags,
 	SecondaryAlignment,
+	SupplementaryAlignment,
 	NoPosition,
 	NoMatePosition,
 	MisMatchContig,
@@ -221,7 +222,24 @@ pub struct FSType {
 }
 
 impl FSType {
-	fn new() -> Self { Self{read_level: HashMap::new(), base_level: HashMap::new()}}
+	pub fn add_read_level_count(&mut self, fs_type: FSReadLevelType, counts: usize) {
+		let mut fc = self.read_level.entry(fs_type).or_insert_with(FSCounts::new);
+		fc.reads += 1;
+		fc.bases += counts;
+	}
+	pub fn add_read_level_fs_counts(&mut self, fs_type: FSReadLevelType, counts: FSCounts) {
+		let fc = self.read_level.entry(fs_type).or_insert_with(FSCounts::new);
+		*fc += counts;
+	}
+	pub fn add_base_level_count(&mut self, fs_type: FSBaseLevelType, bases: usize) {
+		let fc = self.base_level.entry(fs_type).or_insert(0);
+		*fc += bases;
+	}
+	pub fn read_level(&self) -> &HashMap<FSReadLevelType, FSCounts> { &self.read_level }
+	pub fn base_level(&self) -> &HashMap<FSBaseLevelType, usize> { &self.base_level }
+}
+impl FSType {
+	pub fn new() -> Self { Self{read_level: HashMap::new(), base_level: HashMap::new()}}
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -427,7 +445,7 @@ impl CallJson {
 	pub fn quality(&self) -> &Quality { &self.total_stats.quality }
 	pub fn qc_dist(&self) -> &QCDist { &self.total_stats.qc_distributions }
 	pub fn methylation(&self) -> &Methylation { &self.total_stats.methylation }
-	pub fn filter_stats(&self) -> &FSType { &self.filter_stats}
+	pub fn filter_stats(&mut self) -> &mut FSType { &mut self.filter_stats}
 	pub fn basic_stats(&self) -> &BasicStats { &self.total_stats.basic_stats }
 	pub fn vcf_filter_stats(&self) -> &HashMap<String, QCCounts> { &self.total_stats.vcf_filter_stats }
 	pub fn mutations(&self) -> &HashMap<String, MutCounts> { &self.total_stats.mutations }
