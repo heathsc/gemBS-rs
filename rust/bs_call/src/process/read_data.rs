@@ -6,7 +6,7 @@ use crate::htslib::*;
 use crate::config::{BsCallConfig, BsCallFiles};
 use super::records::{ReadEnd, Map};
 use super::pileup;
-use crate::stats::{StatJob, FSBaseLevelType, FSReadLevelType, FSType};
+use crate::stats::{StatJob, FSReadLevelType, FSType};
 
 enum ReadState {
 	Duplicate,
@@ -74,9 +74,15 @@ enum StateChange {
 	NewContig((u32, u32, u32)),
 }
 
-fn send_pileup_job(reads: Vec<Option<ReadEnd>>, cname: &str, x: u32, y: u32, pileup_tx: &mpsc::Sender<Option<pileup::PileupRegion>>) {
-	let preg = pileup::PileupRegion::new(cname, x as usize, y as usize, reads);
-	if pileup_tx.send(Some(preg)).is_err() { warn!("Error trying to sent new region to pileup thread") }	
+fn send_pileup_job(reads: Vec<Option<ReadEnd>>, cname: &str, x: u32, y: u32, tid: u32, pileup_tx: &mpsc::Sender<Option<pileup::PileupRegion>>) -> io::Result<()> {
+	let preg = pileup::PileupRegion::new(cname, x as usize, y as usize, tid as usize, reads);
+	match pileup_tx.send(Some(preg)) { 
+		Err(e) => {
+			warn!("Error trying to send new region to pileup thread");
+			Err(hts_err(format!("Error sending region to pileup thread: {}", e)))
+		},
+		Ok(_) => Ok(()),
+	} 	
 }
 
 pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut bs_files: BsCallFiles) -> io::Result<()> {
@@ -85,7 +91,8 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 	let mut fs_stats = FSType::new();
 	let (pileup_tx, pileup_rx) = mpsc::channel();
 	let cfg = Arc::clone(&bs_cfg);
-	let pileup_handle = thread::spawn(move || { pileup::make_pileup(Arc::clone(&bs_cfg), pileup_rx) });
+	let st_tx = mpsc::Sender::clone(&stat_tx);
+	let pileup_handle = thread::spawn(move || { pileup::make_pileup(Arc::clone(&bs_cfg), pileup_rx, bs_files, st_tx) });
 	let hdr = &mut sam_input.hdr;
 
 	let keep_duplicates = cfg.conf_hash.get_bool("keep_duplicates");
@@ -101,7 +108,7 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 					let cname = hdr.tid2name(cstate.tid as usize);
 					let (x, y) = (cstate.start_x, cstate.end_x);
 					debug!("Last block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
-					send_pileup_job(reads, cname, x, y, &pileup_tx);
+					send_pileup_job(reads, cname, x, y, cstate.tid, &pileup_tx)?;
 				}
 				break;
 			},
@@ -116,14 +123,14 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 				StateChange::NewBlock((x,y)) => {
 					let cname = hdr.tid2name(cstate.tid as usize);
 					debug!("Ending block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
-					send_pileup_job(reads, cname, x, y, &pileup_tx);
+					send_pileup_job(reads, cname, x, y, cstate.tid, &pileup_tx)?;
 					reads = Vec::new();
 					state_hash.clear();
 				},
 				StateChange::NewContig((tid, x, y)) => {
 					let cname = hdr.tid2name(tid as usize);
 					debug!("Ending contig with block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
-					send_pileup_job(reads, cname, x, y, &pileup_tx);
+					send_pileup_job(reads, cname, x, y, tid, &pileup_tx)?;
 					reads = Vec::new();
 					state_hash.clear();
 				},
@@ -142,10 +149,7 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 					ReadState::Present(x) => {
 						if map.is_last() {
 							let rpair = reads[*x].as_mut().expect("Missing pair for read");
-							let (filter, rflag, trimmed) = rpair.check_pair(&mut read, &cfg.conf_hash);
-							if trimmed > 0 {
-								fs_stats.add_base_level_count(FSBaseLevelType::Overlapping, trimmed as usize);
-							}
+							let (filter, rflag) = rpair.check_pair(&mut read, &cfg.conf_hash);
 							if filter {
 								fs_stats.add_read_level_count(rflag, brec.l_qseq() as usize);
 								fs_stats.add_read_level_count(rflag, rpair.seq_qual.len());
@@ -182,10 +186,9 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 			};
 		} else { fs_stats.add_read_level_count(read_flag, brec.l_qseq() as usize); }
 	}
-	if pileup_tx.send(None).is_err() { warn!("Error trying to sent QUIT signal to pileup thread") }
+	if pileup_tx.send(None).is_err() { warn!("Error trying to send QUIT signal to pileup thread") }
 	else if pileup_handle.join().is_err() { warn!("Error waiting for pileup thread to finish") }
 
-	for (flag, ct) in fs_stats.base_level().iter() { let _ = stat_tx.send(StatJob::AddFSBaseLevelCounts(*flag, *ct)); }
 	for (flag, ct) in fs_stats.read_level().iter() { let _ = stat_tx.send(StatJob::AddFSReadLevelCounts(*flag, *ct)); }
 	Ok(())
 }

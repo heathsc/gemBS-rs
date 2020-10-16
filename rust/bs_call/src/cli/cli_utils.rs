@@ -42,6 +42,22 @@ pub fn get_fvec(m: &ArgMatches, opt: &str, low: f64, high: f64) -> io::Result<Op
 	} else { Ok(None) }
 }
 
+pub fn get_ivec(m: &ArgMatches, opt: &str, low: usize, high: usize) -> io::Result<Option<Vec<usize>>> {
+	if let Some(v) = m.values_of(opt) {
+		let mut vec = Vec::new();
+		for x in v {
+			match <usize>::from_str(x) {
+				Ok(z) => {
+					if z >=low && z <= high{ vec.push(z) }
+					else { return Err(new_err(format!("Integer argument '{}' for option {} not between {} and {}", x, opt, low, high))) }
+				},
+				Err(e) => return Err(new_err(format!("Couldn't parse integer argument '{}' for option {}: {}", x, opt, e))),
+			}
+		}
+		Ok(Some(vec))
+	} else { Ok(None) }
+}
+
 pub struct LogLevel {
 	level: usize,
 }

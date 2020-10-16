@@ -14,6 +14,8 @@ pub const MFLAG_REVERSE:u16 = 4;
 pub const MFLAG_SPLIT:u16 = 8;
 pub const MFLAG_LAST: u16 = 16;
 pub const MFLAG_DUPLICATE: u16 = 32;
+pub const MFLAG_READ1: u16 = 64;
+pub const MFLAG_READ2: u16 = 128;
 pub const MFLAG_BSSTRAND_MASK:u16 = 3;
 pub const MFLAG_DUPLICATE_MASK: u16 = 3;
 
@@ -38,6 +40,7 @@ pub const BSS_UNCONVERTED: u16 = 3;
 impl Map {
 	pub fn bs_strand(&self) -> BSStrand { BSSTRAND_MAP[(self.flags & MFLAG_BSSTRAND_MASK) as usize] }
 	pub fn is_last(&self) -> bool { (self.flags & MFLAG_LAST) != 0 }
+	pub fn is_reverse(&self) -> bool { (self.flags & MFLAG_REVERSE) != 0 }
 	pub fn start(&self) -> u32 { self.map_pos.pos }
 	pub fn end(&self) -> u32 { self.map_pos.pos + self.cigar.rlen() - 1 }
 	pub fn rlen(&self) -> u32 { self.cigar.rlen() }
@@ -53,6 +56,9 @@ fn maps_from_bam_rec(sam_hdr: &SamHeader, brec: &BamRec, check_supp: bool) -> Re
 	let mut flags = bs_strand.get_num();
 	if tst_flag(BAM_FDUP) { flags |= MFLAG_DUPLICATE }; 
 	if tst_flag(BAM_FREVERSE) { flags |= MFLAG_REVERSE }; 
+	if tst_flag(BAM_FREAD1) { flags |= MFLAG_READ1 }; 
+	if tst_flag(BAM_FREAD2) { flags |= MFLAG_READ2 }; 
+	if tst_flag(BAM_FSUPPLEMENTARY) { flags |= MFLAG_SPLIT };
 	let mut maps = Vec::with_capacity(1);
 	let tid = if let Some(i) = brec.tid() {i as u32} else {return Err("Invalid contig ID".to_string())};
 	let pos = if let Some(i) = brec.pos() {i as u32} else {return Err("Invalid map position".to_string())};
@@ -196,46 +202,44 @@ impl ReadEnd {
 		}
 		false
 	}
-	pub fn check_pair(&mut self, read: &mut Self, conf_hash: &ConfHash) -> (bool, ReadFlag, u32) {
+	pub fn check_pair(&mut self, read: &mut Self, conf_hash: &ConfHash) -> (bool, ReadFlag) {
 		let keep_unmatched = conf_hash.get_bool("keep_unmatched");
 		let map1 = &mut self.maps[0];
 		let map2 = &mut read.maps[0];
 		// Check if maps are to the same contig
-		if map1.map_pos.tid != map2.map_pos.tid { return (!keep_unmatched, ReadFlag::MisMatchContig, 0) }
+		if map1.map_pos.tid != map2.map_pos.tid { return (!keep_unmatched, ReadFlag::MisMatchContig) }
 		// Check if maps are on different strands
-		if ((map1.flags ^ map2.flags) & MFLAG_REVERSE) == 0 { return (!keep_unmatched, ReadFlag::BadOrientation, 0) }
-		let mut trimmed = 0;
+		if ((map1.flags ^ map2.flags) & MFLAG_REVERSE) == 0 { return (!keep_unmatched, ReadFlag::BadOrientation) }
 		// Check direction and template length
 		if (map1.flags & MFLAG_REVERSE) == 0 {
 			// Forward - Reverse
 			let max_template_length = conf_hash.get_int("max_template_length") as u32;
 			let end2 = map2.end();
-			if end2 - map1.start() >= max_template_length { return (!keep_unmatched, ReadFlag::LargeInsertSize, 0) }	
+			if end2 - map1.start() >= max_template_length { return (!keep_unmatched, ReadFlag::LargeInsertSize) }	
 			// Check for overlap
 			let end1 = map1.end();
 			if end1 >= map2.start() {
 				// If so then trim second read
-				trimmed = end1 - map2.start() + 1;
-				map2.cigar.trim_start(trimmed);
-				map2.map_pos.pos += trimmed;
+				let trim = end1 - map2.start() + 1;
+				map2.cigar.trim_start(trim);
+				map2.map_pos.pos += trim;
 			}
 //			let tlen = (end2 as isize) - (map1.map_pos.pos as isize) + 1;
 		} else {
 			// Reverse - Forward: Can occur when the template length < read length.  In this case the reads should overlap
 			let end1 = map1.end();
-			if end1 < map2.start() { return (!keep_unmatched, ReadFlag::BadOrientation, 0) }
+			if end1 < map2.start() { return (!keep_unmatched, ReadFlag::BadOrientation) }
 			let end2 = map2.end();
 			if map2.start() > map1.start() { 
 				let trim = map2.start() - map1.start();
 				map1.cigar.trim_start(trim);
 				map1.map_pos.pos += trim;
-				trimmed = trim;
 			}
-			if end2 > end1 { 
-				trimmed += end2 - end1;
-				map2.cigar.trim_end(end2 - end1)
-			}
+			if end2 > end1 { map2.cigar.trim_end(end2 - end1)}
 		}
-		(false, ReadFlag::Passed, trimmed)
+		(false, ReadFlag::Passed)
 	}
+	pub fn read_one(&self) -> bool { (self.maps[0].flags & (MFLAG_READ1 | MFLAG_READ2)) == MFLAG_READ1 }
+	pub fn read_two(&self) -> bool { (self.maps[0].flags & (MFLAG_READ1 | MFLAG_READ2)) == MFLAG_READ2 }
+	pub fn is_supplementary(&self) -> bool { (self.maps[0].flags & MFLAG_SPLIT) != 0 }
 }

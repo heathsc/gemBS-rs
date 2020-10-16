@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use std::io;
+use std::{io, cmp};
 use std::collections::HashMap;
 
 use crate::config::*;
@@ -8,7 +8,7 @@ use super::cli_utils;
 
 use clap::ArgMatches;
 
-pub const OPTS: [(&str, ConfVar);22] = [
+pub const OPTS: [(&str, ConfVar);20] = [
 	("haploid", ConfVar::Bool(false)),
 	("keep_duplicates", ConfVar::Bool(false)),
 	("keep_supplementary", ConfVar::Bool(false)),
@@ -18,8 +18,6 @@ pub const OPTS: [(&str, ConfVar);22] = [
 	("benchmark_mode", ConfVar::Bool(false)),
 	("all_positions", ConfVar::Bool(false)),
 	("filter_contigs", ConfVar::Bool(false)),
-	("right_trim", ConfVar::Int(0)),
-	("left_trim", ConfVar::Int(0)),
 	("mapq_threshold", ConfVar::Int(20)),
 	("bq_threshold", ConfVar::Int(13)),
 	("max_template_length", ConfVar::Int(1000)),
@@ -61,6 +59,18 @@ fn distribute_threads(conf_hash: &mut HashMap<&'static str, ConfVar>, in_file: &
 	Ok(())
 }
 
+pub fn get_trim_values(m: &ArgMatches, name: &str) -> io::Result<(usize, usize)> {
+	if let Some(v) = cli_utils::get_ivec(m, name, 1, 63)? {
+		match v.len() {
+			1 => Ok((v[0], v[0])),
+			2 => Ok((v[0], v[1])),
+			_ => Err(htslib::hts_err("Unexpected number of values for trim option".to_string())),
+		}
+	} else {
+		Ok((1, 1))
+	}
+}
+
 pub fn handle_options(m: &ArgMatches) -> io::Result<(BsCallConfig, BsCallFiles)> {
 	
 	let mut conf_hash: HashMap<&'static str, ConfVar> = HashMap::new();
@@ -78,6 +88,14 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(BsCallConfig, BsCallFiles)>
 	else { (0.01, 0.05) };
 	conf_hash.insert(&"under_conversion", ConfVar::Float(under));
 	conf_hash.insert(&"over_conversion", ConfVar::Float(over));	
+	
+	// Left and right trim
+	let (x1, x2) = get_trim_values(m, "left_trim")?;
+	conf_hash.insert(&"left_trim_read_1", ConfVar::Int(x1));
+	conf_hash.insert(&"left_trim_read_2", ConfVar::Int(x2));
+	let (x1, x2) = get_trim_values(m, "right_trim")?;
+	conf_hash.insert(&"right_trim_read_1", ConfVar::Int(x1));
+	conf_hash.insert(&"right_trim_read_2", ConfVar::Int(x2));
 	
 	// Output type - if not set we try to guess from output file name (if supplied), otherwise use VCF format
 	let output = if let ConfVar::String(x) = conf_hash.get(&"output").unwrap() { x.as_deref().map(|x| x.to_owned() ) } else { panic!("String variable output not set") };

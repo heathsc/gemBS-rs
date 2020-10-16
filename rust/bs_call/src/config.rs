@@ -110,21 +110,11 @@ impl BsCallConfig {
 	pub fn get_conf_float(&self, key: &str) -> f64 { self.conf_hash.get_float(key) }
 	pub fn get_conf_str(&self, key: &str) -> Option<&str> { self.conf_hash.get_str(key) }
 	pub fn get_conf_otype(&self) -> OType { self.conf_hash.get_otype() }
-	
-//	pub fn ref_index(&self) -> &htslib::Faidx { &self.ref_index }	
-//	pub fn sam_input(&self) -> &htslib::SamFile { &self.sam_input }
-//	pub fn vcf_output(&mut self) -> &mut htslib::VcfFile { &mut self.vcf_output }
-	
 	pub fn add_contigs(&mut self, ctgs: &mut[CtgInfo]) { self.contigs.extend_from_slice(ctgs); }
 	pub fn add_regions(&mut self, regions: &mut[CtgRegion]) { self.regions.extend_from_slice(regions); }
 	pub fn ctg_in_header(&self, idx: usize) -> bool { self.contigs[idx].in_header() }
-
 	pub fn ctg_vcf_id(&self, idx: usize) -> Option<usize> { self.contigs[idx].vcf_id() }
 	pub fn ctg_ref_id(&self, idx: usize) -> Option<usize> { self.contigs[idx].ref_id() }
-//	pub fn n_ctgs(&self) -> usize { self.sam_input.nref() }
-//	pub fn ctg_name(&self, idx: usize) -> &str { self.sam_input.tid2name(idx) }
-//	pub fn ctg_len(&self, idx: usize) -> usize { self.sam_input.tid2len(idx) }
-//	pub fn ctg_id<S: AsRef<str>>(&self, seq: S) -> Option<usize> { self.sam_input.name2tid(seq) }
 }
 
 pub struct BsCallFiles {
