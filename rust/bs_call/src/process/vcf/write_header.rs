@@ -84,9 +84,9 @@ fn add_seq_info(hd: &mut VcfHeader, ctgs: &[contigs::CtgInfo], sam_file: &SamFil
 	Ok(())
 }
 
-pub fn write_vcf_header(bs_cfg: &mut BsCallConfig, source: &str) -> io::Result<()> {
-	let mut hd = &mut bs_cfg.vcf_output.hdr;
-	let sam_file = &bs_cfg.sam_input;
+pub fn write_vcf_header(bs_cfg: &mut BsCallConfig, bs_files: &mut BsCallFiles, source: &str) -> io::Result<()> {
+	let mut hd = &mut bs_files.vcf_output.as_mut().unwrap().hdr;
+	let sam_file = &bs_files.sam_input.as_ref().unwrap();
 	let chash = &bs_cfg.conf_hash;
 	let mut sbuf = format!("##fileformat={}", hd.get_version());
 	hd.append(&sbuf)?;
@@ -110,6 +110,6 @@ pub fn write_vcf_header(bs_cfg: &mut BsCallConfig, source: &str) -> io::Result<(
 	// Get VCF/BCF header IDs for contigs and filters
 	contigs::set_contig_vcf_ids(&hd, contigs, sam_file); 
 	// And write out header
-	bs_cfg.vcf_output.write_hdr()?;	
+	bs_files.vcf_output.as_mut().unwrap().write_hdr()?;	
 	Ok(())
 }

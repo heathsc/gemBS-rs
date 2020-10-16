@@ -61,7 +61,7 @@ fn distribute_threads(conf_hash: &mut HashMap<&'static str, ConfVar>, in_file: &
 	Ok(())
 }
 
-pub fn handle_options(m: &ArgMatches) -> io::Result<BsCallConfig> {
+pub fn handle_options(m: &ArgMatches) -> io::Result<(BsCallConfig, BsCallFiles)> {
 	
 	let mut conf_hash: HashMap<&'static str, ConfVar> = HashMap::new();
 	// Handle simple options
@@ -111,12 +111,11 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<BsCallConfig> {
 	let ref_idx = reference::handle_reference(rf.unwrap(), &mut in_file)?;
 	
 	// Set up contigs and contig regions
-	let (mut ctgs, mut ctg_regions) = defs::setup_contigs(&chash, &in_file, &ref_idx)?;
-	
-	let mut bs_cfg = BsCallConfig::new(chash, in_file, out_file, ref_idx);
-	bs_cfg.add_contigs(&mut ctgs);
-	bs_cfg.add_regions(&mut ctg_regions);
+	let (ctgs, ctg_regions) = defs::setup_contigs(&chash, &in_file, &ref_idx)?;
+	in_file.set_region_itr(&ctg_regions)?;
+	let bs_cfg = BsCallConfig::new(chash, ctgs, ctg_regions);
+	let bs_files = BsCallFiles::new(in_file, out_file, ref_idx);
 
-	Ok(bs_cfg)
+	Ok((bs_cfg, bs_files))
 }
 

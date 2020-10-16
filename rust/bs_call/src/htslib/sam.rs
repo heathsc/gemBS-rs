@@ -3,11 +3,23 @@ use std::io;
 use r_htslib::*;
 use crate::defs::CtgRegion;
 
-pub struct SamFile {
+pub struct SamInner {
 	pub file: HtsFile, 
+	pub itr: Option<HtsItr>,
+}
+
+impl SamInner {
+	pub fn get_next(&mut self, brec: BamRec) -> SamReadResult {
+		if let Some(itr) = &mut self.itr {
+			itr.sam_itr_next(&mut self.file, brec)
+		} else { SamReadResult::Error }
+	}	
+}
+
+pub struct SamFile {
 	pub index: HtsIndex,
 	pub hdr: SamHeader,
-	pub itr: Option<HtsItr>,
+	pub inner: SamInner,
 }
 
 impl SamFile {
@@ -16,29 +28,24 @@ impl SamFile {
 		let mut file = HtsFile::new(name, "r")?;
 		let index = file.sam_index_load()?;
 		let hdr = SamHeader::read(&mut file)?;
-		Ok(Self{file, index, hdr, itr: None})
+		Ok(Self{inner: SamInner{file, itr: None}, index, hdr})
 	}
 	pub fn nref(&self) -> usize { self.hdr.nref() }
 	pub fn tid2name(&self, i: usize) -> &str { self.hdr.tid2name(i) }
 	pub fn tid2len(&self, i: usize) -> usize { self.hdr.tid2len(i) }
 	pub fn name2tid<S: AsRef<str>>(&self, cname: S) -> Option<usize> { self.hdr.name2tid(cname) }
 	pub fn text(&self) -> &str { self.hdr.text() }
-	pub fn format(&self) -> HtsFormat {	self.file.format() }
-	pub fn set_threads(&mut self, t: usize) -> io::Result<()> { self.file.set_threads(t) }
-	pub fn set_fai_filename<S: AsRef<str>>(&mut self, name: S) -> io::Result<()> { self.file.set_fai_filename(name) }
+	pub fn format(&self) -> HtsFormat {	self.inner.file.format() }
+	pub fn set_threads(&mut self, t: usize) -> io::Result<()> { self.inner.file.set_threads(t) }
+	pub fn set_fai_filename<S: AsRef<str>>(&mut self, name: S) -> io::Result<()> { self.inner.file.set_fai_filename(name) }
 	pub fn set_itr(&mut self) -> io::Result<()> {
-		self.itr = Some(self.index.sam_itr_queryi(HTS_IDX_START as isize, 0, 0)?);
+		self.inner.itr = Some(self.index.sam_itr_queryi(HTS_IDX_START as isize, 0, 0)?);
 		Ok(()) 
 	}	 
 	pub fn set_region_itr(&mut self, regions: &[CtgRegion]) -> io::Result<()> { 
 		let reg_str: Vec<String> = regions.iter().map(|r| format!("{}:{}-{}", self.hdr.tid2name(r.sam_tid), r.start, r.stop)).collect();
-		self.itr = Some(self.index.sam_itr_regarray(&mut self.hdr, &reg_str)?);
+		self.inner.itr = Some(self.index.sam_itr_regarray(&mut self.hdr, &reg_str)?);
 		Ok(())
-	}
-	pub fn get_next(&self, brec: &mut BamRec) -> SamReadResult {
-		if let Some(itr) = &self.itr {
-			itr.sam_itr_next(&self.file, brec)
-		} else { SamReadResult::Error }
 	}
 }
 
@@ -60,7 +67,7 @@ impl BSStrand {
 #[derive(PartialEq)]
 pub enum Aligner { Unknown, GEM, Bowtie, Novoalign, BSMap, BWAMeth }
 
-pub fn get_bs_strand(b: &BamRec) -> (BSStrand, Option<&[u8]>) {
+pub fn get_bs_strand<'a>(b: &'a BamRec) -> (BSStrand, Option<&'a[u8]>) {
 	let mut sa_tag = None;
 	let mut strand = BSStrand::Unconverted;
 	if let Some(itr) = b.get_aux_iter() {

@@ -1,24 +1,25 @@
 use std::{io, thread};
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 
-use crate::config::BsCallConfig;
+use crate::config::{BsCallConfig, BsCallFiles};
 use crate::stats;
 
 pub mod vcf;
 pub mod sam;
 pub mod records;
 pub mod read_data;
+pub mod pileup;
 
 pub use vcf::*;
 pub use sam::*;
 
-pub fn process(bs_cfg: &mut BsCallConfig) -> io::Result<()> {
+pub fn process(bs_cfg: Arc<BsCallConfig>, bs_files: BsCallFiles) -> io::Result<()> {
 	// Set up stats logging thread
-	let mut stats = bs_cfg.stats.take();
 	let (stats_tx, stats_rx) = mpsc::channel();
-	let stat_handle = thread::spawn(move || { stats::stat_thread(&mut stats, stats_rx) });
-	
-	read_data::read_data(bs_cfg, mpsc::Sender::clone(&stats_tx))?;
+	let sname = bs_cfg.get_conf_str("report_file").map(|s| s.to_owned());
+	let source = bs_cfg.get_conf_str("bs_call_source").expect("No bs_call_source variable").to_owned();
+	let stat_handle = thread::spawn(move || { stats::stat_thread(sname, source, stats_rx) });
+	read_data::read_data(Arc::clone(&bs_cfg), mpsc::Sender::clone(&stats_tx), bs_files)?;
 	
 	if stats_tx.send(stats::StatJob::Quit).is_err() { warn!("Error trying to sent QUIT signal to stats thread") }
 	else if stat_handle.join().is_err() { warn!("Error waiting for stats thread to finish") }

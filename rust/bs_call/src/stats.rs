@@ -66,7 +66,10 @@ fn dummy_job(rx: mpsc::Receiver<StatJob>) {
 	info!("dummy stat_thread shutting down()");
 }
 
-pub fn stat_thread(stats: &mut Option<Stats>, rx: mpsc::Receiver<StatJob>) {
-	if let Some(s) = stats.as_mut() { accumulate_stats(&mut s.stats, rx); }
-	else { dummy_job(rx) }
+pub fn stat_thread(stats_name: Option<String>, source: String, rx: mpsc::Receiver<StatJob>) {
+	// Initialize Stats
+	if let Some(name) = stats_name {
+		let mut s = Stats::new(name, source);
+		accumulate_stats(&mut s.stats, rx);
+	} else { dummy_job(rx) }
 }

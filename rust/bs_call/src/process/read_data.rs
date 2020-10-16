@@ -1,10 +1,11 @@
-use std::{io, cmp};
-use std::sync::mpsc;
+use std::{io, cmp, thread};
+use std::sync::{Arc, mpsc};
 use std::collections::HashMap;
 
 use crate::htslib::*;
-use crate::config::BsCallConfig;
+use crate::config::{BsCallConfig, BsCallFiles};
 use super::records::{ReadEnd, Map};
+use super::pileup;
 use crate::stats::{StatJob, FSBaseLevelType, FSReadLevelType, FSType};
 
 enum ReadState {
@@ -73,40 +74,61 @@ enum StateChange {
 	NewContig((u32, u32, u32)),
 }
 
-pub fn read_data(bs_cfg: &mut BsCallConfig, stat_tx: mpsc::Sender<StatJob>) -> io::Result<()> {
-	bs_cfg.sam_input.set_region_itr(&bs_cfg.regions)?;
-	let mut fs_stats = FSType::new();
+fn send_pileup_job(reads: Vec<Option<ReadEnd>>, cname: &str, x: u32, y: u32, pileup_tx: &mpsc::Sender<Option<pileup::PileupRegion>>) {
+	let preg = pileup::PileupRegion::new(cname, x as usize, y as usize, reads);
+	if pileup_tx.send(Some(preg)).is_err() { warn!("Error trying to sent new region to pileup thread") }	
+}
+
+pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut bs_files: BsCallFiles) -> io::Result<()> {
 	
-	let hdr = &bs_cfg.sam_input.hdr;
-	let keep_duplicates = bs_cfg.conf_hash.get_bool("keep_duplicates");
+	let mut sam_input = bs_files.sam_input.take().unwrap();
+	let mut fs_stats = FSType::new();
+	let (pileup_tx, pileup_rx) = mpsc::channel();
+	let cfg = Arc::clone(&bs_cfg);
+	let pileup_handle = thread::spawn(move || { pileup::make_pileup(Arc::clone(&bs_cfg), pileup_rx) });
+	let hdr = &mut sam_input.hdr;
+
+	let keep_duplicates = cfg.conf_hash.get_bool("keep_duplicates");
 	let mut brec = BamRec::new().unwrap();
 	let mut reads: Vec<Option<ReadEnd>> = Vec::new();
 	let mut state_hash: HashMap<String, ReadState> = HashMap::new();
 	let mut curr_state = State(None);
 	loop {
-		match bs_cfg.sam_input.get_next(&mut brec) {
-			SamReadResult::Ok => (),
-			SamReadResult::EOF => break,
+		brec = match sam_input.inner.get_next(brec) {
+			SamReadResult::Ok(b) => b,
+			SamReadResult::EOF => {
+				if let Some(cstate) = curr_state.0.as_ref() {
+					let cname = hdr.tid2name(cstate.tid as usize);
+					let (x, y) = (cstate.start_x, cstate.end_x);
+					debug!("Last block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
+					send_pileup_job(reads, cname, x, y, &pileup_tx);
+				}
+				break;
+			},
 			_ => panic!("Error reading record"),
-		} 
-		let (read_end, read_flag) = ReadEnd::from_bam_rec(&bs_cfg.conf_hash, hdr, &brec);
+		};
+		let (read_end, read_flag) = ReadEnd::from_bam_rec(&cfg.conf_hash, hdr, &brec);
 		if let Some(mut read) = read_end {
 			let map = &read.maps[0];
 			let change = curr_state.update(map, reads.len());
 			let cstate = curr_state.0.as_ref().unwrap();
 			match change {
 				StateChange::NewBlock((x,y)) => {
-					println!("Ending block ({}:{}-{} len = {}, {} maps)", hdr.tid2name(cstate.tid as usize), x, y, y - x + 1, reads.len());
-					reads.clear();
+					let cname = hdr.tid2name(cstate.tid as usize);
+					debug!("Ending block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
+					send_pileup_job(reads, cname, x, y, &pileup_tx);
+					reads = Vec::new();
 					state_hash.clear();
 				},
 				StateChange::NewContig((tid, x, y)) => {
-					println!("Ending contig with block ({}:{}-{} len = {}, {} maps)", hdr.tid2name(tid as usize), x, y, y - x + 1, reads.len());
-					reads.clear();
+					let cname = hdr.tid2name(tid as usize);
+					debug!("Ending contig with block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
+					send_pileup_job(reads, cname, x, y, &pileup_tx);
+					reads = Vec::new();
 					state_hash.clear();
 				},
 				StateChange::Init => {
-					println!("Initiating new ")
+					debug!("Initiating run")
 				}
 				_ => (),
 			}	
@@ -120,7 +142,7 @@ pub fn read_data(bs_cfg: &mut BsCallConfig, stat_tx: mpsc::Sender<StatJob>) -> i
 					ReadState::Present(x) => {
 						if map.is_last() {
 							let rpair = reads[*x].as_mut().expect("Missing pair for read");
-							let (filter, rflag, trimmed) = rpair.check_pair(&mut read, &bs_cfg.conf_hash);
+							let (filter, rflag, trimmed) = rpair.check_pair(&mut read, &cfg.conf_hash);
 							if trimmed > 0 {
 								fs_stats.add_base_level_count(FSBaseLevelType::Overlapping, trimmed as usize);
 							}
@@ -160,6 +182,9 @@ pub fn read_data(bs_cfg: &mut BsCallConfig, stat_tx: mpsc::Sender<StatJob>) -> i
 			};
 		} else { fs_stats.add_read_level_count(read_flag, brec.l_qseq() as usize); }
 	}
+	if pileup_tx.send(None).is_err() { warn!("Error trying to sent QUIT signal to pileup thread") }
+	else if pileup_handle.join().is_err() { warn!("Error waiting for pileup thread to finish") }
+
 	for (flag, ct) in fs_stats.base_level().iter() { let _ = stat_tx.send(StatJob::AddFSBaseLevelCounts(*flag, *ct)); }
 	for (flag, ct) in fs_stats.read_level().iter() { let _ = stat_tx.send(StatJob::AddFSReadLevelCounts(*flag, *ct)); }
 	Ok(())
