@@ -197,8 +197,11 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 				} else { true }
 			};
 			if insert { reads.push(Some(read)) };
-		} else if (brec.flag() & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY)) == 0 { // Only collect stats on primary reads
-			fs_stats.add_read_level_count(read_flag, brec.l_qseq() as usize); 
+		} else { // Only collect stats on primary reads unless they are flagged for being secondary or supplementary
+			if match read_flag {
+				FSReadLevelType::SupplementaryAlignment | FSReadLevelType::SecondaryAlignment => true,
+				_ => brec.flag() & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY) == 0,
+			} {	fs_stats.add_read_level_count(read_flag, brec.l_qseq() as usize) } 
 		}
 	}
 	if pileup_tx.send(None).is_err() { warn!("Error trying to send QUIT signal to pileup thread") }
