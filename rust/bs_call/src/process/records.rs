@@ -16,6 +16,7 @@ pub const MFLAG_LAST: u16 = 16;
 pub const MFLAG_DUPLICATE: u16 = 32;
 pub const MFLAG_READ1: u16 = 64;
 pub const MFLAG_READ2: u16 = 128;
+pub const MFLAG_NON_PRIMARY: u16 = 256;
 pub const MFLAG_BSSTRAND_MASK:u16 = 3;
 pub const MFLAG_DUPLICATE_MASK: u16 = 3;
 
@@ -59,6 +60,7 @@ fn maps_from_bam_rec(sam_hdr: &SamHeader, brec: &BamRec, check_supp: bool) -> Re
 	if tst_flag(BAM_FREAD1) { flags |= MFLAG_READ1 }; 
 	if tst_flag(BAM_FREAD2) { flags |= MFLAG_READ2 }; 
 	if tst_flag(BAM_FSUPPLEMENTARY) { flags |= MFLAG_SPLIT };
+	if tst_flag(BAM_FSECONDARY | BAM_FSUPPLEMENTARY) { flags |= MFLAG_NON_PRIMARY }
 	let mut maps = Vec::with_capacity(1);
 	let tid = if let Some(i) = brec.tid() {i as u32} else {return Err("Invalid contig ID".to_string())};
 	let pos = if let Some(i) = brec.pos() {i as u32} else {return Err("Invalid map position".to_string())};
@@ -157,10 +159,10 @@ impl ReadEnd {
 		if !ignore_duplicates && tst_flag(BAM_FDUP) { 
 			if keep_duplicates { set_read_flag(ReadFlag::Duplicate) } else { return (None, ReadFlag::Duplicate)}
 		}
+		if (brec.qual() as usize) < mapq_threshold { return (None, ReadFlag::LowMAPQ)};
 		if tst_flag(BAM_FSUPPLEMENTARY) {
 			if keep_supplementary { set_read_flag(ReadFlag::SupplementaryAlignment) }  else {return (None, ReadFlag::SupplementaryAlignment)}
 		}
-		if (brec.qual() as usize) < mapq_threshold { return (None, ReadFlag::LowMAPQ)};
 		let tid = if let Some(x) = brec.tid() {x} else { return (None, ReadFlag::NoPosition) };
 		if brec.pos().is_none() { return (None, ReadFlag::NoPosition) };
 		let mate_pos = if tst_flag(BAM_FPAIRED) {
@@ -241,5 +243,5 @@ impl ReadEnd {
 	}
 	pub fn read_one(&self) -> bool { (self.maps[0].flags & (MFLAG_READ1 | MFLAG_READ2)) == MFLAG_READ1 }
 	pub fn read_two(&self) -> bool { (self.maps[0].flags & (MFLAG_READ1 | MFLAG_READ2)) == MFLAG_READ2 }
-	pub fn is_supplementary(&self) -> bool { (self.maps[0].flags & MFLAG_SPLIT) != 0 }
+	pub fn is_primary(&self) -> bool { (self.maps[0].flags & MFLAG_NON_PRIMARY) == 0 }
 }

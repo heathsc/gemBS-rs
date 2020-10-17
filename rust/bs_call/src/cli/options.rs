@@ -60,14 +60,14 @@ fn distribute_threads(conf_hash: &mut HashMap<&'static str, ConfVar>, in_file: &
 }
 
 pub fn get_trim_values(m: &ArgMatches, name: &str) -> io::Result<(usize, usize)> {
-	if let Some(v) = cli_utils::get_ivec(m, name, 1, 63)? {
+	if let Some(v) = cli_utils::get_ivec(m, name, 0, 63)? {
 		match v.len() {
 			1 => Ok((v[0], v[0])),
 			2 => Ok((v[0], v[1])),
 			_ => Err(htslib::hts_err("Unexpected number of values for trim option".to_string())),
 		}
 	} else {
-		Ok((1, 1))
+		Ok((0, 0))
 	}
 }
 

@@ -119,7 +119,7 @@ fn check_regions(preg: &mut PileupRegion, regions: &[CtgRegion]) -> io::Result<(
 	} else { Err(hts_err("Pileup region does not overlap a contig region".to_string())) }
 }
 
-fn add_read_to_pileup(read: &ReadEnd, preg: &PileupRegion, pileup: &mut Pileup, ltrim: usize, rtrim: usize, min_qual: u8) -> (usize, usize, usize, usize, usize) {
+fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: usize, min_qual: u8) -> (usize, usize, usize, usize, usize) {
 	let cigar = &read.maps[0].cigar;
 	let sq = &read.seq_qual;
 	let mut ref_pos = read.maps[0].map_pos.pos as usize;
@@ -134,11 +134,10 @@ fn add_read_to_pileup(read: &ReadEnd, preg: &PileupRegion, pileup: &mut Pileup, 
 	let (mut clipped, mut trimmed, mut overlap, mut low_qual) = (0, 0, 0, 0);
 	
 	// Get cut off for right trim using the original length of sequence (including hard clips if present)
-	let l = cigar.qlen1() as usize;
-	if t1 + t2 > l {
-		
-	} else {
-		let right_cut = l - t2;
+	let total_len = cigar.qlen1() as usize;
+	if t1 + t2 >= total_len { clipped = total_len }
+	else {
+		let right_cut = total_len - t2;
 		let mut state = if t1 > 0 { 0 } else { 1 };
 		for elem in cigar.iter() {
 			let (op, l) = elem.op_pair();
@@ -191,17 +190,17 @@ fn add_read_to_pileup(read: &ReadEnd, preg: &PileupRegion, pileup: &mut Pileup, 
 				match op {
 					CigarOp::HardClip | CigarOp::SoftClip => clipped += len,
 					CigarOp::Overlap => overlap += len,
-					_ => trimmed += len, 
+					_ => if (op_type & 1) != 0 { trimmed += len }, 
 				}				
 			}			
 		}
 	}
-	(l, clipped, trimmed, overlap, low_qual)
+	(total_len, clipped, trimmed, overlap, low_qual)
 
 }
 
 fn handle_pileup(bs_cfg: Arc<BsCallConfig>, mut preg: PileupRegion, seq: &mut Option<Sequence>, 
-	ref_index: &Faidx, stat_tx: &mpsc::Sender<StatJob>, n_reads: &mut usize) -> io::Result<()> {
+	ref_index: &Faidx, stat_tx: &mpsc::Sender<StatJob>) -> io::Result<()> {
 	if preg.reads.is_empty() {
 		warn!("make_pileup received empty read vector");
 		return Ok(())
@@ -219,14 +218,13 @@ fn handle_pileup(bs_cfg: Arc<BsCallConfig>, mut preg: PileupRegion, seq: &mut Op
 	let mut pileup_vec = Vec::with_capacity(size);
 	for _ in 0..size { pileup_vec.push(PileupPos::new())}
 	let mut pileup = Pileup{data: pileup_vec, start: preg.start };
-	for rd in preg.reads.iter() {
+	for rd in preg.reads.drain(..) {
 		if let Some(read) = rd {
-			*n_reads += 1;
 			let (ltrim, rtrim) = if read.read_one() { (ltrim1, rtrim1) }
 			else if read.read_two() { (ltrim2, rtrim2) }
 			else { (0, 0) };
-			let (l, clipped, trimmed, overlap, low_qual) = add_read_to_pileup(read, &preg, &mut pileup, ltrim, rtrim, min_qual);
-			if !read.is_supplementary() {
+			let (l, clipped, trimmed, overlap, low_qual) = add_read_to_pileup(&read, &mut pileup, ltrim, rtrim, min_qual);
+			if read.is_primary() {
 				if clipped > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Clipped, clipped) };
 				if overlap > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Overlapping, overlap) };
 				if trimmed > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Trimmed, trimmed) };
@@ -237,7 +235,6 @@ fn handle_pileup(bs_cfg: Arc<BsCallConfig>, mut preg: PileupRegion, seq: &mut Op
 		}
 	}
 	for (flag, ct) in fs_stats.base_level().iter() { let _ = stat_tx.send(StatJob::AddFSBaseLevelCounts(*flag, *ct)); }
-
 	Ok(())
 }
 
@@ -245,13 +242,12 @@ pub fn make_pileup(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<PileupRe
 	info!("pileup_thread starting up()");
 	let ref_index = bs_files.ref_index.take().unwrap();
 	let mut seq: Option<Sequence> = None;
-	let mut nreads = 0;
 	loop {
 		match rx.recv() {
 			Ok(None) => break,
 			Ok(Some(preg)) => {
 				debug!("Received new pileup region: {}:{}-{}", preg.cname, preg.start, preg.end);
-				if let Err(e) = handle_pileup(Arc::clone(&bs_cfg), preg, &mut seq, &ref_index, &stat_tx, &mut nreads) {
+				if let Err(e) = handle_pileup(Arc::clone(&bs_cfg), preg, &mut seq, &ref_index, &stat_tx) {
 					error!("handle_pileup failed with error: {}", e);
 					break;
 				}
@@ -262,5 +258,5 @@ pub fn make_pileup(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<PileupRe
 			}
 		}
 	}
-	info!("pileup_thread shutting down after processing {} reads", nreads);
+	info!("pileup_thread shutting down");
 }	

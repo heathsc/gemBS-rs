@@ -166,6 +166,7 @@ pub enum FSReadLevelType {
 	LowMAPQ,
 	NotCorrectlyAligned,
 	PairNotFound,
+	ZeroUnclipped,
 }
 
 impl FSReadLevelType {

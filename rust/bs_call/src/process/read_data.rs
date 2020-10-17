@@ -85,6 +85,14 @@ fn send_pileup_job(reads: Vec<Option<ReadEnd>>, cname: &str, x: u32, y: u32, tid
 	} 	
 }
 
+fn 	count_passed_reads(reads: &[Option<ReadEnd>], fs_stats: &mut FSType) {
+	for rd in reads.iter() {
+		if let Some(read) = rd {
+			if read.is_primary() { fs_stats.add_read_level_count(FSReadLevelType::Passed, read.seq_qual.len()); }
+		}
+	}		
+}
+
 pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut bs_files: BsCallFiles) -> io::Result<()> {
 	
 	let mut sam_input = bs_files.sam_input.take().unwrap();
@@ -108,6 +116,7 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 					let cname = hdr.tid2name(cstate.tid as usize);
 					let (x, y) = (cstate.start_x, cstate.end_x);
 					debug!("Last block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
+					count_passed_reads(&reads, &mut fs_stats);
 					send_pileup_job(reads, cname, x, y, cstate.tid, &pileup_tx)?;
 				}
 				break;
@@ -123,6 +132,7 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 				StateChange::NewBlock((x,y)) => {
 					let cname = hdr.tid2name(cstate.tid as usize);
 					debug!("Ending block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
+					count_passed_reads(&reads, &mut fs_stats);
 					send_pileup_job(reads, cname, x, y, cstate.tid, &pileup_tx)?;
 					reads = Vec::new();
 					state_hash.clear();
@@ -130,6 +140,7 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 				StateChange::NewContig((tid, x, y)) => {
 					let cname = hdr.tid2name(tid as usize);
 					debug!("Ending contig with block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
+					count_passed_reads(&reads, &mut fs_stats);
 					send_pileup_job(reads, cname, x, y, tid, &pileup_tx)?;
 					reads = Vec::new();
 					state_hash.clear();
@@ -143,7 +154,7 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 			let insert = if let Some(state) = state_hash.get(id) {
 				match state {
 					ReadState::Duplicate => {
-						fs_stats.add_read_level_count(FSReadLevelType::Duplicate, brec.l_qseq() as usize);
+						if read.is_primary() { fs_stats.add_read_level_count(FSReadLevelType::Duplicate, brec.l_qseq() as usize); }
 						false
 					},
 					ReadState::Present(x) => {
@@ -158,11 +169,15 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 							} else {
 								// Get rid of reads that we have trimmed to zero length 
 								if rpair.maps[0].rlen() == 0 { 
-									fs_stats.add_read_level_count(rflag, rpair.seq_qual.len());
+									if rpair.is_primary() {
+										fs_stats.add_read_level_count(FSReadLevelType::ZeroUnclipped, rpair.seq_qual.len());
+									}
 									reads[*x] = None 
 								}
 								if read.maps[0].rlen() == 0 {
-									fs_stats.add_read_level_count(rflag, brec.l_qseq() as usize);
+									if read.is_primary() {
+										fs_stats.add_read_level_count(FSReadLevelType::ZeroUnclipped, brec.l_qseq() as usize);
+									}
 									false
 								} else { true }
 							}
@@ -172,6 +187,7 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 			} else {
 				// Check if duplicate of already stored read
 				if !keep_duplicates && read.check_dup(&reads[cstate.idx..]) {
+					if read.is_primary() { fs_stats.add_read_level_count(FSReadLevelType::Duplicate, brec.l_qseq() as usize); }
 					state_hash.insert(id.to_owned(), ReadState::Duplicate);
 					false
 				} else if map.is_last() {
@@ -180,15 +196,13 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 					true
 				} else { true }
 			};
-			if insert { 
-				fs_stats.add_read_level_count(FSReadLevelType::Passed, brec.l_qseq() as usize);
-				reads.push(Some(read)) 
-			};
-		} else { fs_stats.add_read_level_count(read_flag, brec.l_qseq() as usize); }
+			if insert { reads.push(Some(read)) };
+		} else if (brec.flag() & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY)) == 0 { // Only collect stats on primary reads
+			fs_stats.add_read_level_count(read_flag, brec.l_qseq() as usize); 
+		}
 	}
 	if pileup_tx.send(None).is_err() { warn!("Error trying to send QUIT signal to pileup thread") }
 	else if pileup_handle.join().is_err() { warn!("Error waiting for pileup thread to finish") }
-
 	for (flag, ct) in fs_stats.read_level().iter() { let _ = stat_tx.send(StatJob::AddFSReadLevelCounts(*flag, *ct)); }
 	Ok(())
 }
