@@ -4,8 +4,8 @@ use std::{cmp, io};
 use crate::config::{BsCallConfig, BsCallFiles};
 use crate::defs::CtgRegion;
 use super::records::ReadEnd;
-use crate::htslib::{Sequence, Faidx, CigarOp, hts_err, SeqQual, BSStrand};
-use crate::stats::{StatJob, FSBaseLevelType, FSType};
+use crate::htslib::{Sequence, Faidx, CigarOp, hts_err, BSStrand};
+use crate::stats::{StatJob, FSBaseLevelType, FSType, MethProfile};
 
 pub struct PileupRegion {
 	start: usize,
@@ -55,7 +55,9 @@ impl Default for PileupPos { fn default() -> Self { Self::new() }}
 
 pub struct Pileup {
 	data: Vec<PileupPos>,
+	ref_seq: Vec<u8>,
 	start: usize, 
+	ref_start: usize,
 }
 
 impl Pileup {
@@ -87,16 +89,37 @@ fn check_sequence(cname: &str, seq: &mut Option<Sequence>, ref_index: &Faidx) ->
 	Ok(())	
 }
 
-fn load_ref_seq(preg: &mut PileupRegion, seq: &Option<Sequence>) -> io::Result<(Vec<u8>, usize, usize)> {
+const REF_TAB: [u8; 256] = [
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
+];
+
+fn load_ref_seq(preg: &mut PileupRegion, seq: &Option<Sequence>) -> io::Result<(Vec<u8>, usize)> {
 	// Extend range if possible to allow the reference context to be displayed (unless we are at the ends of the chromosomes)
 	// if the end coordinate is past the end of the chromosome, get_seq will silently adjust it to the actual end point
 	// x and y will have the start and end points of the fetched sequence while preg.start and preg.end are the regions 
-	// for which the pileup will be generated
+	// for which the pileup will be generated.
+	// The returned sequence is copied to a vector and translated A=1, C=2, G=3, T=4, _=0
+	
 	let x = if preg.start > 2 {preg.start - 2} else {0};
-	let ref_seq = seq.as_ref().unwrap().get_seq(x, preg.end + 2)?.to_vec();
+	let ref_seq: Vec<_> = seq.as_ref().unwrap().get_seq(x, preg.end + 2)?.iter().map(|c| REF_TAB[*c as usize]).collect();
 	let y = x + ref_seq.len() - 1;
 	if preg.end > y { preg.end = y }
-	Ok((ref_seq, x, y))
+	Ok((ref_seq, x))
 }
 
 // Check that the region falls overlaps one of the predefined contig regions, and trim if necessary
@@ -119,7 +142,7 @@ fn check_regions(preg: &mut PileupRegion, regions: &[CtgRegion]) -> io::Result<(
 	} else { Err(hts_err("Pileup region does not overlap a contig region".to_string())) }
 }
 
-fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: usize, min_qual: u8) -> (usize, usize, usize, usize, usize) {
+fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: usize, min_qual: u8, mprof: &mut MethProfile) -> (usize, usize, usize, usize, usize) {
 	let cigar = &read.maps[0].cigar;
 	let sq = &read.seq_qual;
 	let mut ref_pos = read.maps[0].map_pos.pos as usize;
@@ -173,6 +196,13 @@ fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: 
 					match op {
 						CigarOp::Match | CigarOp::Equal | CigarOp::Diff => {
 							low_qual += pileup.add_obs(ref_pos, &sq[seq_pos..seq_pos + add], rev, bs, min_qual, mapq2);
+							let opos = if rev {
+								assert!(orig_seq_pos + add <= total_len);
+								total_len - 1 - orig_seq_pos
+							} else { orig_seq_pos };
+							// Get previous reference base
+							let state = if ref_pos > pileup.ref_start { pileup.ref_seq[ref_pos - 1 - pileup.ref_start] } else { 0 };
+							mprof.add_profile(&pileup.ref_seq[ref_pos - pileup.ref_start..], opos as isize, state, &sq[seq_pos..seq_pos + add], rev, bs);
 						},
 						CigarOp::Overlap => overlap += add,
 						_ => (),
@@ -200,7 +230,7 @@ fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: 
 }
 
 fn handle_pileup(bs_cfg: Arc<BsCallConfig>, mut preg: PileupRegion, seq: &mut Option<Sequence>, 
-	ref_index: &Faidx, stat_tx: &mpsc::Sender<StatJob>) -> io::Result<()> {
+	ref_index: &Faidx, stat_tx: &mpsc::Sender<StatJob>, meth_prof: &mut MethProfile) -> io::Result<()> {
 	if preg.reads.is_empty() {
 		warn!("make_pileup received empty read vector");
 		return Ok(())
@@ -212,18 +242,18 @@ fn handle_pileup(bs_cfg: Arc<BsCallConfig>, mut preg: PileupRegion, seq: &mut Op
 	let min_qual = bs_cfg.conf_hash.get_int("bq_threshold") as u8;
 	check_sequence(&preg.cname, seq, ref_index)?;
 	check_regions(&mut preg, &bs_cfg.regions)?;	
-	let (ref_seq, ref_start, ref_end) = load_ref_seq(&mut preg, seq)?;
+	let (ref_seq, ref_start) = load_ref_seq(&mut preg, seq)?;
 	let mut fs_stats = FSType::new();
 	let size = preg.end + 1 - preg.start;
 	let mut pileup_vec = Vec::with_capacity(size);
 	for _ in 0..size { pileup_vec.push(PileupPos::new())}
-	let mut pileup = Pileup{data: pileup_vec, start: preg.start };
+	let mut pileup = Pileup{data: pileup_vec, start: preg.start, ref_seq, ref_start };
 	for rd in preg.reads.drain(..) {
 		if let Some(read) = rd {
 			let (ltrim, rtrim) = if read.read_one() { (ltrim1, rtrim1) }
 			else if read.read_two() { (ltrim2, rtrim2) }
 			else { (0, 0) };
-			let (l, clipped, trimmed, overlap, low_qual) = add_read_to_pileup(&read, &mut pileup, ltrim, rtrim, min_qual);
+			let (l, clipped, trimmed, overlap, low_qual) = add_read_to_pileup(&read, &mut pileup, ltrim, rtrim, min_qual, meth_prof);
 			if read.is_primary() {
 				if clipped > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Clipped, clipped) };
 				if overlap > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Overlapping, overlap) };
@@ -241,13 +271,15 @@ fn handle_pileup(bs_cfg: Arc<BsCallConfig>, mut preg: PileupRegion, seq: &mut Op
 pub fn make_pileup(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<PileupRegion>>, mut bs_files: BsCallFiles, stat_tx: mpsc::Sender<StatJob>) {
 	info!("pileup_thread starting up()");
 	let ref_index = bs_files.ref_index.take().unwrap();
+	let min_qual = bs_cfg.conf_hash.get_int("bq_threshold") as u8;
+	let mut meth_prof = MethProfile::new(min_qual as usize);
 	let mut seq: Option<Sequence> = None;
 	loop {
 		match rx.recv() {
 			Ok(None) => break,
 			Ok(Some(preg)) => {
 				debug!("Received new pileup region: {}:{}-{}", preg.cname, preg.start, preg.end);
-				if let Err(e) = handle_pileup(Arc::clone(&bs_cfg), preg, &mut seq, &ref_index, &stat_tx) {
+				if let Err(e) = handle_pileup(Arc::clone(&bs_cfg), preg, &mut seq, &ref_index, &stat_tx, &mut meth_prof) {
 					error!("handle_pileup failed with error: {}", e);
 					break;
 				}
@@ -258,5 +290,6 @@ pub fn make_pileup(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<PileupRe
 			}
 		}
 	}
+	let _ = stat_tx.send(StatJob::SetNonCpgReadProfile(meth_prof.take_profile()));
 	info!("pileup_thread shutting down");
 }	

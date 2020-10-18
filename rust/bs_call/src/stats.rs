@@ -2,7 +2,9 @@ use chrono::prelude::*;
 use std::sync::mpsc;
 
 pub mod stats_json;
+pub mod meth_profile;
 pub use stats_json::{FSReadLevelType, FSBaseLevelType, FSType, FSCounts};
+pub use meth_profile::{MethProfile};
 
 pub struct Stats {
 	stats: stats_json::CallJson,
@@ -31,6 +33,7 @@ impl Drop for Stats {
 pub enum StatJob {
 	AddFSReadLevelCounts(FSReadLevelType, FSCounts),
 	AddFSBaseLevelCounts(FSBaseLevelType, usize),
+	SetNonCpgReadProfile(Vec<[usize; 4]>),
 	Quit,
 }
 
@@ -41,6 +44,7 @@ fn accumulate_stats(stats: &mut stats_json::CallJson, rx: mpsc::Receiver<StatJob
 			Ok(StatJob::Quit) => break,
 			Ok(StatJob::AddFSReadLevelCounts(fs_type, c)) => stats.filter_stats().add_read_level_fs_counts(fs_type, c),
 			Ok(StatJob::AddFSBaseLevelCounts(fs_type, c)) => stats.filter_stats().add_base_level_count(fs_type, c),
+			Ok(StatJob::SetNonCpgReadProfile(v)) => stats.total_stats().methylation().non_cpg_read_profile = Some(v),
 			Err(e) => {
 				warn!("stat_thread recieved error: {}", e);
 				break

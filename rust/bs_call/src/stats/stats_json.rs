@@ -385,7 +385,7 @@ impl CSType {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-struct TSType { 
+pub struct TSType { 
 	#[serde(flatten)]
 	basic_stats: BasicStats,
 	#[serde(rename = "dbSNPSites")]
@@ -417,6 +417,7 @@ impl TSType {
 			methylation: Methylation::new()
 		}
 	}
+	pub fn methylation(&mut self) -> &mut Methylation { &mut self.methylation }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -447,6 +448,7 @@ impl CallJson {
 	pub fn qc_dist(&self) -> &QCDist { &self.total_stats.qc_distributions }
 	pub fn methylation(&self) -> &Methylation { &self.total_stats.methylation }
 	pub fn filter_stats(&mut self) -> &mut FSType { &mut self.filter_stats}
+	pub fn total_stats(&mut self) -> &mut TSType { &mut self.total_stats}
 	pub fn basic_stats(&self) -> &BasicStats { &self.total_stats.basic_stats }
 	pub fn vcf_filter_stats(&self) -> &HashMap<String, QCCounts> { &self.total_stats.vcf_filter_stats }
 	pub fn mutations(&self) -> &HashMap<String, MutCounts> { &self.total_stats.mutations }
