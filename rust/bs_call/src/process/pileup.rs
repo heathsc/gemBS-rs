@@ -142,7 +142,7 @@ fn check_regions(preg: &mut PileupRegion, regions: &[CtgRegion]) -> io::Result<(
 	} else { Err(hts_err("Pileup region does not overlap a contig region".to_string())) }
 }
 
-fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: usize, min_qual: u8, mprof: &mut MethProfile) -> (usize, usize, usize, usize, usize) {
+fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: usize, min_qual: u8, mprof: &mut MethProfile) -> (usize, usize, usize, usize, usize, usize) {
 	let cigar = &read.maps[0].cigar;
 	let sq = &read.seq_qual;
 	let mut ref_pos = read.maps[0].map_pos.pos as usize;
@@ -154,7 +154,7 @@ fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: 
 	// Left and right trimming refers to the original direction of the reads
 	// so for a reversed read we need to reverse the trimming
 	let (t1, t2) = if rev { (rtrim, ltrim) } else { (ltrim, rtrim) };
-	let (mut clipped, mut trimmed, mut overlap, mut low_qual) = (0, 0, 0, 0);
+	let (mut clipped, mut trimmed, mut overlap, mut low_qual, mut inserts) = (0, 0, 0, 0, 0);
 	
 	// Get cut off for right trim using the original length of sequence (including hard clips if present)
 	let total_len = cigar.qlen1() as usize;
@@ -181,6 +181,7 @@ fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: 
 				match op {
 					CigarOp::HardClip | CigarOp::SoftClip => clipped += add,
 					CigarOp::Overlap => overlap += add,
+					CigarOp::Ins => inserts += add,
 					_ => trimmed += add, 
 				}
 				len -= add;
@@ -205,6 +206,8 @@ fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: 
 							mprof.add_profile(&pileup.ref_seq[ref_pos - pileup.ref_start..], opos as isize, state, &sq[seq_pos..seq_pos + add], rev, bs);
 						},
 						CigarOp::Overlap => overlap += add,
+						CigarOp::HardClip | CigarOp::SoftClip => clipped += len,
+						CigarOp::Ins => inserts += add,
 						_ => (),
 					} 
 					if (op_type & 1) != 0 {
@@ -220,12 +223,13 @@ fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: 
 				match op {
 					CigarOp::HardClip | CigarOp::SoftClip => clipped += len,
 					CigarOp::Overlap => overlap += len,
+					CigarOp::Ins => inserts += len,
 					_ => if (op_type & 1) != 0 { trimmed += len }, 
 				}				
 			}			
 		}
 	}
-	(total_len, clipped, trimmed, overlap, low_qual)
+	(total_len, clipped, trimmed, overlap, low_qual, inserts)
 
 }
 
@@ -253,12 +257,13 @@ fn handle_pileup(bs_cfg: Arc<BsCallConfig>, mut preg: PileupRegion, seq: &mut Op
 			let (ltrim, rtrim) = if read.read_one() { (ltrim1, rtrim1) }
 			else if read.read_two() { (ltrim2, rtrim2) }
 			else { (0, 0) };
-			let (l, clipped, trimmed, overlap, low_qual) = add_read_to_pileup(&read, &mut pileup, ltrim, rtrim, min_qual, meth_prof);
+			let (l, clipped, trimmed, overlap, low_qual, inserts) = add_read_to_pileup(&read, &mut pileup, ltrim, rtrim, min_qual, meth_prof);
 			if read.is_primary() {
 				if clipped > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Clipped, clipped) };
 				if overlap > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Overlapping, overlap) };
 				if trimmed > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Trimmed, trimmed) };
 				if low_qual > 0 { fs_stats.add_base_level_count(FSBaseLevelType::LowQuality, low_qual) };
+				if inserts > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Inserts, low_qual) };
 				let nflt = clipped + overlap + trimmed + low_qual;
 				if nflt < l { fs_stats.add_base_level_count(FSBaseLevelType::Passed, l - nflt) };
 			}

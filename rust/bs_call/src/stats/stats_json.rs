@@ -200,6 +200,7 @@ pub enum FSBaseLevelType {
 	Clipped,
 	Overlapping,
 	LowQuality,
+	Inserts,
 }
 
 impl FSBaseLevelType {
