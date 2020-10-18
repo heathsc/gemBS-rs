@@ -264,8 +264,9 @@ fn handle_pileup(bs_cfg: Arc<BsCallConfig>, mut preg: PileupRegion, seq: &mut Op
 				if trimmed > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Trimmed, trimmed) };
 				if low_qual > 0 { fs_stats.add_base_level_count(FSBaseLevelType::LowQuality, low_qual) };
 				if inserts > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Inserts, low_qual) };
-				let nflt = clipped + overlap + trimmed + low_qual;
-				if nflt < l { fs_stats.add_base_level_count(FSBaseLevelType::Passed, l - nflt) };
+				let nflt = clipped + overlap + trimmed + low_qual + inserts;
+				assert!(nflt <= l);
+				fs_stats.add_base_level_count(FSBaseLevelType::Passed, l - nflt);
 			}
 		}
 	}
