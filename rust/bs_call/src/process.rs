@@ -9,9 +9,12 @@ pub mod sam;
 pub mod records;
 pub mod read_data;
 pub mod pileup;
+pub mod call_genotypes;
 
 pub use vcf::*;
 pub use sam::*;
+
+pub const GT_HET: [bool; 10] = [false, true, true, true, false, true, true, false, true, false];
 
 pub fn process(bs_cfg: Arc<BsCallConfig>, bs_files: BsCallFiles) -> io::Result<()> {
 	// Set up stats logging thread

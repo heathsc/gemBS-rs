@@ -1,9 +1,10 @@
 use std::sync::{Arc, mpsc};
-use std::{cmp, io};
+use std::{cmp, io, thread, slice};
 
 use crate::config::{BsCallConfig, BsCallFiles};
 use crate::defs::CtgRegion;
 use super::records::ReadEnd;
+use super::call_genotypes;
 use crate::htslib::{Sequence, Faidx, CigarOp, hts_err, BSStrand};
 use crate::stats::{StatJob, FSBaseLevelType, FSType, MethProfile};
 
@@ -22,9 +23,9 @@ impl PileupRegion {
 }
 
 pub struct PileupPos {
-	counts: [u32; 16],
-	quality: [f32; 8],
-	mapq2: f32	
+	pub counts: [u32; 16],
+	pub quality: [f32; 8],
+	pub mapq2: f32	
 }
 
 const TAB_UNCONV: [usize; 4] = [0, 1, 2, 3];
@@ -54,13 +55,20 @@ impl PileupPos {
 impl Default for PileupPos { fn default() -> Self { Self::new() }}
 
 pub struct Pileup {
-	data: Vec<PileupPos>,
-	ref_seq: Vec<u8>,
-	start: usize, 
-	ref_start: usize,
+	pub data: Vec<PileupPos>,
+	pub ref_seq: Vec<u8>,
+	pub start: usize, 
+	pub ref_start: usize,
+	pub sam_tid: usize,
 }
 
 impl Pileup {
+	fn new(data: Vec<PileupPos>, ref_seq: Vec<u8>, start: usize, ref_start: usize, sam_tid: usize) -> Self {
+		assert!(start >= ref_start);
+		assert!(start - ref_start <= 2);
+		Self{data, ref_seq, start, ref_start, sam_tid}
+	}
+	
 	fn add_obs(&mut self, pos: usize, sq: &[u8], rev: bool, bs: BSStrand, min_qual: u8, mapq2: f32) -> usize {
 		let mut lq_ct = 0;
 		let max = self.start + self.data.len();
@@ -72,6 +80,27 @@ impl Pileup {
 		}
 		lq_ct
 	}
+	
+	pub fn get_prec_2_bases(&self) -> [u8; 2] {
+		match self.start - self.ref_start {
+			0 => [0, 0],
+			1 => [0, self.ref_seq[0]],
+			2 => [self.ref_seq[0], self.ref_seq[1]],
+			_ => panic!("Illegal configuration"),
+		}
+	}
+	
+	pub fn get_ref_iter(&self) -> slice::Iter<u8> {	self.ref_seq[self.start - self.ref_start..].iter() }
+}
+
+fn send_call_job(pileup: Pileup, call_tx: &mpsc::Sender<Option<Pileup>>) -> io::Result<()> {
+	match call_tx.send(Some(pileup)) { 
+		Err(e) => {
+			warn!("Error trying to send new region to call_genotypes thread");
+			Err(hts_err(format!("Error sending region to call_genotypes thread: {}", e)))
+		},
+		Ok(_) => Ok(()),
+	} 	
 }
 
 fn check_sequence(cname: &str, seq: &mut Option<Sequence>, ref_index: &Faidx) -> io::Result<()> {
@@ -233,8 +262,8 @@ fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: 
 
 }
 
-fn handle_pileup(bs_cfg: Arc<BsCallConfig>, mut preg: PileupRegion, seq: &mut Option<Sequence>, 
-	ref_index: &Faidx, stat_tx: &mpsc::Sender<StatJob>, meth_prof: &mut MethProfile) -> io::Result<()> {
+fn handle_pileup(bs_cfg: &BsCallConfig, mut preg: PileupRegion, seq: &mut Option<Sequence>, 
+	ref_index: &Faidx, stat_tx: &mpsc::Sender<StatJob>, call_tx: &mpsc::Sender<Option<Pileup>>, meth_prof: &mut MethProfile) -> io::Result<()> {
 	if preg.reads.is_empty() {
 		warn!("make_pileup received empty read vector");
 		return Ok(())
@@ -251,7 +280,7 @@ fn handle_pileup(bs_cfg: Arc<BsCallConfig>, mut preg: PileupRegion, seq: &mut Op
 	let size = preg.end + 1 - preg.start;
 	let mut pileup_vec = Vec::with_capacity(size);
 	for _ in 0..size { pileup_vec.push(PileupPos::new())}
-	let mut pileup = Pileup{data: pileup_vec, start: preg.start, ref_seq, ref_start };
+	let mut pileup = Pileup::new(pileup_vec, ref_seq, preg.start, ref_start, preg.sam_tid);
 	for rd in preg.reads.drain(..) {
 		if let Some(read) = rd {
 			let (ltrim, rtrim) = if read.read_one() { (ltrim1, rtrim1) }
@@ -270,14 +299,20 @@ fn handle_pileup(bs_cfg: Arc<BsCallConfig>, mut preg: PileupRegion, seq: &mut Op
 			}
 		}
 	}
+	send_call_job(pileup, &call_tx)?;	
 	for (flag, ct) in fs_stats.base_level().iter() { let _ = stat_tx.send(StatJob::AddFSBaseLevelCounts(*flag, *ct)); }
 	Ok(())
 }
 
 pub fn make_pileup(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<PileupRegion>>, mut bs_files: BsCallFiles, stat_tx: mpsc::Sender<StatJob>) {
-	info!("pileup_thread starting up()");
+	info!("pileup_thread starting up");
 	let ref_index = bs_files.ref_index.take().unwrap();
-	let min_qual = bs_cfg.conf_hash.get_int("bq_threshold") as u8;
+	let (call_tx, call_rx) = mpsc::channel();
+	let cfg = Arc::clone(&bs_cfg);
+	let st_tx = mpsc::Sender::clone(&stat_tx);
+	let call_handle = thread::spawn(move || { call_genotypes::call_genotypes(Arc::clone(&bs_cfg), call_rx, bs_files, st_tx) });
+
+	let min_qual = cfg.conf_hash.get_int("bq_threshold") as u8;
 	let mut meth_prof = MethProfile::new(min_qual as usize);
 	let mut seq: Option<Sequence> = None;
 	loop {
@@ -285,7 +320,7 @@ pub fn make_pileup(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<PileupRe
 			Ok(None) => break,
 			Ok(Some(preg)) => {
 				debug!("Received new pileup region: {}:{}-{}", preg.cname, preg.start, preg.end);
-				if let Err(e) = handle_pileup(Arc::clone(&bs_cfg), preg, &mut seq, &ref_index, &stat_tx, &mut meth_prof) {
+				if let Err(e) = handle_pileup(&cfg, preg, &mut seq, &ref_index, &stat_tx, &call_tx, &mut meth_prof) {
 					error!("handle_pileup failed with error: {}", e);
 					break;
 				}
@@ -296,6 +331,10 @@ pub fn make_pileup(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<PileupRe
 			}
 		}
 	}
-	let _ = stat_tx.send(StatJob::SetNonCpgReadProfile(meth_prof.take_profile()));
+	if call_tx.send(None).is_err() { warn!("Error trying to send QUIT signal to call_genotypes thread") }
+	else {
+		let _ = stat_tx.send(StatJob::SetNonCpgReadProfile(meth_prof.take_profile()));
+		if call_handle.join().is_err() { warn!("Error waiting for call_genotype thread to finish") }
+	}
 	info!("pileup_thread shutting down");
 }	

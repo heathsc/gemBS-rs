@@ -84,7 +84,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(BsCallConfig, BsCallFiles)>
 	// And now the odd options
 	
 	// Conversion rates
-	let (under, over) = if let Some(v) = cli_utils::get_fvec(m, "conversion", 0.0, 1.0)? { (v[0], v[1]) }
+	let (under, over) = if let Some(v) = cli_utils::get_fvec(m, "conversion", 1.0e-8, 1.0 - 1.0e-8)? { (v[0], v[1]) }
 	else { (0.01, 0.05) };
 	conf_hash.insert(&"under_conversion", ConfVar::Float(under));
 	conf_hash.insert(&"over_conversion", ConfVar::Float(over));	

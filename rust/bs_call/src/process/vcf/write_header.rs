@@ -107,7 +107,7 @@ pub fn write_vcf_header(bs_cfg: &mut BsCallConfig, bs_files: &mut BsCallFiles, s
 	else { "SAMPLE" };
 	hd.add_sample(sample)?;
 	hd.sync()?;
-	// Get VCF/BCF header IDs for contigs and filters
+	// Get VCF/BCF header IDs for contigs
 	contigs::set_contig_vcf_ids(&hd, contigs, sam_file); 
 	// And write out header
 	bs_files.vcf_output.as_mut().unwrap().write_hdr()?;	

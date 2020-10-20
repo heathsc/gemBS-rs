@@ -47,7 +47,7 @@ impl State {
 				change = StateChange::NewContig((state.tid, state.start_x, state.end_x));
 				state.tid = mp.tid;
 				state_cp(&mut state);
-			} else if start_x > state.end_x {
+			} else if start_x > state.end_x + 2 { // Want at least 2 bases free between blocks to avoid issues with call context in VCF output
 				change = StateChange::NewBlock((state.start_x, state.end_x));
 				state_cp(&mut state);
 			} else {
@@ -205,7 +205,9 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 		}
 	}
 	if pileup_tx.send(None).is_err() { warn!("Error trying to send QUIT signal to pileup thread") }
-	else if pileup_handle.join().is_err() { warn!("Error waiting for pileup thread to finish") }
-	for (flag, ct) in fs_stats.read_level().iter() { let _ = stat_tx.send(StatJob::AddFSReadLevelCounts(*flag, *ct)); }
+	else {
+		for (flag, ct) in fs_stats.read_level().iter() { let _ = stat_tx.send(StatJob::AddFSReadLevelCounts(*flag, *ct)); }
+		if pileup_handle.join().is_err() { warn!("Error waiting for pileup thread to finish") }
+	}
 	Ok(())
 }

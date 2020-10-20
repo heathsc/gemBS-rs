@@ -38,7 +38,7 @@ pub enum StatJob {
 }
 
 fn accumulate_stats(stats: &mut stats_json::CallJson, rx: mpsc::Receiver<StatJob>) {
-	info!("stat_thread starting up()");
+	info!("stat_thread starting up");
 	loop {
 		match rx.recv() {
 			Ok(StatJob::Quit) => break,
@@ -51,12 +51,12 @@ fn accumulate_stats(stats: &mut stats_json::CallJson, rx: mpsc::Receiver<StatJob
 			}
 		}
 	}
-	info!("stat_thread shutting down()");
+	info!("stat_thread shutting down");
 }
 
 // No output stats file supplied so we just throw away all messages apart from Quit
 fn dummy_job(rx: mpsc::Receiver<StatJob>) {
-	info!("dummy stat_thread starting up()");
+	debug!("dummy stat_thread starting up");
 	loop {
 		match rx.recv() {
 			Ok(StatJob::Quit) => break,
@@ -67,7 +67,7 @@ fn dummy_job(rx: mpsc::Receiver<StatJob>) {
 			_ => (),
 		}
 	}
-	info!("dummy stat_thread shutting down()");
+	debug!("dummy stat_thread shutting down");
 }
 
 pub fn stat_thread(stats_name: Option<String>, source: String, rx: mpsc::Receiver<StatJob>) {
