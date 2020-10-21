@@ -1,5 +1,7 @@
 use std::cmp;
+use std::f64::consts::LN_10;
 use crate::process::GT_HET;
+
 
 use libc::c_double;
 
@@ -23,7 +25,7 @@ impl FisherTest {
 		Self{lfact_store}
 	}
 	
-	pub fn calc_fs_stat(&self, mx: usize, cts: &[u32], ln_10: f64) -> f64 {
+	pub fn calc_fs_stat(&self, mx: usize, cts: &[u32]) -> f64 {
 		if GT_HET[mx] {
 			let get_cts = |x: &[usize], y: &[usize]| [x.iter().fold(0, |s, x| s + cts[*x]), y.iter().fold(0, |s, x| s + cts[*x]),
 				x.iter().fold(0, |s, x| s + cts[*x + 8]), y.iter().fold(0, |s, x| s + cts[*x + 8])];
@@ -38,7 +40,7 @@ impl FisherTest {
 				_ => panic!("Unexpected genotype"),
 			};
 			let z = self.fisher(&ftab);
-			(if z < 1.0e-20 { 1.0e-20 } else { z }).ln() / ln_10
+			(if z < 1.0e-20 { 1.0e-20 } else { z }).ln() / LN_10
 		} else { 0.0 } 
 	}	
 	

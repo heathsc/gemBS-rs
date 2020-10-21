@@ -1,3 +1,6 @@
+use std::f64::consts::LN_10;
+use libc::c_int;
+
 pub struct QualProb {
 	k: f64,
 	ln_k: f64,
@@ -11,17 +14,15 @@ pub struct Model {
 	ln_ref_bias_1: f64,
 	lambda: f64, // 1 - under_conversion rate
 	theta: f64, // over_conversion rate
-	ln_10: f64,
 }
 
 impl Model {
 	pub fn new(max_qual: usize, conv: (f64, f64), ref_bias: f64) -> Self {
 		assert!(conv.0 > 0.0 && conv.0 < 1.0 && conv.1 > 0.0 && conv.1 < 1.0 && ref_bias > 0.0);
 		let mut v = Vec::with_capacity(max_qual + 1);
-		let ln_10 = 10.0_f64.ln();
 		for q in 0..=max_qual {
 			let e = {
-				let t = ((q as f64) * ln_10 * -0.1).exp();
+				let t = ((q as f64) * LN_10 * -0.1).exp();
 				if t > 0.5 { 0.5 } else { t }
 			};
 			let k = e / (3.0 - 4.0 * e);
@@ -32,9 +33,8 @@ impl Model {
 				ln_k_one: k.ln_1p(),
 			})
 		}
-		Self{qtab: v, lambda: 1.0 - conv.0, theta: conv.1, ln_ref_bias: ref_bias.ln(), ln_ref_bias_1:(0.5 * (1.0 + ref_bias)).ln(), ln_10 }
+		Self{qtab: v, lambda: 1.0 - conv.0, theta: conv.1, ln_ref_bias: ref_bias.ln(), ln_ref_bias_1:(0.5 * (1.0 + ref_bias)).ln() }
 	}
-	pub fn ln_10(&self) -> f64 { self.ln_10 }
 
   /*********************************************************************************************
    * Base and methylation frequencies are described by 5 parameters: w, p, q, mc, mg
@@ -66,8 +66,8 @@ impl Model {
    * only the 10 possible diploid genotypes)
    *
    **********************************************************************************************/	
-	pub fn calc_gt_prob(&self, counts: &[usize; 8], qual: &[usize; 8], ref_base: u8) -> (usize, [f64; 10]) {
-		let qp: Vec<_> = qual.iter().map(|x| &self.qtab[*x]).collect();
+	pub fn calc_gt_prob(&self, counts: &[c_int; 8], qual: &[c_int; 8], ref_base: u8) -> (usize, [f64; 10]) {
+		let qp: Vec<_> = qual.iter().map(|x| &self.qtab[*x as usize]).collect();
 		let n: Vec<_> = counts.iter().map(|x| *x as f64).collect();
 		let mut ll = self.add_ref_prior(ref_base);
 		let get_par = |i: usize| (n[i] * qp[i].ln_k_one, n[i] * qp[i].ln_k_half, n[i] * qp[i].ln_k);		
@@ -108,9 +108,9 @@ impl Model {
 			let tz2 = n[7] * (0.5 * (1.0 - z0.2) + qp[7].k).ln();
 			add_contrib(&[tz1, tz2, tz1, tz, n[7] * (1.0 - z1.0 + qp[7].k).ln(), tz2, n[7] * (1.0 - 0.5 * z1.1 + qp[7].k).ln(), tz1, tz, x]);
 		}
-		let (mx, max) = ll[1..].iter().cloned().enumerate().fold((0, ll[0]), |(i, m), (j, l)| if l > m { (j, l) } else { (i, m) });
+		let (mx, max) = ll[1..].iter().cloned().enumerate().fold((0, ll[0]), |(i, m), (j, l)| if l > m { (j + 1, l) } else { (i, m) });
 		let sum = (ll.iter().cloned().fold(0.0, |s, x| s + (x - max).exp())).ln();
-		ll.iter_mut().for_each(|x| *x = (*x - max - sum) / self.ln_10);
+		ll.iter_mut().for_each(|x| *x = (*x - max - sum) / LN_10);
 		(mx, ll)
 	}
 

@@ -1,6 +1,8 @@
 use std::sync::{Arc, mpsc};
 use std::{cmp, io, thread};
 
+use libc::c_int;
+
 use crate::config::{BsCallConfig, BsCallFiles};
 use super::pileup::Pileup;
 use crate::stats::StatJob;
@@ -16,13 +18,14 @@ use fisher::FisherTest;
 pub enum CallEntry {
 	Call(GenotypeCall),
 	Skip(u8),
+	Starting(u8),
 }
 
 pub struct GenotypeCall {
-	pub counts: [usize; 8],
+	pub counts: [c_int; 8],
 	pub gt_ll: [f64; 10],
 	pub fisher_strand: f64,
-	pub qual: [usize; 8],
+	pub qual: [c_int; 8],
 	pub mq: u8,
 	pub aq: u8,
 	pub max_gt: u8,
@@ -44,19 +47,19 @@ fn call_from_pileup(pileup: Pileup, model: &Model, fisher: &FisherTest, write_tx
 	// Send call_block to output thread
 	let mut call_vec = Vec::with_capacity(BLOCK_SIZE);
 	for (pp, ref_base) in pileup.data.iter().zip(pileup.get_ref_iter()) {
-		let mut counts: [usize; 8] = [0; 8];
-		let total = pp.counts.iter().map(|x| *x as usize).enumerate().fold(0, |s, (i, x)| { counts[i & 7] += x; s + x} );
+		let mut counts: [c_int; 8] = [0; 8];
+		let total = pp.counts.iter().map(|x| *x as c_int).enumerate().fold(0, |s, (i, x)| { counts[i & 7] += x; s + x} );
 		let call = if total > 0 {
 			let total_flt = total as f32;
-			let mut qual: [usize; 8] = [0; 8];
+			let mut qual: [c_int; 8] = [0; 8];
 			let total_qual = counts.iter().enumerate().filter(|(_, n)| *n > &0).fold(0.0, |s, (i, n)| {
-				qual[i] = cmp::min((pp.quality[i] / (*n as f32)).round() as usize, 63);
+				qual[i] = cmp::min((pp.quality[i] / (*n as f32)).round() as c_int, 63);
 				s + pp.quality[i]
 			});
 			let aq = cmp::min((total_qual / (total_flt as f32)).round() as usize, 255) as u8;
 			let mq = cmp::min((pp.mapq2 / (total_flt as f32)).sqrt().round() as usize, 255) as u8;
 			let (mx, gt_ll) = model.calc_gt_prob(&counts, &qual, *ref_base);
-			let fisher_strand = fisher.calc_fs_stat(mx, &pp.counts, model.ln_10());
+			let fisher_strand = fisher.calc_fs_stat(mx, &pp.counts);
 			CallEntry::Call(GenotypeCall{counts, gt_ll, fisher_strand, qual, mq, aq, max_gt: mx as u8, ref_base: *ref_base})
 		} else { CallEntry::Skip(*
 		ref_base) };

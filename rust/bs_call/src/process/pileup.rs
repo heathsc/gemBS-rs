@@ -235,7 +235,7 @@ fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: 
 							mprof.add_profile(&pileup.ref_seq[ref_pos - pileup.ref_start..], opos as isize, state, &sq[seq_pos..seq_pos + add], rev, bs);
 						},
 						CigarOp::Overlap => overlap += add,
-						CigarOp::HardClip | CigarOp::SoftClip => clipped += len,
+						CigarOp::HardClip | CigarOp::SoftClip => clipped += add,
 						CigarOp::Ins => inserts += add,
 						_ => (),
 					} 
