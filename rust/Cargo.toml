@@ -2,5 +2,5 @@
 members = ["gemBS", "read_filter", "bs_call"]
 
 [profile.release]
-# lto = true
+lto = "thin"
 panic = 'abort'
