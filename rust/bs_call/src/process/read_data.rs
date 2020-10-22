@@ -74,7 +74,7 @@ enum StateChange {
 	NewContig((u32, u32, u32)),
 }
 
-fn send_pileup_job(reads: Vec<Option<ReadEnd>>, cname: &str, x: u32, y: u32, tid: u32, pileup_tx: &mpsc::Sender<Option<pileup::PileupRegion>>) -> io::Result<()> {
+fn send_pileup_job(reads: Vec<Option<ReadEnd>>, cname: &str, x: u32, y: u32, tid: u32, pileup_tx: &mpsc::SyncSender<Option<pileup::PileupRegion>>) -> io::Result<()> {
 	let preg = pileup::PileupRegion::new(cname, x as usize, y as usize, tid as usize, reads);
 	match pileup_tx.send(Some(preg)) { 
 		Err(e) => {
@@ -97,7 +97,7 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 	
 	let mut sam_input = bs_files.sam_input.take().unwrap();
 	let mut fs_stats = FSType::new();
-	let (pileup_tx, pileup_rx) = mpsc::channel();
+	let (pileup_tx, pileup_rx) = mpsc::sync_channel(32);
 	let cfg = Arc::clone(&bs_cfg);
 	let st_tx = mpsc::Sender::clone(&stat_tx);
 	let pileup_handle = thread::spawn(move || { pileup::make_pileup(Arc::clone(&bs_cfg), pileup_rx, bs_files, st_tx) });

@@ -239,31 +239,34 @@ fn enc_u8(v: &mut Vec<u8>, x: u8) {
 	v.push(x);
 }
 
+#[inline]
 fn enc_vchar(v: &mut Vec<u8>, s: &[u8]) { 
 	enc_size(v, s.len() as c_int, BCF_BT_CHAR);
 	v.extend_from_slice(s) 
 }
 
+#[inline]
 fn enc_vfloat(v: &mut Vec<u8>, s: &[f32]) {
 	enc_size(v, s.len() as c_int, BCF_BT_FLOAT);
 	s.iter().copied().for_each(|x| v.extend_from_slice(&x.to_le_bytes()));
 }
 
 fn enc_vint(v: &mut Vec<u8>, s: &[c_int]) {
-	if s.len() == 1 { enc_int(v, s[0])}
-	else {
-		let (min, max): (c_int, c_int) = s[1..].iter().copied().fold((s[0], s[0]), |(mn, mx), x| if x < mn { (x, mx) } else if x > mx { (mn, x) } else { (mn, mx) });
-		if max <= BCF_MAX_BT_INT8 && min >= BCF_MIN_BT_INT8 {
-			enc_size(v, s.len() as c_int, BCF_BT_INT8);
-			s.iter().copied().for_each(|x| v.push(x as u8));
-		} else if max <= BCF_MAX_BT_INT16 && min >= BCF_MIN_BT_INT16 {
-			enc_size(v, s.len() as c_int, BCF_BT_INT16);
-			s.iter().copied().for_each(|x| v.extend_from_slice(&(x as u16).to_le_bytes()));
-		} else {
-			enc_size(v, s.len() as c_int, BCF_BT_INT32);
-			s.iter().copied().for_each(|x| v.extend_from_slice(&(x as u32).to_le_bytes()));							
-		}
-	}		
+	let (min, max): (c_int, c_int) = s[1..].iter().copied().fold((s[0], s[0]), |(mn, mx), x| if x < mn { (x, mx) } else if x > mx { (mn, x) } else { (mn, mx) });
+	enc_vint_(v, s, min, max);
+}
+
+fn enc_vint_(v: &mut Vec<u8>, s: &[c_int], min: c_int, max: c_int) {
+	if max <= BCF_MAX_BT_INT8 && min >= BCF_MIN_BT_INT8 {
+		enc_size(v, s.len() as c_int, BCF_BT_INT8);
+		s.iter().copied().for_each(|x| v.push(x as u8));
+	} else if max <= BCF_MAX_BT_INT16 && min >= BCF_MIN_BT_INT16 {
+		enc_size(v, s.len() as c_int, BCF_BT_INT16);
+		s.iter().copied().for_each(|x| v.extend_from_slice(&(x as u16).to_le_bytes()));
+	} else {
+		enc_size(v, s.len() as c_int, BCF_BT_INT32);
+		s.iter().copied().for_each(|x| v.extend_from_slice(&(x as u32).to_le_bytes()));							
+	}
 }
 
 fn write_fixed_columns(call: &GenotypeCall, filter_ids: &[u8], v: &mut Vec<u8>, call_stats: &CallStats, ref_context: &[u8], bcf_rec: &mut BcfRec) -> io::Result<usize> {
@@ -308,7 +311,6 @@ fn write_format_columns(call: &GenotypeCall, filter_ids: &[u8], called_context: 
 	let flt_str = get_filter_string(filter);
 	enc_u8(v, filter_ids[FLT_ID_FT]);
 	enc_vchar(v, flt_str.as_bytes());
-
 	// DP
 	enc_u8(v, filter_ids[FLT_ID_DP]);
 	enc_int(v, call_stats.dp1);
@@ -326,13 +328,14 @@ fn write_format_columns(call: &GenotypeCall, filter_ids: &[u8], called_context: 
 	enc_u8(v, filter_ids[FLT_ID_GL]);
 	enc_vfloat(v, &gl);
 	// MC8
+	let (max, nz) = call.counts.iter().copied().fold((0, 0), |(m, n), x| if x > m { (x, n + 1) } else if x > 0 { (m, n + 1) } else { (m , n) } );
 	enc_u8(v, filter_ids[FLT_ID_MC8]);
-	enc_vint(v, &call.counts);
+	enc_vint_(v, &call.counts, 0 , max);
 	// AMQ
-	let tv: Vec<c_int> = call.counts.iter().copied().zip(call.qual.iter()).filter(|(c,_)| *c > 0).map(|(_, q)| *q).collect();
-	if !tv.is_empty() {
+	if nz > 0 {
 		enc_u8(v, filter_ids[FLT_ID_AMQ]);
-		enc_vint(v, &tv);
+		v.push(((nz as u8) << 4) | BCF_BT_INT8);
+		call.qual.iter().copied().for_each(|q| if q > 0 { v.push(q as u8) });
 		n_fmt += 1;
 	}
 	// CS
@@ -358,33 +361,37 @@ fn write_format_columns(call: &GenotypeCall, filter_ids: &[u8], called_context: 
 }
 
 struct WriteState {
-	sam_tid: usize,
+	vcf_rid: usize,
 	curr_x: usize,
 	call_buf: VecDeque<CallEntry>,
 	bcf_rec: BcfRec,
 	tvec: Vec<u8>,
+	all_positions: bool,
 }
 
 impl WriteState {
-	fn new_block(call_block: CallBlock) -> Self {
+	fn new_block(call_block: CallBlock, bs_cfg: &BsCallConfig) -> Self {
 		let mut v = VecDeque::with_capacity(5);
 		for _ in 0..3 { v.push_back(CallEntry::Starting(0)) }
 		for c in call_block.prec_ref_bases.iter() { v.push_back(CallEntry::Starting(*c)) }
 		let bcf_rec = BcfRec::new().expect("Couldn't allocate Bcf Record");
 		let tvec = Vec::with_capacity(256);
-		Self { sam_tid: call_block.sam_tid, curr_x: call_block.start, call_buf: v, bcf_rec, tvec}
+		let vcf_rid = bs_cfg.ctg_vcf_id(call_block.sam_tid).expect("Contig not in VCF list");
+		let all_positions = bs_cfg.conf_hash.get_bool("all_positions");
+
+		Self { vcf_rid, all_positions, curr_x: call_block.start, call_buf: v, bcf_rec, tvec}
 	}
-	fn finish_block(&mut self, bs_cfg: &BsCallConfig, vcf_output: &mut VcfFile, filter_ids: &[u8], stat_tx: &mpsc::Sender<StatJob>) -> io::Result<()> {
+	fn finish_block(&mut self, vcf_output: &mut VcfFile, filter_ids: &[u8], stat_tx: &mpsc::Sender<StatJob>) -> io::Result<()> {
 		for _ in 0..2 {
 			self.add_entry(CallEntry::Skip(0));
-			self.write_entry(bs_cfg, vcf_output, filter_ids, stat_tx)?;
+			self.write_entry(vcf_output, filter_ids, stat_tx)?;
 		}
 		Ok(())
 	}
-	fn handle_calls(&mut self, mut call_vec: Vec<CallEntry>, bs_cfg: &BsCallConfig, vcf_output: &mut VcfFile, filter_ids: &[u8], stat_tx: &mpsc::Sender<StatJob>) -> io::Result<()> {
+	fn handle_calls(&mut self, mut call_vec: Vec<CallEntry>, vcf_output: &mut VcfFile, filter_ids: &[u8], stat_tx: &mpsc::Sender<StatJob>) -> io::Result<()> {
 		for entry in call_vec.drain(..) {
 			self.add_entry(entry);
-			self.write_entry(bs_cfg, vcf_output, filter_ids, stat_tx)?;
+			self.write_entry(vcf_output, filter_ids, stat_tx)?;
 		}
 		Ok(())
 	}
@@ -393,10 +400,9 @@ impl WriteState {
 		self.call_buf.push_back(entry);
 		let _ = self.call_buf.pop_front();		
 	}
-	fn write_entry(&mut self, bs_cfg: &BsCallConfig, vcf_output: &mut VcfFile, filter_ids: &[u8], stat_tx: &mpsc::Sender<StatJob>) -> io::Result<()> {
+	fn write_entry(&mut self, vcf_output: &mut VcfFile, filter_ids: &[u8], stat_tx: &mpsc::Sender<StatJob>) -> io::Result<()> {
 		match &self.call_buf[2] {
 			CallEntry::Call(call) => {
-				let all_positions = bs_cfg.conf_hash.get_bool("all_positions");
 				let dp1: c_int = call.counts[0..4].iter().sum();
 				let d_inf: c_int = call.counts[4..].iter().sum();
 				// Skip sites with no coverage
@@ -407,7 +413,7 @@ impl WriteState {
 				let qd = if dp1 > 0 { phred / dp1 } else { phred };
 				let call_stats = CallStats{phred, fs, dp1, qd};
 				// Skip sites where the call is AA or TT and the reference base is A or T respectively (unless all sites option is given)
-				let skip = !all_positions && !GT_FLAG[call.max_gt as usize][call.ref_base as usize];
+				let skip = !self.all_positions && !GT_FLAG[call.max_gt as usize][call.ref_base as usize];
 				let bcf_rec = &mut self.bcf_rec;
 				let mut ref_context = Vec::with_capacity(5);
 				let mut called_gt = Vec::with_capacity(5);
@@ -422,9 +428,8 @@ impl WriteState {
 				let called_context: Vec<u8> = called_gt.iter().copied().map(|g| IUPAC.as_bytes()[g]).collect(); 
 				let filter = if !skip {
 					let tvec = &mut self.tvec;
-					let rid = bs_cfg.ctg_vcf_id(self.sam_tid).expect("Contig not in VCF list");
 					bcf_rec.clear();
-					bcf_rec.set_rid(rid); 
+					bcf_rec.set_rid(self.vcf_rid); 
 					bcf_rec.set_pos(self.curr_x);
 					let flt = write_fixed_columns(call, filter_ids, tvec, &call_stats, &ref_context, bcf_rec)?;
 					let cpg = CPG_DISPLAY[cmp::max(CPG_STATE[called_gt[1]][called_gt[2]], CPG_STATE[called_gt[2]][called_gt[3]])];
@@ -450,25 +455,25 @@ pub fn write_vcf_entry(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<WriteVcfJob
 		match rx.recv() {
 			Ok(WriteVcfJob::Quit) => {
 				if let Some(ws) = write_state.as_mut() { 
-					if let Err(e) = ws.finish_block(&bs_cfg, &mut vcf_output, &filter_ids, &stat_tx) { error!("finish_block failed with error: {}", e); }
+					if let Err(e) = ws.finish_block(&mut vcf_output, &filter_ids, &stat_tx) { error!("finish_block failed with error: {}", e); }
 				}
 				break;
 			},
 			Ok(WriteVcfJob::CallBlock(block)) => {
 				debug!("Received new call block: {}:{}", block.sam_tid, block.start);
 				if let Some(ws) = write_state.as_mut() { 
-					if let Err(e) = ws.finish_block(&bs_cfg, &mut vcf_output, &filter_ids, &stat_tx) {
+					if let Err(e) = ws.finish_block(&mut vcf_output, &filter_ids, &stat_tx) {
 						error!("finish_block failed with error: {}", e);
 						break;
 					}
 				}
-				write_state = Some(WriteState::new_block(block));
+				write_state = Some(WriteState::new_block(block, &bs_cfg));
 			},
 			Ok(WriteVcfJob::GenotypeCall(call_vec)) => {
 				match write_state.as_mut() {
 					Some(
 						ws) => {
-						if let Err(e) = ws.handle_calls(call_vec, &bs_cfg, &mut vcf_output, &filter_ids, &stat_tx) {
+						if let Err(e) = ws.handle_calls(call_vec, &mut vcf_output, &filter_ids, &stat_tx) {
 							error!("handle_calls failed with error: {}", e);
 							break;						
 						}

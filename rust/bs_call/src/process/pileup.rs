@@ -57,16 +57,17 @@ impl Default for PileupPos { fn default() -> Self { Self::new() }}
 pub struct Pileup {
 	pub data: Vec<PileupPos>,
 	pub ref_seq: Vec<u8>,
+	pub gc_bins: Vec<u8>,
 	pub start: usize, 
 	pub ref_start: usize,
 	pub sam_tid: usize,
 }
 
 impl Pileup {
-	fn new(data: Vec<PileupPos>, ref_seq: Vec<u8>, start: usize, ref_start: usize, sam_tid: usize) -> Self {
+	fn new(data: Vec<PileupPos>, ref_seq: Vec<u8>, start: usize, ref_start: usize, gc_bins: Vec<u8>, sam_tid: usize) -> Self {
 		assert!(start >= ref_start);
 		assert!(start - ref_start <= 2);
-		Self{data, ref_seq, start, ref_start, sam_tid}
+		Self{data, ref_seq, gc_bins, start, ref_start, sam_tid}
 	}
 	
 	fn add_obs(&mut self, pos: usize, sq: &[u8], rev: bool, bs: BSStrand, min_qual: u8, mapq2: f32) -> usize {
@@ -93,7 +94,7 @@ impl Pileup {
 	pub fn get_ref_iter(&self) -> slice::Iter<u8> {	self.ref_seq[self.start - self.ref_start..].iter() }
 }
 
-fn send_call_job(pileup: Pileup, call_tx: &mpsc::Sender<Option<Pileup>>) -> io::Result<()> {
+fn send_call_job(pileup: Pileup, call_tx: &mpsc::SyncSender<Option<Pileup>>) -> io::Result<()> {
 	match call_tx.send(Some(pileup)) { 
 		Err(e) => {
 			warn!("Error trying to send new region to call_genotypes thread");
@@ -103,18 +104,70 @@ fn send_call_job(pileup: Pileup, call_tx: &mpsc::Sender<Option<Pileup>>) -> io::
 	} 	
 }
 
-fn check_sequence(cname: &str, seq: &mut Option<Sequence>, ref_index: &Faidx) -> io::Result<()> {
-	if let Some(sq) = seq {
-		if sq.cname() != cname {
-			// Drop old sequence before loading in new contig data
-			drop(seq.take().unwrap());
-			info!("Loading sequence data for {}", cname);
-			*seq = Some(ref_index.fetch_seq(cname)?);				
+const GC_BIN_SIZE: u8 = 100;
+
+const GC_TAB: [[u8; 2]; 256] = [
+	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [1, 0], [0, 0], [1, 1], [0, 0], [0, 0], [0, 0], [1, 1], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [1, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [1, 0], [0, 0], [1, 1], [0, 0], [0, 0], [0, 0], [1, 1], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [1, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 
+];
+
+pub struct GcContent {
+	bins: Vec<u8>,
+	bin_size: u8,
+}
+
+impl GcContent {
+	fn generate_bins(seq: &Sequence) -> Self {
+		let bin_size = GC_BIN_SIZE;
+		let mut bins = Vec::with_capacity(1 + seq.len() / (bin_size as usize));
+		let (mut ix, mut a, mut b) = (0, 0, 0);
+		for c in seq.get_seq(0, seq.len() - 1).unwrap().iter() {
+			let delta = GC_TAB[*c as usize];
+			a += delta[0];
+			b += delta[1];
+			ix += 1;
+			if ix == bin_size {
+				bins.push(if a == bin_size { b } else { 255 });
+				ix = 0;
+				a = 0;
+				b = 0;
+			}
 		}
-	} else {
-		info!("Loading sequence data for {}", cname);
-		*seq = Some(ref_index.fetch_seq(cname)?);		
+		if ix > 0 { bins.push(255); }
+		Self{bins, bin_size: GC_BIN_SIZE}
 	}
+	fn get_gc_slice(&self, x: usize, y: usize) -> &[u8] {
+		let x1 = x / (self.bin_size as usize);
+		let y1 = cmp::min(y / (self.bin_size as usize) + 1, self.bins.len() - 1);
+		 &self.bins[x1..=y1]
+	}
+}
+
+fn check_sequence(cname: &str, seq: &mut Option<SeqData>, ref_index: &Faidx) -> io::Result<()> {
+	if let Some(seq_data) = seq {
+		if seq_data.seq.cname() != cname { seq.take().unwrap(); }
+	}
+	if seq.is_none() {
+		info!("Loading sequence data for {}", cname);
+		let new_seq = ref_index.fetch_seq(cname)?;
+		let gc_content = GcContent::generate_bins(&new_seq);
+		*seq = Some(SeqData{seq: new_seq, gc_content})
+	}
+	
 	Ok(())	
 }
 
@@ -137,7 +190,7 @@ const REF_TAB: [u8; 256] = [
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	
 ];
 
-fn load_ref_seq(preg: &mut PileupRegion, seq: &Option<Sequence>) -> io::Result<(Vec<u8>, usize)> {
+fn load_ref_seq(preg: &mut PileupRegion, seq_data: &Option<SeqData>) -> io::Result<(Vec<u8>, usize, Vec<u8>)> {
 	// Extend range if possible to allow the reference context to be displayed (unless we are at the ends of the chromosomes)
 	// if the end coordinate is past the end of the chromosome, get_seq will silently adjust it to the actual end point
 	// x and y will have the start and end points of the fetched sequence while preg.start and preg.end are the regions 
@@ -145,10 +198,13 @@ fn load_ref_seq(preg: &mut PileupRegion, seq: &Option<Sequence>) -> io::Result<(
 	// The returned sequence is copied to a vector and translated A=1, C=2, G=3, T=4, _=0
 	
 	let x = if preg.start > 2 {preg.start - 2} else {0};
-	let ref_seq: Vec<_> = seq.as_ref().unwrap().get_seq(x, preg.end + 2)?.iter().map(|c| REF_TAB[*c as usize]).collect();
+	let seq_data = seq_data.as_ref().unwrap();
+	
+	let ref_seq: Vec<_> = seq_data.seq.get_seq(x, preg.end + 2)?.iter().map(|c| REF_TAB[*c as usize]).collect();
 	let y = x + ref_seq.len() - 1;
 	if preg.end > y { preg.end = y }
-	Ok((ref_seq, x))
+	let gc_bins = seq_data.gc_content.get_gc_slice(x, y).to_vec();
+	Ok((ref_seq, x, gc_bins))
 }
 
 // Check that the region falls overlaps one of the predefined contig regions, and trim if necessary
@@ -211,7 +267,7 @@ fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: 
 					CigarOp::HardClip | CigarOp::SoftClip => clipped += add,
 					CigarOp::Overlap => overlap += add,
 					CigarOp::Ins => inserts += add,
-					_ => trimmed += add, 
+					_ => if (op_type & 1) != 0 { trimmed += add }, 
 				}
 				len -= add;
 			}
@@ -258,12 +314,16 @@ fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: 
 			}			
 		}
 	}
+//	if total_len < (clipped + trimmed + overlap + low_qual + inserts) {
+//		println!("len: {}, clp: {}, trm: {}, over: {}, lq: {}, ins: {}, cigar: {}", total_len, clipped, trimmed, overlap, low_qual, inserts, cigar);
+//		println!("t1: {}, t2: {}, right_cut: {}", t1, t2, total_len - t2);
+//	}
 	(total_len, clipped, trimmed, overlap, low_qual, inserts)
 
 }
 
-fn handle_pileup(bs_cfg: &BsCallConfig, mut preg: PileupRegion, seq: &mut Option<Sequence>, 
-	ref_index: &Faidx, stat_tx: &mpsc::Sender<StatJob>, call_tx: &mpsc::Sender<Option<Pileup>>, meth_prof: &mut MethProfile) -> io::Result<()> {
+fn handle_pileup(bs_cfg: &BsCallConfig, mut preg: PileupRegion, seq_data: &mut Option<SeqData>, 
+	ref_index: &Faidx, stat_tx: &mpsc::Sender<StatJob>, call_tx: &mpsc::SyncSender<Option<Pileup>>, meth_prof: &mut MethProfile) -> io::Result<()> {
 	if preg.reads.is_empty() {
 		warn!("make_pileup received empty read vector");
 		return Ok(())
@@ -273,14 +333,14 @@ fn handle_pileup(bs_cfg: &BsCallConfig, mut preg: PileupRegion, seq: &mut Option
 	let rtrim1 = bs_cfg.conf_hash.get_int("right_trim_read_1");
 	let rtrim2 = bs_cfg.conf_hash.get_int("right_trim_read_2");
 	let min_qual = bs_cfg.conf_hash.get_int("bq_threshold") as u8;
-	check_sequence(&preg.cname, seq, ref_index)?;
+	check_sequence(&preg.cname, seq_data, ref_index)?;
 	check_regions(&mut preg, &bs_cfg.regions)?;	
-	let (ref_seq, ref_start) = load_ref_seq(&mut preg, seq)?;
+	let (ref_seq, ref_start, gc_bins) = load_ref_seq(&mut preg, seq_data)?;
 	let mut fs_stats = FSType::new();
 	let size = preg.end + 1 - preg.start;
 	let mut pileup_vec = Vec::with_capacity(size);
 	for _ in 0..size { pileup_vec.push(PileupPos::new())}
-	let mut pileup = Pileup::new(pileup_vec, ref_seq, preg.start, ref_start, preg.sam_tid);
+	let mut pileup = Pileup::new(pileup_vec, ref_seq, preg.start, ref_start, gc_bins, preg.sam_tid);
 	for rd in preg.reads.drain(..) {
 		if let Some(read) = rd {
 			let (ltrim, rtrim) = if read.read_one() { (ltrim1, rtrim1) }
@@ -304,17 +364,22 @@ fn handle_pileup(bs_cfg: &BsCallConfig, mut preg: PileupRegion, seq: &mut Option
 	Ok(())
 }
 
+pub struct SeqData {
+	seq: Sequence,
+	gc_content: GcContent,
+}
+
 pub fn make_pileup(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<PileupRegion>>, mut bs_files: BsCallFiles, stat_tx: mpsc::Sender<StatJob>) {
 	info!("pileup_thread starting up");
 	let ref_index = bs_files.ref_index.take().unwrap();
-	let (call_tx, call_rx) = mpsc::channel();
+	let (call_tx, call_rx) = mpsc::sync_channel(32);
 	let cfg = Arc::clone(&bs_cfg);
 	let st_tx = mpsc::Sender::clone(&stat_tx);
 	let call_handle = thread::spawn(move || { call_genotypes::call_genotypes(Arc::clone(&bs_cfg), call_rx, bs_files, st_tx) });
 
 	let min_qual = cfg.conf_hash.get_int("bq_threshold") as u8;
 	let mut meth_prof = MethProfile::new(min_qual as usize);
-	let mut seq: Option<Sequence> = None;
+	let mut seq: Option<SeqData> = None;
 	loop {
 		match rx.recv() {
 			Ok(None) => break,

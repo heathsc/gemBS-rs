@@ -40,7 +40,7 @@ pub struct CallBlock {
 
 const BLOCK_SIZE: usize = 4096;
 
-fn call_from_pileup(pileup: Pileup, model: &Model, fisher: &FisherTest, write_tx: &mpsc::Sender<WriteVcfJob>) -> io::Result<()> {
+fn call_from_pileup(pileup: Pileup, model: &Model, fisher: &FisherTest, write_tx: &mpsc::SyncSender<WriteVcfJob>) -> io::Result<()> {
 	
 	let call_block = CallBlock{start: pileup.start, sam_tid: pileup.sam_tid, prec_ref_bases: pileup.get_prec_2_bases()};
 	send_write_job(WriteVcfJob::CallBlock(call_block), write_tx)?;
@@ -73,7 +73,7 @@ fn call_from_pileup(pileup: Pileup, model: &Model, fisher: &FisherTest, write_tx
 	Ok(())	
 }
 
-fn send_write_job(job: WriteVcfJob, write_tx: &mpsc::Sender<WriteVcfJob>) -> io::Result<()> {
+fn send_write_job(job: WriteVcfJob, write_tx: &mpsc::SyncSender<WriteVcfJob>) -> io::Result<()> {
 	match write_tx.send(job) { 
 		Err(e) => {
 			warn!("Error trying to send new task to write_vcf thread");
@@ -87,7 +87,7 @@ pub fn call_genotypes(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<Pileu
 	info!("call_genotypes_thread starting up");
 	let ref_bias = bs_cfg.conf_hash.get_float("reference_bias");
 	let conversion = (bs_cfg.conf_hash.get_float("under_conversion"), bs_cfg.conf_hash.get_float("over_conversion"));
-	let (write_tx, write_rx) = mpsc::channel();
+	let (write_tx, write_rx) = mpsc::sync_channel(32);
 	let write_handle = thread::spawn(move || { write_vcf_entry(Arc::clone(&bs_cfg), write_rx, bs_files, stat_tx) });
 	let model = Model::new(63, conversion, ref_bias);
 	let fisher = FisherTest::new();
