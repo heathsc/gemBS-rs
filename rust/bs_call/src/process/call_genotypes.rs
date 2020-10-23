@@ -4,13 +4,13 @@ use std::{cmp, io, thread};
 use libc::c_int;
 
 use crate::config::{BsCallConfig, BsCallFiles};
-use super::pileup::Pileup;
+use super::pileup::{Pileup, GC_BIN_SIZE};
 use crate::stats::StatJob;
 use super::vcf::{write_vcf_entry, WriteVcfJob};
 use crate::htslib::hts_err;
 
 mod model;
-mod fisher;
+pub mod fisher;
 
 use model::Model;
 use fisher::FisherTest;
@@ -30,6 +30,7 @@ pub struct GenotypeCall {
 	pub aq: u8,
 	pub max_gt: u8,
 	pub ref_base: u8,
+	pub gc: u8,
 }
 
 pub struct CallBlock {
@@ -43,10 +44,12 @@ const BLOCK_SIZE: usize = 4096;
 fn call_from_pileup(pileup: Pileup, model: &Model, fisher: &FisherTest, write_tx: &mpsc::SyncSender<WriteVcfJob>) -> io::Result<()> {
 	
 	let call_block = CallBlock{start: pileup.start, sam_tid: pileup.sam_tid, prec_ref_bases: pileup.get_prec_2_bases()};
-	send_write_job(WriteVcfJob::CallBlock(call_block), write_tx)?;
 	// Send call_block to output thread
+	send_write_job(WriteVcfJob::CallBlock(call_block), write_tx)?;
+	let gc_bin_start = pileup.ref_start / (GC_BIN_SIZE as usize);
 	let mut call_vec = Vec::with_capacity(BLOCK_SIZE);
-	for (pp, ref_base) in pileup.data.iter().zip(pileup.get_ref_iter()) {
+	
+	for (ix, (pp, ref_base)) in pileup.data.iter().zip(pileup.get_ref_iter()).enumerate() {
 		let mut counts: [c_int; 8] = [0; 8];
 		let total = pp.counts.iter().map(|x| *x as c_int).enumerate().fold(0, |s, (i, x)| { counts[i & 7] += x; s + x} );
 		let call = if total > 0 {
@@ -60,7 +63,8 @@ fn call_from_pileup(pileup: Pileup, model: &Model, fisher: &FisherTest, write_tx
 			let mq = cmp::min((pp.mapq2 / (total_flt as f32)).sqrt().round() as usize, 255) as u8;
 			let (mx, gt_ll) = model.calc_gt_prob(&counts, &qual, *ref_base);
 			let fisher_strand = fisher.calc_fs_stat(mx, &pp.counts);
-			CallEntry::Call(GenotypeCall{counts, gt_ll, fisher_strand, qual, mq, aq, max_gt: mx as u8, ref_base: *ref_base})
+			let gc = pileup.gc_bins[(ix + pileup.start) / (GC_BIN_SIZE as usize) - gc_bin_start];
+			CallEntry::Call(GenotypeCall{counts, gt_ll, fisher_strand, qual, mq, aq, max_gt: mx as u8, gc, ref_base: *ref_base})
 		} else { CallEntry::Skip(*
 		ref_base) };
 		call_vec.push(call);

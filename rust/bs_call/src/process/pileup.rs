@@ -104,7 +104,7 @@ fn send_call_job(pileup: Pileup, call_tx: &mpsc::SyncSender<Option<Pileup>>) -> 
 	} 	
 }
 
-const GC_BIN_SIZE: u8 = 100;
+pub const GC_BIN_SIZE: u8 = 100;
 
 const GC_TAB: [[u8; 2]; 256] = [
 	[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], 

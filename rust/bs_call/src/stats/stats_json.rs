@@ -4,7 +4,10 @@ use std::ops::{AddAssign, Add, Sub};
 use std::io::Write;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+use super::{VcfStats, MUT_NAMES, SITE_TYPE_ALL, SITE_TYPE_VARIANT, SITE_TYPE_CPG_REF, SITE_TYPE_CPG_NON_REF};
+use crate::process::vcf::write_vcf_entry::FLT_NAMES;
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Counts {
 	all: usize,
@@ -33,6 +36,7 @@ impl Add for Counts {
 
 impl Counts {
 	pub fn new() -> Self { Self{all: 0, passed: 0} }
+	pub fn make(all: usize, passed: usize) -> Self { Self{all, passed} }
 	pub fn all(&self) -> usize { self.all }
 	pub fn passed(&self) -> usize { self.passed } 
 }
@@ -77,6 +81,7 @@ impl Sub for QCCounts {
 
 impl QCCounts {
 	pub fn new() -> Self { Self{non_variant: 0, variant: 0} }
+	fn set(v: &[usize; 2]) -> Self { Self{non_variant: v[0], variant: v[1]} }
 	pub fn non_variant(&self) -> usize { self.non_variant }
 	pub fn variant(&self) -> usize { self.variant }
 	pub fn all(&self) -> usize {self.variant + self.non_variant}
@@ -123,6 +128,24 @@ impl MutCounts {
 	pub fn passed(&self) -> usize {self.passed}
 	pub fn dbsnp_all(&self) -> usize {self.dbsnp_all}
 	pub fn dbsnp_passed(&self) -> usize {self.dbsnp_passed}
+}
+
+fn mut_stats_from_vcf_stats(vs: &VcfStats) -> HashMap<String, MutCounts> {
+	let mut ms = HashMap::new();
+	for (k, (mc, db_mc)) in vs.mut_counts.iter().zip(vs.dbsnp_mut_counts.iter()).enumerate() {
+		ms.insert(MUT_NAMES[k].to_owned(), MutCounts { all: mc.all, passed: mc.passed, dbsnp_all: db_mc.all, dbsnp_passed: db_mc.passed });
+	}	
+	ms
+}
+
+fn filter_stats_from_vcf_stats(vs: &VcfStats) -> HashMap<String, QCCounts> {
+	let mut fs = HashMap::new();
+	for (k, fc) in vs.filter_counts.iter().enumerate() {
+		if k == 0 || fc[0] + fc[1] > 0 {
+			fs.insert(FLT_NAMES[k].to_owned(), QCCounts::set(fc));
+		}
+	}
+	fs	
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
@@ -261,6 +284,13 @@ impl QCDist {
 			rms_mapping_quality: HashMap::new(),
 		}
 	}
+	fn from_vcf_stats(vc: &VcfStats) -> Self {
+		Self{ 
+			fisher_strand: vc.fs_stats.iter().fold(HashMap::new(), |mut h, (k, v)| {h.insert(*k, v[1]); h}),
+			quality_by_depth: vc.qd_stats.iter().fold(HashMap::new(), |mut h, (k, v)| {h.insert(*k, QCCounts::set(v)); h}),
+			rms_mapping_quality: vc.mq_stats.iter().fold(HashMap::new(), |mut h, (k, v)| {h.insert(*k, QCCounts::set(v)); h})
+		}
+	}
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -293,6 +323,19 @@ impl Coverage {
 			gc: HashMap::new()
 		}
 	}
+	fn from_vcf_stats(vs: &VcfStats) -> Self {
+		let mut cv = Self::new();
+		for (k, val) in vs.cov_stats.iter() {
+			if val.all > 0 { cv.all.insert(*k, val.all); }
+			if val.var > 0 { cv.variant.insert(*k, val.var); }
+			if val.cpg[0] > 0 { cv.ref_cpg.insert(*k, val.cpg[0]); }
+			if val.cpg[1] > 0 { cv.non_ref_cpg.insert(*k, val.cpg[1]); }
+			if val.cpg_inf[0] > 0 { cv.ref_cpg_inf.insert(*k, val.cpg_inf[0]); }
+			if val.cpg_inf[1] > 0 { cv.non_ref_cpg_inf.insert(*k, val.cpg_inf[1]); }
+			if val.gc_pcent.iter().max().unwrap() > &0 { cv.gc.insert(*k, val.gc_pcent.to_vec()); }
+		}
+		cv
+	}
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -316,6 +359,14 @@ impl Quality {
 			non_ref_cpg: Vec::new(),
 		}
 	}
+	fn from_vcf_stats(vs: &VcfStats) -> Self {
+		Self {
+			all: vs.qual[SITE_TYPE_ALL].to_vec(),
+			variant: vs.qual[SITE_TYPE_VARIANT].to_vec(),
+			ref_cpg: vs.qual[SITE_TYPE_CPG_REF].to_vec(),
+			non_ref_cpg: vs.qual[SITE_TYPE_CPG_NON_REF].to_vec(),
+		}
+	}
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -331,33 +382,43 @@ pub struct Methylation {
 }
 
 impl Methylation {
-	fn new() -> Self { 
+	fn new(n: usize) -> Self { 
 		Self{ 
-			all_ref_cpg: Vec::new(),
-			passed_ref_cpg: Vec::new(),
-			all_non_ref_cpg: Vec::new(),
-			passed_non_ref_cpg: Vec::new(),
+			all_ref_cpg: Vec::with_capacity(n),
+			passed_ref_cpg: Vec::with_capacity(n),
+			all_non_ref_cpg: Vec::with_capacity(n),
+			passed_non_ref_cpg: Vec::with_capacity(n),
 			non_cpg_read_profile: None,
 		}
+	}
+	fn from_vcf_stats(vs: &VcfStats) -> Self {
+		let mut m = Self::new(vs.cpg_ref_meth.len());
+		for (rf_cpg, nrf_cpg) in vs.cpg_ref_meth.iter().zip(vs.cpg_non_ref_meth.iter()) {
+			m.all_ref_cpg.push(rf_cpg[0]);
+			m.passed_ref_cpg.push(rf_cpg[1]);
+			m.all_non_ref_cpg.push(nrf_cpg[0]);
+			m.passed_non_ref_cpg.push(nrf_cpg[1]);
+		}
+		m
 	}
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct BasicStats { 
 	#[serde(rename = "SNPS")]
-	snps: Counts,
+	pub snps: Counts,
 	#[serde(rename = "Indels")]
-	indels: Counts,
+	pub indels: Counts,
 	#[serde(rename = "Multiallelic")]
-	multiallelic: Counts,
+	pub multiallelic: Counts,
 	#[serde(rename = "RefCpG")]
-	ref_cpg: Counts,
+	pub ref_cpg: Counts,
 	#[serde(rename = "NonRefCpG")]
-	non_ref_cpg: Counts,	
+	pub non_ref_cpg: Counts,	
 }
 
 impl BasicStats {
-	fn new() -> Self {
+	pub fn new() -> Self {
 		Self{ snps: Counts::new(), indels: Counts::new(), multiallelic: Counts::new(), ref_cpg: Counts::new(), non_ref_cpg: Counts::new() }
 	}
 	pub fn snps(&self) -> &Counts { &self.snps }
@@ -368,46 +429,57 @@ impl BasicStats {
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
-struct CSType { 
+pub struct CSType { 
 	#[serde(flatten)]
-	basic_stats: BasicStats,
+	pub basic_stats: BasicStats,
 	#[serde(rename = "dbSNPSites")]
     #[serde(skip_serializing_if = "Option::is_none")]
-	dbsnp_sites: Option<Counts>,
+	pub dbsnp_sites: Option<Counts>,
 	#[serde(rename = "dbSNPVariantSites")]
     #[serde(skip_serializing_if = "Option::is_none")]
-	dbsnp_variants: Option<Counts>,
+	pub dbsnp_variants: Option<Counts>,
 }
 
 impl CSType {
-	fn new() -> Self {
+	pub fn new() -> Self {
 		Self{basic_stats: BasicStats::new(), dbsnp_sites: None, dbsnp_variants: None }
 	}
+}
+
+fn contig_stats_from_vcf_stats(vs: &mut VcfStats) -> HashMap<String, CSType> {
+	let mut cs = HashMap::new();
+	for (k, vb) in vs.contig_stats.drain() {
+		let basic_stats = BasicStats{snps: vb.snps, indels: vb.indels, multiallelic: vb.multiallelic, ref_cpg: vb.ref_cpg, non_ref_cpg: vb.non_ref_cpg};
+		let dbsnp_sites = if vb.dbsnp_sites.all > 0 { Some(vb.dbsnp_sites) } else { None }; 
+		let dbsnp_variants = if vb.dbsnp_variants.all > 0 { Some(vb.dbsnp_variants) } else { None }; 
+		cs.insert(k, CSType{basic_stats, dbsnp_sites, dbsnp_variants});
+	}	
+	cs
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TSType { 
 	#[serde(flatten)]
-	basic_stats: BasicStats,
+	pub basic_stats: BasicStats,
 	#[serde(rename = "dbSNPSites")]
     #[serde(skip_serializing_if = "Option::is_none")]
-	dbsnp_sites: Option<Counts>,
+	pub dbsnp_sites: Option<Counts>,
 	#[serde(rename = "dbSNPVariants")]
     #[serde(skip_serializing_if = "Option::is_none")]
-	dbsnp_variants: Option<Counts>,
+	pub dbsnp_variants: Option<Counts>,
 	#[serde(rename = "QCDistributions")]
-	qc_distributions: QCDist,
+	pub qc_distributions: QCDist,
 	#[serde(rename = "VCFFilterStats")]
-	vcf_filter_stats: HashMap<String, QCCounts>,
-	coverage: Coverage,
-	quality: Quality,
-	mutations: HashMap<String, MutCounts>,
-	methylation: Methylation,
+	pub vcf_filter_stats: HashMap<String, QCCounts>,
+	pub coverage: Coverage,
+	pub quality: Quality,
+	pub mutations: HashMap<String, MutCounts>,
+	pub methylation: Methylation,
 }
 
 impl TSType {
-	fn new() -> Self { 
-		Self{
+	fn new() -> Self {
+		Self {
 			basic_stats: BasicStats::new(),
 			dbsnp_sites: None, dbsnp_variants: None,
 			qc_distributions: QCDist::new(),
@@ -415,9 +487,25 @@ impl TSType {
 			coverage: Coverage::new(),
 			quality: Quality::new(),
 			mutations: HashMap::new(),
-			methylation: Methylation::new()
+			methylation: Methylation::new(0)	
 		}
 	}
+	fn from_vcf_stats(vs: &VcfStats) -> Self {
+		let ts = &vs.total_stats;
+		let basic_stats = BasicStats{snps: ts.snps, indels: ts.indels, multiallelic: ts.multiallelic, ref_cpg: ts.ref_cpg, non_ref_cpg: ts.non_ref_cpg};
+		let dbsnp_sites = if ts.dbsnp_sites.all > 0 { Some(ts.dbsnp_sites) } else { None }; 
+		let dbsnp_variants = if ts.dbsnp_variants.all > 0 { Some(ts.dbsnp_variants) } else { None }; 
+		Self{
+			basic_stats, dbsnp_sites, dbsnp_variants,
+			qc_distributions: QCDist::from_vcf_stats(vs),
+			vcf_filter_stats: filter_stats_from_vcf_stats(vs),
+			coverage: Coverage::from_vcf_stats(vs),
+			quality: Quality::from_vcf_stats(vs),
+			mutations: mut_stats_from_vcf_stats(vs),
+			methylation: Methylation::from_vcf_stats(vs),
+		}			
+	}
+	
 	pub fn methylation(&mut self) -> &mut Methylation { &mut self.methylation }
 }
 
@@ -453,4 +541,14 @@ impl CallJson {
 	pub fn basic_stats(&self) -> &BasicStats { &self.total_stats.basic_stats }
 	pub fn vcf_filter_stats(&self) -> &HashMap<String, QCCounts> { &self.total_stats.vcf_filter_stats }
 	pub fn mutations(&self) -> &HashMap<String, MutCounts> { &self.total_stats.mutations }
+	
+	// name, source, vcf_stats, filter_stats, non_cpg_read_profile);
+	pub fn from_stats<S: AsRef<str>, T: AsRef<str>>(source: S, date: T, mut vcf_stats: Option<VcfStats>, filter_stats: FSType) -> Self {
+		let (contig_stats, total_stats) = if let Some(mut vs) = vcf_stats.take() {
+			let cs = contig_stats_from_vcf_stats(&mut vs);
+			let ts = TSType::from_vcf_stats(&vs);
+			(cs, ts)
+		} else { (HashMap::new(), TSType::new()) };
+		Self {source: source.as_ref().to_owned(), date: date.as_ref().to_owned(), filter_stats, contig_stats, total_stats}
+	}
 }

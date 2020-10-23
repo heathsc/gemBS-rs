@@ -115,6 +115,7 @@ impl BsCallConfig {
 	pub fn ctg_in_header(&self, idx: usize) -> bool { self.contigs[idx].in_header() }
 	pub fn ctg_vcf_id(&self, idx: usize) -> Option<usize> { self.contigs[idx].vcf_id() }
 	pub fn ctg_ref_id(&self, idx: usize) -> Option<usize> { self.contigs[idx].ref_id() }
+	pub fn ctg_name(&self, idx: usize) -> &str { self.contigs[idx].name() }
 }
 
 pub struct BsCallFiles {

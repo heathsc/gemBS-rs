@@ -1,10 +1,10 @@
 use std::sync::{Arc, mpsc};
-use std::{cmp, io};
+use std::{cmp, io, thread};
 use std::collections::VecDeque;
 use crate::config::{BsCallConfig, BsCallFiles};
 use crate::htslib::*;
 use libc::{c_char, c_int};
-use crate::stats::StatJob;
+use crate::stats::{StatJob, collect_vcf_stats};
 use crate::process::call_genotypes::{CallBlock, GenotypeCall, CallEntry};
 
 pub enum WriteVcfJob {
@@ -15,7 +15,7 @@ pub enum WriteVcfJob {
 
 use std::f64::consts::LN_10;
 
-const FLT_NAMES: [&str; 16] = ["PASS", "mac1", "fail", "GT", "FT", "DP", "MQ", "GQ", "QD", "GL", "MC8", "AMQ", "CS", "CG", "CX", "FS" ];	
+pub const FLT_NAMES: [&str; 16] = ["PASS", "mac1", "fail", "GT", "FT", "DP", "MQ", "GQ", "QD", "GL", "MC8", "AMQ", "CS", "CG", "CX", "FS" ];	
 const FLT_ID_PASS: usize = 0;
 const FLT_ID_MAC1: usize = 1;
 const FLT_ID_FAIL: usize = 2;
@@ -72,7 +72,7 @@ const REF_ALT: [[&str; 5]; 10] = [
 const IUPAC: &str = "NAMRWCSYGKT"; 
 const PBASE: &str = "NACGT"; 
 
-const CPG_STATE: [[usize; 11] ;11] = [
+const CPG_STATE: [[u8; 11] ;11] = [
 //    ?? AA AC AG AT CC CG CT GG GC TT	
 	[ 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0 ], // ??
 	[ 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0 ], // AA
@@ -89,6 +89,7 @@ const CPG_STATE: [[usize; 11] ;11] = [
 
 const CPG_DISPLAY: [u8; 5] = [ b'.', b'?', b'N', b'H', b'Y' ];
 const CS_STR: [&str; 10] = ["NA", "+", "-", "NA", "+", "+-", "+", "-", "-",  "NA"];
+const CPG_ST_CTS: [Option<(usize, usize)>; 10] = [ None, Some((5, 7)), Some((6, 4)), None, Some((5, 7)), None, Some((5, 7)), Some((6, 4)), Some((6, 4)), None];
 
 const GT_INT: [[[c_int; 2]; 5]; 10] = [
 	[[4, 4], [2, 2], [4, 4], [4, 4], [4, 4]], // AA
@@ -120,11 +121,28 @@ const GT_HET: [bool; 10] = [ false, true, true, true, false, true, true, false, 
 
 const FLT_NAME: [&str; 4] = [ "q20", "qd2", "fs60", "mq40" ];
 
-struct CallStats {
-	phred: c_int,
-	fs: c_int,
-	qd: c_int,
-	dp1: c_int,
+pub const CALL_STATS_SKIP: u8 = 1;
+pub const CALL_STATS_RS_FOUND: u8 = 2;
+pub const CALL_STATS_SNP: u8 = 4;
+pub const CALL_STATS_MULTI: u8 = 8;
+
+pub const CPG_STATUS_REF_CPG: u8 = 8;
+
+pub struct CallStats {
+	pub sam_tid: usize,
+	pub phred: c_int,
+	pub fs: c_int,
+	pub qd: c_int,
+	pub d_inf: c_int,
+	pub dp1: c_int,
+	pub meth_cts: Option<(usize, usize)>,
+	pub flags: u8,
+	pub cpg_status: u8,
+	pub filter: u8,
+	pub gc: u8,
+	pub ref_base: u8,
+	pub gt: u8,
+	pub mq: u8,
 }
 
 fn ln_prob_2_phred(p: f64) -> c_int {
@@ -200,6 +218,15 @@ fn get_gt_like(call: &GenotypeCall) -> Vec<f32> {
 	v
 }
 
+
+// In this part we re-implement some of the htslib functions for creating VCF/BCF entries
+// so that we can write to a Rust Vec<u8> rather than a kstring, and then we copy the Vec
+// to the kstring structure in the brec1_t.  We do this to keep as much as possible 
+// within safe Rust, and also becuase many of the functions are present as inline functions
+// with vcf.h and are not available in libhts, so we would have to re-implement them anyway.
+// Finally, because we are only using limited functionality of the htslib functions we can
+// customize them to avoid unnecessary processing.
+//
 fn enc_size(v: &mut Vec<u8>, size: c_int, bcf_type: u8) {
 	if size < 15 { v.push(((size as u8) << 4) | bcf_type) }
 	else {
@@ -269,7 +296,7 @@ fn enc_vint_(v: &mut Vec<u8>, s: &[c_int], min: c_int, max: c_int) {
 	}
 }
 
-fn write_fixed_columns(call: &GenotypeCall, filter_ids: &[u8], v: &mut Vec<u8>, call_stats: &CallStats, ref_context: &[u8], bcf_rec: &mut BcfRec) -> io::Result<usize> {
+fn write_fixed_columns(call: &GenotypeCall, filter_ids: &[u8], v: &mut Vec<u8>, call_stats: &mut CallStats, ref_context: &[u8], bcf_rec: &mut BcfRec) -> io::Result<()> {
 	v.clear();
 	// Alternate alleles
 	let alt_alleles = REF_ALT[call.max_gt as usize][call.ref_base as usize];
@@ -298,17 +325,23 @@ fn write_fixed_columns(call: &GenotypeCall, filter_ids: &[u8], v: &mut Vec<u8>, 
 	bcf_rec.set_n_allele(1 + alt_alleles.len());
 	bcf_rec.set_qual(call_stats.phred as f32);	
 	bcf_rec.set_n_info(1);
-	Ok(filter)
+	call_stats.filter = filter as u8;
+	call_stats.flags |= match alt_alleles.len() { 
+		0 => 0,
+		1 => CALL_STATS_SNP,
+		_ => CALL_STATS_SNP | CALL_STATS_MULTI,
+	};
+	Ok(())
 }
 
-fn write_format_columns(call: &GenotypeCall, filter_ids: &[u8], called_context: &[u8], cpg: u8, filter: usize, v: &mut Vec<u8>, call_stats: &CallStats, bcf_rec: &mut BcfRec) -> io::Result<()> {
+fn write_format_columns(call: &GenotypeCall, filter_ids: &[u8], called_context: &[u8], v: &mut Vec<u8>, call_stats: &CallStats, bcf_rec: &mut BcfRec) -> io::Result<()> {
 	let mut n_fmt = 11;
 	v.clear();
 	// GT
 	enc_u8(v, filter_ids[FLT_ID_GT]);
 	enc_vint(v, &GT_INT[call.max_gt as usize][call.ref_base as usize]);
 	// FT
-	let flt_str = get_filter_string(filter);
+	let flt_str = get_filter_string(call_stats.filter as usize);
 	enc_u8(v, filter_ids[FLT_ID_FT]);
 	enc_vchar(v, flt_str.as_bytes());
 	// DP
@@ -342,6 +375,7 @@ fn write_format_columns(call: &GenotypeCall, filter_ids: &[u8], called_context: 
 	enc_u8(v, filter_ids[FLT_ID_CS]);
 	enc_vchar(v, CS_STR[call.max_gt as usize].as_bytes());
 	// CG
+	let cpg = CPG_DISPLAY[(call_stats.cpg_status & 7) as usize];
 	enc_u8(v, filter_ids[FLT_ID_CG]);
 	v.push(0x10 | BCF_BT_CHAR);
 	v.push(cpg);
@@ -361,11 +395,13 @@ fn write_format_columns(call: &GenotypeCall, filter_ids: &[u8], called_context: 
 }
 
 struct WriteState {
+	sam_tid: usize,
 	vcf_rid: usize,
 	curr_x: usize,
 	call_buf: VecDeque<CallEntry>,
 	bcf_rec: BcfRec,
 	tvec: Vec<u8>,
+	call_stats: Vec<CallStats>,
 	all_positions: bool,
 }
 
@@ -376,22 +412,23 @@ impl WriteState {
 		for c in call_block.prec_ref_bases.iter() { v.push_back(CallEntry::Starting(*c)) }
 		let bcf_rec = BcfRec::new().expect("Couldn't allocate Bcf Record");
 		let tvec = Vec::with_capacity(256);
-		let vcf_rid = bs_cfg.ctg_vcf_id(call_block.sam_tid).expect("Contig not in VCF list");
+		let call_stats = Vec::with_capacity(4096);
+		let sam_tid = call_block.sam_tid;
+		let vcf_rid = bs_cfg.ctg_vcf_id(sam_tid).expect("Contig not in VCF list");
 		let all_positions = bs_cfg.conf_hash.get_bool("all_positions");
-
-		Self { vcf_rid, all_positions, curr_x: call_block.start, call_buf: v, bcf_rec, tvec}
+		Self { sam_tid, vcf_rid, all_positions, curr_x: call_block.start, call_buf: v, bcf_rec, tvec, call_stats}
 	}
-	fn finish_block(&mut self, vcf_output: &mut VcfFile, filter_ids: &[u8], stat_tx: &mpsc::Sender<StatJob>) -> io::Result<()> {
+	fn finish_block(mut self, vcf_output: &mut VcfFile, filter_ids: &[u8], vcf_stats_tx: &mpsc::SyncSender<Option<Vec<CallStats>>>) -> io::Result<()> {
 		for _ in 0..2 {
 			self.add_entry(CallEntry::Skip(0));
-			self.write_entry(vcf_output, filter_ids, stat_tx)?;
+			self.write_entry(vcf_output, filter_ids)?;
 		}
-		Ok(())
+		send_vcf_stats_job(self.call_stats, vcf_stats_tx)
 	}
-	fn handle_calls(&mut self, mut call_vec: Vec<CallEntry>, vcf_output: &mut VcfFile, filter_ids: &[u8], stat_tx: &mpsc::Sender<StatJob>) -> io::Result<()> {
+	fn handle_calls(&mut self, mut call_vec: Vec<CallEntry>, vcf_output: &mut VcfFile, filter_ids: &[u8]) -> io::Result<()> {
 		for entry in call_vec.drain(..) {
 			self.add_entry(entry);
-			self.write_entry(vcf_output, filter_ids, stat_tx)?;
+			self.write_entry(vcf_output, filter_ids)?;
 		}
 		Ok(())
 	}
@@ -400,7 +437,7 @@ impl WriteState {
 		self.call_buf.push_back(entry);
 		let _ = self.call_buf.pop_front();		
 	}
-	fn write_entry(&mut self, vcf_output: &mut VcfFile, filter_ids: &[u8], stat_tx: &mpsc::Sender<StatJob>) -> io::Result<()> {
+	fn write_entry(&mut self, vcf_output: &mut VcfFile, filter_ids: &[u8]) -> io::Result<()> {
 		match &self.call_buf[2] {
 			CallEntry::Call(call) => {
 				let dp1: c_int = call.counts[0..4].iter().sum();
@@ -411,7 +448,6 @@ impl WriteState {
 				// Fisher strand and quality by depth stats
 				let fs = (call.fisher_strand * -10.0 + 0.5).round() as c_int;
 				let qd = if dp1 > 0 { phred / dp1 } else { phred };
-				let call_stats = CallStats{phred, fs, dp1, qd};
 				// Skip sites where the call is AA or TT and the reference base is A or T respectively (unless all sites option is given)
 				let skip = !self.all_positions && !GT_FLAG[call.max_gt as usize][call.ref_base as usize];
 				let bcf_rec = &mut self.bcf_rec;
@@ -426,17 +462,26 @@ impl WriteState {
 					called_gt.push(gt as usize);		
 				}
 				let called_context: Vec<u8> = called_gt.iter().copied().map(|g| IUPAC.as_bytes()[g]).collect(); 
-				let filter = if !skip {
+				
+				let cpg_status = {
+					cmp::max(CPG_STATE[called_gt[1]][called_gt[2]], CPG_STATE[called_gt[2]][called_gt[3]]) | 
+					if (ref_context[2] == b'C' && ref_context[3] == b'G') || (ref_context[1] == b'C' && ref_context[2] == b'G') { CPG_STATUS_REF_CPG } else { 0 }
+				};
+				let rs_found = false;
+				let flags = if skip { CALL_STATS_SKIP } else { 0 } | if rs_found { CALL_STATS_RS_FOUND } else { 0 };
+				let meth_cts = CPG_ST_CTS[call.max_gt as usize];
+				let mut call_stats = CallStats{sam_tid: self.sam_tid, phred, fs, dp1, d_inf, qd, cpg_status, flags, gc: call.gc, 
+					meth_cts, filter: 0, gt: call.max_gt, mq: call.mq, ref_base: call.ref_base};
+				if !skip {
 					let tvec = &mut self.tvec;
 					bcf_rec.clear();
 					bcf_rec.set_rid(self.vcf_rid); 
 					bcf_rec.set_pos(self.curr_x);
-					let flt = write_fixed_columns(call, filter_ids, tvec, &call_stats, &ref_context, bcf_rec)?;
-					let cpg = CPG_DISPLAY[cmp::max(CPG_STATE[called_gt[1]][called_gt[2]], CPG_STATE[called_gt[2]][called_gt[3]])];
-					write_format_columns(call, filter_ids, &called_context, cpg, flt, tvec, &call_stats, bcf_rec)?;
+					write_fixed_columns(call, filter_ids, tvec, &mut call_stats, &ref_context, bcf_rec)?;
+					write_format_columns(call, filter_ids, &called_context, tvec, &call_stats, bcf_rec)?;
 					bcf_rec.write(&mut vcf_output.file, &mut vcf_output.hdr)?;			
-					flt
-				} else { 0 };
+				}
+				self.call_stats.push(call_stats);
 				self.curr_x += 1;
 			},	
 			CallEntry::Skip(_) => self.curr_x += 1,
@@ -446,34 +491,48 @@ impl WriteState {
 	}
 }
 
+fn send_vcf_stats_job(call_stats: Vec<CallStats>, vcf_stats_tx: &mpsc::SyncSender<Option<Vec<CallStats>>>) -> io::Result<()> {
+	match vcf_stats_tx.send(Some(call_stats)) { 
+		Err(e) => {
+			warn!("Error trying to send new region to call_genotypes thread");
+			Err(hts_err(format!("Error sending region to call_genotypes thread: {}", e)))
+		},
+		Ok(_) => Ok(()),
+	} 	
+}
+
 pub fn write_vcf_entry(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<WriteVcfJob>, mut bs_files: BsCallFiles, stat_tx: mpsc::Sender<StatJob>) {
 	info!("write_vcf_thread starting up");
 	let mut vcf_output = bs_files.vcf_output.take().unwrap();
 	let filter_ids = get_filter_ids(&vcf_output.hdr);
+	let cfg = Arc::clone(&bs_cfg);
+	let (vcf_stats_tx, vcf_stats_rx) = mpsc::sync_channel(32);
+	let vcf_stats_handle = thread::spawn(move || { collect_vcf_stats(Arc::clone(&bs_cfg), vcf_stats_rx, stat_tx) });
+
 	let mut write_state: Option<WriteState> = None;
 	loop {
 		match rx.recv() {
 			Ok(WriteVcfJob::Quit) => {
-				if let Some(ws) = write_state.as_mut() { 
-					if let Err(e) = ws.finish_block(&mut vcf_output, &filter_ids, &stat_tx) { error!("finish_block failed with error: {}", e); }
+				if let Some(ws) = write_state.take() { 
+					if let Err(e) = ws.finish_block(&mut vcf_output, &filter_ids, &vcf_stats_tx) { error!("finish_block failed with error: {}", e); }
 				}
 				break;
 			},
 			Ok(WriteVcfJob::CallBlock(block)) => {
 				debug!("Received new call block: {}:{}", block.sam_tid, block.start);
-				if let Some(ws) = write_state.as_mut() { 
-					if let Err(e) = ws.finish_block(&mut vcf_output, &filter_ids, &stat_tx) {
+				if let Some(ws) = write_state.take() { 
+					if let Err(e) = ws.finish_block(&mut vcf_output, &filter_ids, &vcf_stats_tx) {
 						error!("finish_block failed with error: {}", e);
 						break;
 					}
 				}
-				write_state = Some(WriteState::new_block(block, &bs_cfg));
+				write_state = Some(WriteState::new_block(block, &cfg));
 			},
 			Ok(WriteVcfJob::GenotypeCall(call_vec)) => {
 				match write_state.as_mut() {
 					Some(
 						ws) => {
-						if let Err(e) = ws.handle_calls(call_vec, &mut vcf_output, &filter_ids, &stat_tx) {
+						if let Err(e) = ws.handle_calls(call_vec, &mut vcf_output, &filter_ids) {
 							error!("handle_calls failed with error: {}", e);
 							break;						
 						}
@@ -487,6 +546,8 @@ pub fn write_vcf_entry(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<WriteVcfJob
 			}
 		}
 	}
+	if vcf_stats_tx.send(None).is_err() { warn!("Error trying to send QUIT signal to vcf_stats thread") }
+	if vcf_stats_handle.join().is_err() { warn!("Error waiting for vcf_stats thread to finish") }
 	info!("write_vcf thread shutting down");	
 }
 

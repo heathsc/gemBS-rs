@@ -6,18 +6,20 @@ use utils::compress;
 use crate::config::*;
 use crate::htslib::{SamFile, VcfHeader, Faidx, BCF_DT_CTG};
 
-#[derive(Default, Copy, Clone)]
+#[derive(Default, Clone)]
 pub struct CtgInfo {
 	ref_id: Option<usize>,
 	vcf_id: Option<usize>,
+	name: String,
 	in_header: bool,
 } 
 
 impl CtgInfo {
-	fn new() -> Self {CtgInfo { ref_id: None, vcf_id: None, in_header: false}}
+	fn new<S: AsRef<str>>(name: S) -> Self {CtgInfo { ref_id: None, vcf_id: None, in_header: false, name: name.as_ref().to_owned()}}
 	pub fn in_header(&self) -> bool { self.in_header }
 	pub fn vcf_id(&self) -> Option<usize> { self.vcf_id }
 	pub fn ref_id(&self) -> Option<usize> { self.ref_id }
+	pub fn name(&self) -> &str { &self.name }
 }
 
 #[derive(Copy, Clone)]
@@ -64,8 +66,8 @@ fn read_omit_ctg_list(chash: &ConfHash, sam_file: &SamFile) -> io::Result<HashSe
 	Ok(omit_ctgs)
 }
 
-fn init_sam_contigs(nctgs: usize) -> Vec<CtgInfo> {
-	(0..nctgs).fold(Vec::new(), |mut v, _| {v.push(CtgInfo::new()); v})	
+fn init_sam_contigs(sam_file: &SamFile) -> Vec<CtgInfo> {
+	(0..sam_file.nref()).fold(Vec::new(), |mut v, i| {v.push(CtgInfo::new(sam_file.tid2name(i))); v})	
 }
 
 fn setup_ref_ids(ctgs: &mut Vec<CtgInfo>, sam_file: &SamFile, ref_idx: &Faidx) {
@@ -145,7 +147,7 @@ fn setup_regions_from_sam_header(ctgs: &mut Vec<CtgInfo>, sam_file: &SamFile, re
 
 pub fn setup_contigs(chash: &ConfHash, sam_file: &SamFile, ref_idx: &Faidx) -> io::Result<(Vec<CtgInfo>, Vec<CtgRegion>)> {
 	let omit_ctgs = read_omit_ctg_list(chash, sam_file)?;
-	let mut ctgs = init_sam_contigs(sam_file.nref());
+	let mut ctgs = init_sam_contigs(sam_file);
 	setup_ref_ids(&mut ctgs, sam_file, ref_idx);
 	let ctg_regions = if let Some(fname) = chash.get_str("contig_bed") {
 		let filter = chash.get_bool("filter_contigs");
