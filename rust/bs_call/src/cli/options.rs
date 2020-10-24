@@ -7,6 +7,7 @@ use crate::{process, reference, htslib, defs};
 use super::cli_utils;
 
 use clap::ArgMatches;
+use crate::dbsnp;
 
 pub const OPTS: [(&str, ConfVar);20] = [
 	("haploid", ConfVar::Bool(false)),
@@ -127,6 +128,9 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(BsCallConfig, BsCallFiles)>
 	// Reference
 	let rf = chash.get_str(&"reference");
 	let ref_idx = reference::handle_reference(rf.unwrap(), &mut in_file)?;
+	
+	// dbSNP index
+	if let Some(dbsnp_file) = chash.get_str(&"dbsnp") { dbsnp::DBSnpIndex::new(dbsnp_file)?; }
 	
 	// Set up contigs and contig regions
 	let (ctgs, ctg_regions) = defs::setup_contigs(&chash, &in_file, &ref_idx)?;

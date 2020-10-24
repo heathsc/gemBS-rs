@@ -29,7 +29,7 @@ args:
     - filter_contigs: {short: F, long: filter-contigs, requires: contig_bed, help: Only include contigs found in the contig-bed file in the output header}
     - dbsnp: {short: D, long: dbsnp, takes_value: true, value_name: FILE, help: dbSNP processed index file}
     - all_positions: {short: A, long: all-positions, help: Output all covered positions }
-    - benchmark_mode: {short: B, long: benchmark-mode, help: Benchmark mode (omits date / time/ version numbers from output }
+    - benchmark_mode: {short: b, long: benchmark-mode, help: Benchmark mode (omits date / time/ version numbers from output }
     - conversion: {short:c, long: conversion, takes_value: true, number_of_values: 2, require_delimiter: true, value_name: "UNDER,OVER", help: "Set under and over conversion rates (default: 0.01,0.05)"}
     - reference_bias: {short: R, long: reference-bias, takes_value: true, value_name: BIAS, help: "Set bias to reference homozygote (default: 2)"}
     - threads: {short: t, long: threads, takes_value: true, value_name: "THREADS", help: "Set number of additional threads (default: number of cores)"} 

@@ -506,7 +506,7 @@ pub fn write_vcf_entry(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<WriteVcfJob
 	let mut vcf_output = bs_files.vcf_output.take().unwrap();
 	let filter_ids = get_filter_ids(&vcf_output.hdr);
 	let cfg = Arc::clone(&bs_cfg);
-	let (vcf_stats_tx, vcf_stats_rx) = mpsc::sync_channel(32);
+	let (vcf_stats_tx, vcf_stats_rx) = mpsc::sync_channel(64);
 	let vcf_stats_handle = thread::spawn(move || { collect_vcf_stats(Arc::clone(&bs_cfg), vcf_stats_rx, stat_tx) });
 
 	let mut write_state: Option<WriteState> = None;

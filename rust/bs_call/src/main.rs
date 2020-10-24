@@ -12,6 +12,7 @@ pub mod reference;
 pub mod htslib;
 pub mod process;
 pub mod stats;
+pub mod dbsnp;
 
 fn main() -> Result<(), &'static str> {
 	let (bs_cfg, bs_files) = match cli::process_cli() {
