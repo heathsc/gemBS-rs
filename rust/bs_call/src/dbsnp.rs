@@ -244,6 +244,7 @@ impl DBSnpIndex {
 		info!("Header line: {}", header);
 		Ok(Self{filename: filename.to_owned(), dbsnp, prefixes: Arc::new(prefixes), header})
 	}
+	pub fn header(&self) -> &str { &self.header }
 }
 
 pub struct DBSnpFile {
@@ -307,7 +308,7 @@ fn get_ctg_header(buf: &[u8]) -> io::Result<DBSnpCtg> {
 }
 
 fn get_string(buf: &[u8]) -> io::Result<(String, &[u8])> {
-	if buf.len() > 1 {
+	if !buf.is_empty() {
 		let mut s = String::new();
 		for (i, c) in buf.iter().copied().enumerate() {
 			if c == 0 { 

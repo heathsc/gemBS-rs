@@ -96,7 +96,13 @@ pub fn write_vcf_header(bs_cfg: &mut BsCallConfig, bs_files: &mut BsCallFiles, s
 		hd.append(&sbuf)?;
 		sbuf = format!("##source={}", source);
 		hd.append(&sbuf)?;
-        // TODO - should add dbSNP header info here
+		if let Some(dbsnp_index) = &bs_files.dbsnp_index.as_ref() {
+			let header = dbsnp_index.header();
+			if !header.is_empty() {
+				sbuf = format!("##dbsnp={}", header);
+				hd.append(&sbuf)?;
+			}
+		}
 	}
 	let sam_sample = add_sample_info(&mut hd, sam_file.text(), benchmark)?;
 	let contigs = &mut bs_cfg.contigs;
