@@ -115,7 +115,7 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 				if let Some(cstate) = curr_state.0.as_ref() {
 					let cname = hdr.tid2name(cstate.tid as usize);
 					let (x, y) = (cstate.start_x, cstate.end_x);
-					debug!("Last block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
+					trace!("Last block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
 					count_passed_reads(&reads, &mut fs_stats);
 					send_pileup_job(reads, cname, x, y, cstate.tid, &pileup_tx)?;
 				}
@@ -131,7 +131,7 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 			match change {
 				StateChange::NewBlock((x,y)) => {
 					let cname = hdr.tid2name(cstate.tid as usize);
-					debug!("Ending block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
+					trace!("Ending block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
 					count_passed_reads(&reads, &mut fs_stats);
 					send_pileup_job(reads, cname, x, y, cstate.tid, &pileup_tx)?;
 					reads = Vec::new();
@@ -139,7 +139,7 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 				},
 				StateChange::NewContig((tid, x, y)) => {
 					let cname = hdr.tid2name(tid as usize);
-					debug!("Ending contig with block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
+					trace!("Ending contig with block ({}:{}-{} len = {}, {} maps)", cname, x, y, y - x + 1, reads.len());
 					count_passed_reads(&reads, &mut fs_stats);
 					send_pileup_job(reads, cname, x, y, tid, &pileup_tx)?;
 					reads = Vec::new();

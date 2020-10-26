@@ -8,6 +8,7 @@ use super::pileup::{Pileup, GC_BIN_SIZE};
 use crate::stats::StatJob;
 use super::vcf::{write_vcf_entry, WriteVcfJob};
 use crate::htslib::hts_err;
+use crate::dbsnp::DBSnpContig;
 
 mod model;
 pub mod fisher;
@@ -34,6 +35,7 @@ pub struct GenotypeCall {
 }
 
 pub struct CallBlock {
+	pub dbsnp_contig: Option<DBSnpContig>, 	
 	pub start: usize,
 	pub sam_tid: usize,
 	pub prec_ref_bases: [u8; 2], // the 2 reference bases before the block begins (or N if not present) 
@@ -41,9 +43,10 @@ pub struct CallBlock {
 
 const BLOCK_SIZE: usize = 4096;
 
-fn call_from_pileup(pileup: Pileup, model: &Model, fisher: &FisherTest, write_tx: &mpsc::SyncSender<WriteVcfJob>) -> io::Result<()> {
+fn call_from_pileup(mut pileup: Pileup, model: &Model, fisher: &FisherTest, write_tx: &mpsc::SyncSender<WriteVcfJob>) -> io::Result<()> {
 	
-	let call_block = CallBlock{start: pileup.start, sam_tid: pileup.sam_tid, prec_ref_bases: pileup.get_prec_2_bases()};
+	let dbsnp_contig = pileup.dbsnp_contig.take();
+	let call_block = CallBlock{dbsnp_contig, start: pileup.start, sam_tid: pileup.sam_tid, prec_ref_bases: pileup.get_prec_2_bases()};
 	// Send call_block to output thread
 	send_write_job(WriteVcfJob::CallBlock(call_block), write_tx)?;
 	let gc_bin_start = pileup.ref_start / (GC_BIN_SIZE as usize);

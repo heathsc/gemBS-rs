@@ -130,13 +130,13 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(BsCallConfig, BsCallFiles)>
 	let ref_idx = reference::handle_reference(rf.unwrap(), &mut in_file)?;
 	
 	// dbSNP index
-	if let Some(dbsnp_file) = chash.get_str(&"dbsnp") { dbsnp::DBSnpIndex::new(dbsnp_file)?; }
+	let dbsnp_index = if let Some(dbsnp_file) = chash.get_str(&"dbsnp") { Some(dbsnp::DBSnpIndex::new(dbsnp_file)?) } else { None };
 	
 	// Set up contigs and contig regions
 	let (ctgs, ctg_regions) = defs::setup_contigs(&chash, &in_file, &ref_idx)?;
 	in_file.set_region_itr(&ctg_regions)?;
 	let bs_cfg = BsCallConfig::new(chash, ctgs, ctg_regions);
-	let bs_files = BsCallFiles::new(in_file, out_file, ref_idx);
+	let bs_files = BsCallFiles::new(in_file, out_file, ref_idx, dbsnp_index);
 
 	Ok((bs_cfg, bs_files))
 }

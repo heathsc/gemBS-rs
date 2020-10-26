@@ -6,6 +6,7 @@ use crate::htslib::*;
 use libc::{c_char, c_int};
 use crate::stats::{StatJob, collect_vcf_stats};
 use crate::process::call_genotypes::{CallBlock, GenotypeCall, CallEntry};
+use crate::dbsnp::DBSnpContig;
 
 pub enum WriteVcfJob {
 	CallBlock(CallBlock),
@@ -296,12 +297,15 @@ fn enc_vint_(v: &mut Vec<u8>, s: &[c_int], min: c_int, max: c_int) {
 	}
 }
 
-fn write_fixed_columns(call: &GenotypeCall, filter_ids: &[u8], v: &mut Vec<u8>, call_stats: &mut CallStats, ref_context: &[u8], bcf_rec: &mut BcfRec) -> io::Result<()> {
+fn write_fixed_columns(call: &GenotypeCall, filter_ids: &[u8], v: &mut Vec<u8>, call_stats: &mut CallStats, ref_context: &[u8], rs: &Option<String>, bcf_rec: &mut BcfRec) -> io::Result<()> {
 	v.clear();
 	// Alternate alleles
 	let alt_alleles = REF_ALT[call.max_gt as usize][call.ref_base as usize];
-	// ID - for the moment leave blank
-	v.push(BCF_BT_CHAR);	
+	// ID
+	if let Some(s) = rs.as_ref() {
+		enc_size(v, s.len() as c_int, BCF_BT_CHAR);
+		v.extend_from_slice(s.as_bytes());
+	} else { v.push(BCF_BT_CHAR) };	
 	// REF allele
 	v.push(0x10 | BCF_BT_CHAR);
 	v.push(ref_context[2]);
@@ -398,6 +402,7 @@ struct WriteState {
 	sam_tid: usize,
 	vcf_rid: usize,
 	curr_x: usize,
+	dbsnp_contig: Option<DBSnpContig>,
 	call_buf: VecDeque<CallEntry>,
 	bcf_rec: BcfRec,
 	tvec: Vec<u8>,
@@ -406,7 +411,7 @@ struct WriteState {
 }
 
 impl WriteState {
-	fn new_block(call_block: CallBlock, bs_cfg: &BsCallConfig) -> Self {
+	fn new_block(mut call_block: CallBlock, bs_cfg: &BsCallConfig) -> Self {
 		let mut v = VecDeque::with_capacity(5);
 		for _ in 0..3 { v.push_back(CallEntry::Starting(0)) }
 		for c in call_block.prec_ref_bases.iter() { v.push_back(CallEntry::Starting(*c)) }
@@ -416,7 +421,8 @@ impl WriteState {
 		let sam_tid = call_block.sam_tid;
 		let vcf_rid = bs_cfg.ctg_vcf_id(sam_tid).expect("Contig not in VCF list");
 		let all_positions = bs_cfg.conf_hash.get_bool("all_positions");
-		Self { sam_tid, vcf_rid, all_positions, curr_x: call_block.start, call_buf: v, bcf_rec, tvec, call_stats}
+		let dbsnp_contig = call_block.dbsnp_contig.take();
+		Self { sam_tid, vcf_rid, all_positions, curr_x: call_block.start, call_buf: v, bcf_rec, tvec, call_stats, dbsnp_contig}
 	}
 	fn finish_block(mut self, vcf_output: &mut VcfFile, filter_ids: &[u8], vcf_stats_tx: &mpsc::SyncSender<Option<Vec<CallStats>>>) -> io::Result<()> {
 		for _ in 0..2 {
@@ -449,7 +455,12 @@ impl WriteState {
 				let fs = (call.fisher_strand * -10.0 + 0.5).round() as c_int;
 				let qd = if dp1 > 0 { phred / dp1 } else { phred };
 				// Skip sites where the call is AA or TT and the reference base is A or T respectively (unless all sites option is given)
-				let skip = !self.all_positions && !GT_FLAG[call.max_gt as usize][call.ref_base as usize];
+				let (rs, rs_reqd) = match if let Some(ctg) = &self.dbsnp_contig { ctg.lookup_rs(self.curr_x) } else { None } {
+					Some((s, fg)) => (Some(s), fg),
+					None => (None, false),
+				};
+				let rs_found = rs.is_some();
+				let skip = !self.all_positions && !rs_reqd && !GT_FLAG[call.max_gt as usize][call.ref_base as usize];
 				let bcf_rec = &mut self.bcf_rec;
 				let mut ref_context = Vec::with_capacity(5);
 				let mut called_gt = Vec::with_capacity(5);
@@ -467,7 +478,6 @@ impl WriteState {
 					cmp::max(CPG_STATE[called_gt[1]][called_gt[2]], CPG_STATE[called_gt[2]][called_gt[3]]) | 
 					if (ref_context[2] == b'C' && ref_context[3] == b'G') || (ref_context[1] == b'C' && ref_context[2] == b'G') { CPG_STATUS_REF_CPG } else { 0 }
 				};
-				let rs_found = false;
 				let flags = if skip { CALL_STATS_SKIP } else { 0 } | if rs_found { CALL_STATS_RS_FOUND } else { 0 };
 				let meth_cts = CPG_ST_CTS[call.max_gt as usize];
 				let mut call_stats = CallStats{sam_tid: self.sam_tid, phred, fs, dp1, d_inf, qd, cpg_status, flags, gc: call.gc, 
@@ -477,7 +487,7 @@ impl WriteState {
 					bcf_rec.clear();
 					bcf_rec.set_rid(self.vcf_rid); 
 					bcf_rec.set_pos(self.curr_x);
-					write_fixed_columns(call, filter_ids, tvec, &mut call_stats, &ref_context, bcf_rec)?;
+					write_fixed_columns(call, filter_ids, tvec, &mut call_stats, &ref_context, &rs, bcf_rec)?;
 					write_format_columns(call, filter_ids, &called_context, tvec, &call_stats, bcf_rec)?;
 					bcf_rec.write(&mut vcf_output.file, &mut vcf_output.hdr)?;			
 				}

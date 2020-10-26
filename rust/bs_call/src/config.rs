@@ -5,6 +5,7 @@ use std::io::{Error, ErrorKind};
 
 use crate::htslib;
 use crate::defs::{CtgRegion, CtgInfo};
+use crate::dbsnp;
 
 pub fn new_err(s: String) -> io::Error {
 	Error::new(ErrorKind::Other, s)	
@@ -121,11 +122,12 @@ impl BsCallConfig {
 pub struct BsCallFiles {
 	pub sam_input: Option<htslib::SamFile>,
 	pub ref_index: Option<htslib::Faidx>,
-	pub vcf_output: Option<htslib::VcfFile>,	
+	pub vcf_output: Option<htslib::VcfFile>,
+	pub dbsnp_index: Option<dbsnp::DBSnpIndex>,	
 }
 
 impl BsCallFiles {
-	pub fn new(sam_input: htslib::SamFile, vcf_output: htslib::VcfFile, ref_index: htslib::Faidx) -> Self { 
-		Self{sam_input: Some(sam_input), vcf_output: Some(vcf_output), ref_index: Some(ref_index)} 
+	pub fn new(sam_input: htslib::SamFile, vcf_output: htslib::VcfFile, ref_index: htslib::Faidx, dbsnp_index: Option<dbsnp::DBSnpIndex>) -> Self { 
+		Self{sam_input: Some(sam_input), vcf_output: Some(vcf_output), ref_index: Some(ref_index), dbsnp_index} 
 	}	
 }

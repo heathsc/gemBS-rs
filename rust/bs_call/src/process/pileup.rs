@@ -7,6 +7,7 @@ use super::records::ReadEnd;
 use super::call_genotypes;
 use crate::htslib::{Sequence, Faidx, CigarOp, hts_err, BSStrand};
 use crate::stats::{StatJob, FSBaseLevelType, FSType, MethProfile};
+use crate::dbsnp::{DBSnpFile, DBSnpContig};
 
 pub struct PileupRegion {
 	start: usize,
@@ -58,16 +59,18 @@ pub struct Pileup {
 	pub data: Vec<PileupPos>,
 	pub ref_seq: Vec<u8>,
 	pub gc_bins: Vec<u8>,
+	pub dbsnp_contig: Option<DBSnpContig>, 
 	pub start: usize, 
 	pub ref_start: usize,
 	pub sam_tid: usize,
 }
 
 impl Pileup {
-	fn new(data: Vec<PileupPos>, ref_seq: Vec<u8>, start: usize, ref_start: usize, gc_bins: Vec<u8>, sam_tid: usize) -> Self {
+	fn new(data: Vec<PileupPos>, ref_seq: Vec<u8>, start: usize, ref_start: usize, gc_bins: Vec<u8>, sam_tid: usize, cname: &str, dbsnp_file: &mut Option<DBSnpFile>) -> Self {
 		assert!(start >= ref_start);
 		assert!(start - ref_start <= 2);
-		Self{data, ref_seq, gc_bins, start, ref_start, sam_tid}
+		let dbsnp_contig = if let Some(x) = dbsnp_file.as_ref() { x.get_dbsnp_contig(cname) } else { None };
+		Self{data, ref_seq, gc_bins, start, ref_start, sam_tid, dbsnp_contig}
 	}
 	
 	fn add_obs(&mut self, pos: usize, sq: &[u8], rev: bool, bs: BSStrand, min_qual: u8, mapq2: f32) -> usize {
@@ -157,18 +160,22 @@ impl GcContent {
 	}
 }
 
-fn check_sequence(cname: &str, seq: &mut Option<SeqData>, ref_index: &Faidx) -> io::Result<()> {
+fn check_sequence(cname: &str, seq: &mut Option<SeqData>, ref_index: &Faidx, dbsnp_file: &mut Option<DBSnpFile>) -> io::Result<()> {
 	if let Some(seq_data) = seq {
-		if seq_data.seq.cname() != cname { seq.take().unwrap(); }
+		if seq_data.seq.cname() != cname { 
+			if let Some(dbsnp) = dbsnp_file { dbsnp.unload_ctg(seq_data.seq.cname()); }
+			seq.take(); 
+		}
 	}
 	if seq.is_none() {
+		if let Some(dbsnp) = dbsnp_file { dbsnp.load_ctg(cname)?; } 
 		info!("Loading sequence data for {}", cname);
 		let new_seq = ref_index.fetch_seq(cname)?;
 		let gc_content = GcContent::generate_bins(&new_seq);
-		*seq = Some(SeqData{seq: new_seq, gc_content})
+		*seq = Some(SeqData{seq: new_seq, gc_content});
+		info!("Sequence data loaded");
 	}
-	
-	Ok(())	
+	Ok(())
 }
 
 const REF_TAB: [u8; 256] = [
@@ -322,31 +329,35 @@ fn add_read_to_pileup(read: &ReadEnd, pileup: &mut Pileup, ltrim: usize, rtrim: 
 
 }
 
-fn handle_pileup(bs_cfg: &BsCallConfig, mut preg: PileupRegion, seq_data: &mut Option<SeqData>, 
-	ref_index: &Faidx, stat_tx: &mpsc::Sender<StatJob>, call_tx: &mpsc::SyncSender<Option<Pileup>>, meth_prof: &mut MethProfile) -> io::Result<()> {
+fn handle_pileup(pileup_data: &mut PileupData, mut preg: PileupRegion, stat_tx: &mpsc::Sender<StatJob>, call_tx: &mpsc::SyncSender<Option<Pileup>>) -> io::Result<()> {
 	if preg.reads.is_empty() {
 		warn!("make_pileup received empty read vector");
 		return Ok(())
 	}
+	let bs_cfg = &pileup_data.bs_cfg;
 	let ltrim1 = bs_cfg.conf_hash.get_int("left_trim_read_1");
 	let ltrim2 = bs_cfg.conf_hash.get_int("left_trim_read_2");
 	let rtrim1 = bs_cfg.conf_hash.get_int("right_trim_read_1");
 	let rtrim2 = bs_cfg.conf_hash.get_int("right_trim_read_2");
 	let min_qual = bs_cfg.conf_hash.get_int("bq_threshold") as u8;
-	check_sequence(&preg.cname, seq_data, ref_index)?;
+	let seq_data = &mut pileup_data.seq_data;
+	let ref_index = &pileup_data.ref_index;
+	let dbsnp_file = &mut pileup_data.dbsnp_file;
+	check_sequence(&preg.cname, seq_data, ref_index, dbsnp_file)?;
 	check_regions(&mut preg, &bs_cfg.regions)?;	
-	let (ref_seq, ref_start, gc_bins) = load_ref_seq(&mut preg, seq_data)?;
+	let meth_prof = &mut pileup_data.meth_prof;
+	let (ref_seq, ref_start, gc_bins) = load_ref_seq(&mut preg, &seq_data)?;
 	let mut fs_stats = FSType::new();
 	let size = preg.end + 1 - preg.start;
 	let mut pileup_vec = Vec::with_capacity(size);
 	for _ in 0..size { pileup_vec.push(PileupPos::new())}
-	let mut pileup = Pileup::new(pileup_vec, ref_seq, preg.start, ref_start, gc_bins, preg.sam_tid);
+	let mut pileup = Pileup::new(pileup_vec, ref_seq, preg.start, ref_start, gc_bins, preg.sam_tid, &preg.cname, dbsnp_file);
 	for rd in preg.reads.drain(..) {
 		if let Some(read) = rd {
 			let (ltrim, rtrim) = if read.read_one() { (ltrim1, rtrim1) }
 			else if read.read_two() { (ltrim2, rtrim2) }
 			else { (0, 0) };
-			let (l, clipped, trimmed, overlap, low_qual, inserts) = add_read_to_pileup(&read, &mut pileup, ltrim, rtrim, min_qual, meth_prof);
+			let (l, clipped, trimmed, overlap, low_qual, inserts) = add_read_to_pileup(&read, &mut pileup, ltrim, rtrim, min_qual,  meth_prof);
 			if read.is_primary() {
 				if clipped > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Clipped, clipped) };
 				if overlap > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Overlapping, overlap) };
@@ -369,23 +380,42 @@ pub struct SeqData {
 	gc_content: GcContent,
 }
 
+pub struct PileupData {
+	seq_data: Option<SeqData>,
+	ref_index: Faidx,
+	dbsnp_file: Option<DBSnpFile>,
+	bs_cfg: Arc<BsCallConfig>,
+	meth_prof: MethProfile,
+}
+
 pub fn make_pileup(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<PileupRegion>>, mut bs_files: BsCallFiles, stat_tx: mpsc::Sender<StatJob>) {
 	info!("pileup_thread starting up");
-	let ref_index = bs_files.ref_index.take().unwrap();
+	let dbsnp_file = if let Some(dbsnp_index) = bs_files.dbsnp_index.take() {
+		match DBSnpFile::open(dbsnp_index) {
+			Ok(db) => Some(db),
+			Err(e) => {
+				error!("Couldn't open dbSNP index file: {}", e);
+				None
+			},
+		}	
+	} else { None }; 
+	let min_qual = bs_cfg.conf_hash.get_int("bq_threshold") as u8;
+	let mut pileup_data = PileupData {
+		seq_data: None,
+		ref_index: bs_files.ref_index.take().unwrap(),
+		dbsnp_file,
+		meth_prof: MethProfile::new(min_qual as usize),
+		bs_cfg: Arc::clone(&bs_cfg),
+	};
 	let (call_tx, call_rx) = mpsc::sync_channel(32);
-	let cfg = Arc::clone(&bs_cfg);
 	let st_tx = mpsc::Sender::clone(&stat_tx);
 	let call_handle = thread::spawn(move || { call_genotypes::call_genotypes(Arc::clone(&bs_cfg), call_rx, bs_files, st_tx) });
-
-	let min_qual = cfg.conf_hash.get_int("bq_threshold") as u8;
-	let mut meth_prof = MethProfile::new(min_qual as usize);
-	let mut seq: Option<SeqData> = None;
 	loop {
 		match rx.recv() {
 			Ok(None) => break,
 			Ok(Some(preg)) => {
 				debug!("Received new pileup region: {}:{}-{}", preg.cname, preg.start, preg.end);
-				if let Err(e) = handle_pileup(&cfg, preg, &mut seq, &ref_index, &stat_tx, &call_tx, &mut meth_prof) {
+				if let Err(e) = handle_pileup(&mut pileup_data, preg, &stat_tx, &call_tx) {
 					error!("handle_pileup failed with error: {}", e);
 					break;
 				}
@@ -398,7 +428,7 @@ pub fn make_pileup(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<PileupRe
 	}
 	if call_tx.send(None).is_err() { warn!("Error trying to send QUIT signal to call_genotypes thread") }
 	else {
-		let _ = stat_tx.send(StatJob::SetNonCpgReadProfile(meth_prof.take_profile()));
+		let _ = stat_tx.send(StatJob::SetNonCpgReadProfile(pileup_data.meth_prof.take_profile()));
 		if call_handle.join().is_err() { warn!("Error waiting for call_genotype thread to finish") }
 	}
 	info!("pileup_thread shutting down");
