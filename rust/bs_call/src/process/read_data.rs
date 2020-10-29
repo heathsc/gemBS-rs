@@ -90,7 +90,7 @@ fn 	count_passed_reads(reads: &[Option<ReadEnd>], fs_stats: &mut FSType) {
 		if let Some(read) = rd {
 			if read.is_primary() { fs_stats.add_read_level_count(FSReadLevelType::Passed, read.seq_qual.len()); }
 		}
-	}		
+	}
 }
 
 pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut bs_files: BsCallFiles) -> io::Result<()> {

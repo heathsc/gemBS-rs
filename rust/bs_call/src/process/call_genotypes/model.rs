@@ -1,6 +1,7 @@
 use std::f64::consts::LN_10;
 use libc::c_int;
 
+#[derive(Debug)]
 pub struct QualProb {
 	k: f64,
 	ln_k: f64,
@@ -88,8 +89,8 @@ impl Model {
 			let (x, tz, tz1) = get_par(3);
 			add_contrib(&[tz1, tz1, tz1, tz, tz1, tz1, tz, tz1, tz, x]);
 		}
-		let z0 = if counts[0] + counts[1] != 0 { self.get_z( n[5], n[7], qp[5].k, qp[7].k) } else { (-1.0, -1.0, -1.0) };
-		let z1 = if counts[4] + counts[6] != 0 { self.get_z( n[6], n[4], qp[6].k, qp[4].k) } else { (-1.0, -1.0, -1.0) };
+		let z0 = self.get_z( counts[5], counts[7], qp[5].k, qp[7].k);
+		let z1 = self.get_z( counts[6], counts[4], qp[6].k, qp[4].k);
 		if counts[4] != 0 {
 			let (x, tz, tz1) = get_par(4);
 			let tz2 = n[4] * (0.5 * (1.0 - z1.2) + qp[4].k).ln();
@@ -106,7 +107,7 @@ impl Model {
 		if counts[7] != 0 {
 			let (x, tz, tz1) = get_par(7);
 			let tz2 = n[7] * (0.5 * (1.0 - z0.2) + qp[7].k).ln();
-			add_contrib(&[tz1, tz2, tz1, tz, n[7] * (1.0 - z1.0 + qp[7].k).ln(), tz2, n[7] * (1.0 - 0.5 * z1.1 + qp[7].k).ln(), tz1, tz, x]);
+			add_contrib(&[tz1, tz2, tz1, tz, n[7] * (1.0 - z0.0 + qp[7].k).ln(), tz2, n[7] * (1.0 - 0.5 * z0.1 + qp[7].k).ln(), tz1, tz, x]);
 		}
 		let (mx, max) = ll[1..].iter().cloned().enumerate().fold((0, ll[0]), |(i, m), (j, l)| if l > m { (j + 1, l) } else { (i, m) });
 		let sum = (ll.iter().cloned().fold(0.0, |s, x| s + (x - max).exp())).ln();
@@ -114,16 +115,25 @@ impl Model {
 		(mx, ll)
 	}
 
-	fn get_z(&self, x1: f64, x2: f64, k1: f64, k2: f64) -> (f64, f64, f64) {
-		let lpt = self.lambda + self.theta;
-		let lmt = self.lambda - self.theta;
-		let d = (x1 + x2) * lmt;
-		let f = |x| if x < 1.0 { 1.0 - self.lambda } else if x > 1.0 { 1.0 - self.theta } else { 0.5 * (lmt * x + 2.0 - lpt) };
-		(
-			f((x1 * (lpt + 2.0 * k2) - x2 * (2.0 - lpt + 2.0 * k1)) / d), // w = 1, p = 1
-			f((x1 * (2.0 + lpt + 4.0 * k2) - x2 * (2.0 - lpt + 4.0 * k1)) / d), // w = 1, p = 1/2
-			f((x1 * (lpt + 4.0 * k2) - x2 * (2.0 - lpt + 4.0 * k1)) / d) // w = 1.2, p = 1
-		)
+	fn get_z(&self, c1: i32, c2: i32, k1: f64, k2: f64) -> (f64, f64, f64) {
+		match (c1, c2) {
+			(0, 0) => (0.0, 0.0, 0.0), // Never used so it doesn't matter
+			(_, 0) =>  (1.0 - self.theta, 1.0 - self.theta, 1.0 - self.theta),
+			(0, _) =>  (1.0 - self.lambda, 1.0 - self.lambda, 1.0 - self.lambda),
+			(_, _) => {
+				let x1 = c1 as f64;
+				let x2 = c2 as f64;
+				let lpt = self.lambda + self.theta;
+				let lmt = self.lambda - self.theta;
+				let d = (x1 + x2) * lmt;
+				let f = |x| if x < -1.0 { 1.0 - self.lambda } else if x > 1.0 { 1.0 - self.theta } else { 0.5 * (lmt * x + 2.0 - lpt) };
+				(
+					f((x1 * (lpt + 2.0 * k2) - x2 * (2.0 - lpt + 2.0 * k1)) / d), // w = 1, p = 1
+					f((x1 * (2.0 + lpt + 4.0 * k2) - x2 * (2.0 - lpt + 4.0 * k1)) / d), // w = 1, p = 1/2
+					f((x1 * (lpt + 4.0 * k2) - x2 * (2.0 - lpt + 4.0 * k1)) / d) // w = 1.2, p = 1
+				)
+			},
+		}
 	}
 
 	fn add_ref_prior(&self, ref_base: u8) -> [f64; 10] {
@@ -134,7 +144,7 @@ impl Model {
 				ll[0] = lrb;
 				ll[1] = lrb1;
 				ll[2] = lrb1;
-				ll[3] = lrb;
+				ll[3] = lrb1;
 			},
 		    2 => { // C
 				ll[1] = lrb1;

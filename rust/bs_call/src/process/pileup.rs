@@ -363,7 +363,7 @@ fn handle_pileup(pileup_data: &mut PileupData, mut preg: PileupRegion, stat_tx: 
 				if overlap > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Overlapping, overlap) };
 				if trimmed > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Trimmed, trimmed) };
 				if low_qual > 0 { fs_stats.add_base_level_count(FSBaseLevelType::LowQuality, low_qual) };
-				if inserts > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Inserts, low_qual) };
+				if inserts > 0 { fs_stats.add_base_level_count(FSBaseLevelType::Inserts, inserts) };
 				let nflt = clipped + overlap + trimmed + low_qual + inserts;
 				assert!(nflt <= l);
 				fs_stats.add_base_level_count(FSBaseLevelType::Passed, l - nflt);
