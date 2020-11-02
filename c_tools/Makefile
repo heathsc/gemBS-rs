@@ -39,7 +39,7 @@ all_static: setup gem3-static _samtools _bcftools _bs_call _utils
 all_debug: setup gem3-debug _samtools _bcftools _bs_call _utils
 
 _samtools: $(HTSLIB_DIR) $(SAMTOOLS_DIR) $(SAMTOOLS_DIR)/config.mk 
-	$(MAKE) --directory=$(SAMTOOLS_DIR) all all-htslib
+	$(MAKE) --directory=$(SAMTOOLS_DIR) all
 
 _bcftools: $(HTSLIB_DIR) $(BCFTOOLS_DIR) $(BCFTOOLS_DIR)/config.h
 	$(MAKE) $(FOLDER_BIN)/bcftools
