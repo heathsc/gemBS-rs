@@ -57,7 +57,7 @@ _utils: utils/Makefile
 	$(MAKE) --directory=utils
 
 utils/Makefile: utils/Makefile.in utils/configure _samtools
-	cd utils; ./configure --with-htslib=../${HTSLIB_DIR}
+	cd utils; ./configure --with-htslib=${GEMBS_INSTALL_ROOT}
 
 utils/configure: utils/configure.ac
 	cd utils; autoconf

@@ -5,8 +5,8 @@ AC_ARG_WITH(htslib,
 [AS_HELP_STRING([--with-htslib=PATH],
 		[specify prefix directory for installed htslib library.])])
 if test "x$with_htslib" != "x"; then
-      HTSLIBS="$with_htslib/libhts.a -lcurl -lcrypto -llzma"
-		HTSINC="-I$with_htslib"
+      HTSLIBS="-L $with_htslib/lib -lhts -lcurl -lcrypto -llzma"
+		HTSINC="-I$with_htslib/include"
 else
       HTSLIBS="-lhts -lcurl -lcrypto -llzma"
 		HTSINC=""
