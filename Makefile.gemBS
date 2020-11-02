@@ -6,6 +6,8 @@ ifeq ($(INSTALL_TEXLIVE),yes)
 endif
 
 GEMBS_INSTALL_ROOT ?= /usr/local/lib/gemBS
+export GEMBS_INSTALL_ROOT
+
 bin_dir = $(GEMBS_INSTALL_ROOT)/bin
 etc_dir = $(GEMBS_INSTALL_ROOT)/etc
 css_dir = $(etc_dir)/css
@@ -21,9 +23,9 @@ all: $(TARGETS)
 install: all installdirs
 	cp rust/bin/* $(bin_dir)
 	cp c_tools/bin/* $(bin_dir)
-	cp c_tools/bcftools/bcftools $(bin_dir)
-	cp c_tools/samtools/samtools $(bin_dir)
-	cp c_tools/htslib/bgzip $(bin_dir)
+#	cp c_tools/bcftools/bcftools $(bin_dir)
+#	cp c_tools/samtools/samtools $(bin_dir)
+#	cp c_tools/htslib/bgzip $(bin_dir)
 #	cp c_tools/bs_call/bin/* $(bin_dir)
 	cp c_tools/gem3-mapper/bin/gem-mapper $(bin_dir)
 	cp c_tools/gem3-mapper/bin/gem-indexer $(bin_dir)
