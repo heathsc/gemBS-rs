@@ -16,7 +16,7 @@ lib_dir = $(GEMBS_INSTALL_ROOT)/lib
 css_dir = $(etc_dir)/css
 cfg_dir = $(etc_dir)/config_scripts
 
-SUBDIRS = rust c_tools
+SUBDIRS = c_tools rust
 INSTALLDIRS = $(GEMBS_INSTALL_ROOT) $(bin_dir) $(lib_dir) $(etc_dir) $(css_dir) $(cfg_dir)
 
 .PHONY: subdirs $(SUBDIRS) installdirs all clean distclean texlive
