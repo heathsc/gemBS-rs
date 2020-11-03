@@ -573,6 +573,14 @@ pub fn add_command_opts(gem_bs: &GemBS, args: &mut String, sec: Section, opt_lis
 				args.push_str(format!("--{}\x1e", y).as_str()) },
 			VarType::Int => if let Some(i) = gem_bs.get_config_int(sec, x) { 
 				args.push_str(format!("--{}\x1e{}\x1e", y, i).as_str()) },
+			VarType::IntVec => if let Some(v) = gem_bs.get_config_intvec(sec, x) { 
+				if v.len() == 1 { args.push_str(format!("--{}\x1e{}\x1e", y, v[0]).as_str()) }
+				else {
+					args.push_str(format!("--{}\x1e{}", y, v[0]).as_str());
+					for i in v[1..].iter() { args.push_str(format!(",{}", i).as_str()) }
+					args.push('\x1e');
+				}
+			},
 			VarType::String => if let Some(s) = gem_bs.get_config_str(sec, x) { 
 				args.push_str(format!("--{}\x1e{}\x1e", y, s).as_str()) },
 			VarType::Float => if let Some(z) = gem_bs.get_config_float(sec, x) { 

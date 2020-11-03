@@ -98,8 +98,8 @@ fn make_known_var_list() -> KnownVarList {
 	kv_list.add_known_var("bcf_dir", VarType::String, vec!(Section::Calling));
 	kv_list.add_known_var("mapq_threshold", VarType::Int, vec!(Section::Calling, Section::Report));
 	kv_list.add_known_var("qual_threshold", VarType::Int, vec!(Section::Calling, Section::Extract));
-	kv_list.add_known_var("left_trim", VarType::Int, vec!(Section::Calling));
-	kv_list.add_known_var("right_trim", VarType::Int, vec!(Section::Calling));
+	kv_list.add_known_var("left_trim", VarType::IntVec, vec!(Section::Calling));
+	kv_list.add_known_var("right_trim", VarType::IntVec, vec!(Section::Calling));
 	kv_list.add_known_var("species", VarType::String, vec!(Section::Calling));
 	kv_list.add_known_var("keep_duplicates", VarType::Bool, vec!(Section::Calling));
 	kv_list.add_known_var("ignore_duplicate_flag", VarType::Bool, vec!(Section::Calling));
@@ -196,7 +196,7 @@ impl PrepConfig {
 				// We initially keep everything as a string until after finishing parsing the config file(s)
 				// To allow interpolation to work as expected
 				let rv = match vt {
-					VarType::FloatVec | VarType::StringVec => DataValue::StringVec(vec!(val_str;1)),
+					VarType::FloatVec | VarType::StringVec | VarType::IntVec => DataValue::StringVec(vec!(val_str;1)),
 					_ => DataValue::String(val_str),
 				};
 
@@ -336,6 +336,15 @@ impl PrepConfig {
 									if let DataValue::Float(val) = DataValue::from_str(s, VarType::Float)? { v.push(val); }
 								}	
 								Some(DataValue::FloatVec(v))					
+							} else { None }
+						},
+						VarType::IntVec => { 
+							if let DataValue::StringVec(vv) = &pv.var {
+								let mut v = Vec::new();
+								for s in vv.iter() {
+									if let DataValue::Int(val) = DataValue::from_str(s, VarType::Int)? { v.push(val); }
+								}	
+								Some(DataValue::IntVec(v))					
 							} else { None }
 						},
 						VarType::StringVec => { 

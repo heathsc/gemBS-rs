@@ -42,6 +42,11 @@ fn check_and_assign_var(gem_bs: &mut GemBS, k: &str, vt: VarType, section: Secti
 				if let DataValue::Float(val) = DataValue::from_str(&val, VarType::Float)? { v.push(val); }
 				Some(DataValue::FloatVec(v))					
 			},
+			VarType::IntVec => { 
+				let mut v = Vec::new();					
+				if let DataValue::Int(val) = DataValue::from_str(&val, VarType::Int)? { v.push(val); }
+				Some(DataValue::IntVec(v))					
+			},
 			VarType::StringVec => Some(DataValue::StringVec(vec!(val))),					
 			_ => Some(DataValue::from_str(&val, vt)?),
 		};

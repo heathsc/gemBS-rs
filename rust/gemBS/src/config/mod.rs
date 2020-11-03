@@ -153,6 +153,9 @@ impl GemBS {
 	pub fn get_config_int(&self, section: Section, name: &str) -> Option<isize> {
 		if let Some(DataValue::Int(x)) = self.get_config(section, name) { Some(*x) } else { None }
 	}	
+	pub fn get_config_intvec(&self, section: Section, name: &str) -> Option<&Vec<isize>> {
+		if let Some(DataValue::IntVec(x)) = self.get_config(section, name) { Some(x) } else { None }
+	}	
 	pub fn get_config_str(&self, section: Section, name: &str) -> Option<&str> {
 		if let Some(DataValue::String(x)) = self.get_config(section, name) { Some(x) } else { None }
 	}	

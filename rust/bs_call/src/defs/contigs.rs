@@ -38,7 +38,7 @@ impl CtgRegion {
 
 fn read_ctg_list(chash: &ConfHash, sam_file: &SamFile, key: &str) -> io::Result<HashSet<usize>> {
 	let mut ctgs = HashSet::new();
-	let vname = format!("exclude_{}", key);
+	let vname = format!("contig_{}", key);
 	if let Some(fname) = chash.get_str(&vname) {
 		let mut rdr = compress::open_bufreader(fname)?;
 		debug!("Reading contig {} list from {}", key, fname);

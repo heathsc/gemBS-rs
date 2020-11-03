@@ -91,8 +91,8 @@ subcommands:
           - barcode: {short: b, long: barcode, value_name: BARCODE, takes_value: true, multiple: true, help: Barcode of sample}
           - mapq_threshold: {short: q, long: mapq-threshold, value_name: MAPQ_THRESHOLD, takes_value: true, help: Threshold for MAPQ scores}
           - qual_threshold: {short: Q, long: qual-threshold, value_name: QUAL_THRESHOLD, takes_value: true, help: Threshold for base quality scores}
-          - right_trim: {short: g, long: right-trim, value_name: BASES, takes_value: true, help: Bases to trim from right of read}
-          - left_trim: {short: f, long: left-trim, value_name: BASES, takes_value: true, help: Bases to trim from left of read}
+          - right_trim: {short: g, long: right-trim, takes_value: true, multiple: true, min_values: 1, max_values: 2, require_delimiter: true, value_name: "BASES [,BASES]", help: Bases to trim from right of read pair (give 2 values for read specific values) }
+          - left_trim: {short: f, long: left-trim, takes_value: true, multiple: true, min_values: 1, max_values: 2, require_delimiter: true, value_name: "BASES, [,BASES]", help: Bases to trim from left of read pair (give 2 values for read specific values) }
           - tmp_dir: {short: d, long: tmp-dir, value_name: PATH, takes_value: true, help: Temporary directory to perform sorting operations}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for calling pipeline}
           - call_threads: {long: call-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for methylation caller}

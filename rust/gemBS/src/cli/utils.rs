@@ -38,6 +38,10 @@ pub fn get_shell(s: &str) -> Shell {
 pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
 	match tt {
 		VarType::Int => m.value_of(opt).and_then(|x| <isize>::from_str(x).ok().map(DataValue::Int)),
+		VarType::IntVec => m.values_of(opt).map(|v| {			
+			let vec:Vec<_> = v.map(|x| <isize>::from_str(x).ok().unwrap()).collect();
+			DataValue::IntVec(vec)
+		}),
 		VarType::Bool => if m.is_present(opt) { Some(DataValue::Bool(true)) } else { None },
 		VarType::Float => m.value_of(opt).and_then(|x| <f64>::from_str(x).ok().map(DataValue::Float)),
 		VarType::String => m.value_of(opt).map(|x| DataValue::String(x.to_owned())),
@@ -134,8 +138,8 @@ lazy_static! {
       	m.push(("mapq_threshold", OptionType::Global("mapq_threshold", VarType::Int)));
       	m.push(("qual_threshold", OptionType::Global("qual_threshold", VarType::Int)));
       	m.push(("phred_threshold", OptionType::Global("phred_threshold", VarType::Int)));
-      	m.push(("left_trim", OptionType::Global("left_trim", VarType::Int)));
-      	m.push(("right_trim", OptionType::Global("right_trim", VarType::Int)));
+      	m.push(("left_trim", OptionType::Global("left_trim", VarType::IntVec)));
+      	m.push(("right_trim", OptionType::Global("right_trim", VarType::IntVec)));
       	m.push(("conversion", OptionType::Global("conversion", VarType::FloatVec)));
       	m.push(("auto_conversion", OptionType::Global("auto_conversion", VarType::Bool)));
     	m.push(("ref_bias", OptionType::Global("reference_bias", VarType::Float)));

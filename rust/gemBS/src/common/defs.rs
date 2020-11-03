@@ -212,6 +212,7 @@ pub enum DataValue {
 	FileType(FileType),
 	Bool(bool),
 	Int(isize),	
+	IntVec(Vec<isize>),
 	Float(f64),
 	FloatVec(Vec<f64>),
 	JobLen(JobLen),
@@ -233,7 +234,7 @@ impl DataValue {
 				"true" | "yes" | "1" => Ok(DataValue::Bool(true)),
 				_ => Err(format!("Could not parse {} as boolean value", s)),
 			},
-			VarType::Int => match s.parse::<isize>() {
+			VarType::Int | VarType::IntVec => match s.parse::<isize>() {
 				Ok(x) => Ok(DataValue::Int(x)),
 				Err(_) => Err(format!("Could not parse {} as integer value", s)),
 			},
@@ -247,7 +248,7 @@ impl DataValue {
 
 #[derive(Debug, Clone, Copy)]
 pub enum VarType {
-	String, StringVec, Bool, Int, Float, FloatVec, ReadEnd, FileType, JobLen, PageSize, MemSize,
+	String, StringVec, Bool, Int, IntVec, Float, FloatVec, ReadEnd, FileType, JobLen, PageSize, MemSize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
