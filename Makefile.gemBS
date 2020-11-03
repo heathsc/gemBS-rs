@@ -23,7 +23,7 @@ INSTALLDIRS = $(GEMBS_INSTALL_ROOT) $(bin_dir) $(lib_dir) $(etc_dir) $(css_dir) 
 
 all: $(TARGETS) gemBS
 
-gemBS:
+gemBS: gemBS_config.mk
 	echo "#!/bin/sh" > $@
 	echo 'LD_LIBRARY_PATH=$(lib_dir):$$LD_LIBRARY_PATH $(bin_dir)/gemBS $$@' >> $@
 	chmod 755 $@
@@ -36,9 +36,11 @@ install: all installdirs
 	cp $(TMP_ROOT)/bin/bgzip $(bin_dir)
 	cp c_tools/gem3-mapper/bin/gem-mapper $(bin_dir)
 	cp c_tools/gem3-mapper/bin/gem-indexer $(bin_dir)
+	cp c_tools/bs_call/bin/dbSNP_idx $(bin_dir)
 	cp -P $(TMP_ROOT)/lib/libhts* $(lib_dir)
 	cp etc/css/style.css $(css_dir)
 	cp etc/config_scripts/*.conf $(cfg_dir)
+	strip $(bin_dir)/*
 
 texlive: .texlive
 
