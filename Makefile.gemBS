@@ -21,7 +21,12 @@ INSTALLDIRS = $(GEMBS_INSTALL_ROOT) $(bin_dir) $(lib_dir) $(etc_dir) $(css_dir) 
 
 .PHONY: subdirs $(SUBDIRS) installdirs all clean distclean texlive
 
-all: $(TARGETS)
+all: $(TARGETS) gemBS
+
+gemBS:
+	echo "#!/bin/sh" > $@
+	echo 'LD_LIBRARY_PATH=$(lib_dir):$$LD_LIBRARY_PATH $(bin_dir)/gemBS $$@' >> $@
+	chmod 755 $@
 
 install: all installdirs
 	cp rust/bin/* $(bin_dir)
