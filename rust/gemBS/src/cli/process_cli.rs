@@ -1,33 +1,59 @@
 use std::str::FromStr;
-use std::env;
+use std::{env, fs};
 use std::path::Path;
-use clap::{App, AppSettings, ArgGroup};
+use clap::{App, AppSettings, ArgGroup, ArgMatches, Shell};
 
 #[cfg(feature = "slurm")]
 use clap::Arg;
+use yaml_rust::yaml;
 
 use crate::commands;
 use crate::config::GemBS;
 use crate::common::defs::{Section, DataValue};
 
-use super::utils::LogLevel;
+use super::utils::{LogLevel, get_shell};
 
-pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
-	let yaml = load_yaml!("cli.yml");
+fn gen_cli(yaml: &yaml::Yaml) -> App {
 
-    let mut app = App::from_yaml(yaml);
-	app = app.setting(AppSettings::VersionlessSubcommands);
 	#[cfg(feature = "slurm")]
 	{
 		let container: Option<&'static str> = option_env!("GEMBS_CONTAINER");
-		app = app.arg(Arg::with_name("slurm_script").short("s").long("slurm-script").takes_value(true)
-			.value_name("SCRIPT_FILE").help("Generate PERL script to submit commands to slurm for execution"));
 		if container.is_none() {
-			app = app.arg(Arg::with_name("slurm").short("S").long("slurm").help("Submit commands to slurm for execution"))
-			.group(ArgGroup::with_name("slurm_opts").args(&["slurm", "slurm_script"]));
+			App::from_yaml(yaml).version(crate_version!()).setting(AppSettings::VersionlessSubcommands)
+				.arg(Arg::with_name("slurm_script").short("s").long("slurm-script").takes_value(true)
+				.value_name("SCRIPT_FILE").help("Generate PERL script to submit commands to slurm for execution"))
+				.arg(Arg::with_name("slurm").short("S").long("slurm").help("Submit commands to slurm for execution"))
+				.group(ArgGroup::with_name("slurm_opts").args(&["slurm", "slurm_script"]))
+		} else {
+			App::from_yaml(yaml).version(crate_version!()).setting(AppSettings::VersionlessSubcommands)
+				.arg(Arg::with_name("slurm_script").short("s").long("slurm-script").takes_value(true)
+				.value_name("SCRIPT_FILE").help("Generate PERL script to submit commands to slurm for execution"))		
 		}
 	}
-	let m = app.get_matches();		
+	#[cfg(not(feature = "slurm"))]
+	{
+		App::from_yaml(yaml).version(crate_version!()).setting(AppSettings::VersionlessSubcommands)
+		
+	}
+	
+}
+
+fn generate_completions(m: &ArgMatches) -> Result<(), String> {
+	let shell = m.value_of("shell").map(|s| get_shell(s)).unwrap_or(Shell::Bash);
+	let ofile = m.value_of("output").unwrap_or("gemBS");
+	match fs::File::create(&ofile) {
+		Ok(mut file) => {
+			let yaml = load_yaml!("cli.yml");
+			gen_cli(yaml).gen_completions_to("gemBS", shell, &mut file);
+			Ok(())
+		},
+		Err(e) => Err(format!("Couldn't create shell completion file {}: {}", ofile, e)),
+	}
+}
+
+pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
+	let yaml = load_yaml!("cli.yml");
+	let m = gen_cli(yaml).get_matches();		
 	// Interpret global command line flags and set up logging
     
     let ts = m.value_of("timestamp").map(|v| {
@@ -53,7 +79,6 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 		env::set_current_dir(&wd).map_err(|e| format!("Can not switch working directory to {}: {}", f, e))?;
 		debug!("Moved working directory to {}", f);
 	}	
-
 	if let Some(s) = m.value_of("config_file") { gem_bs.set_config(Section::Default, "config_file", DataValue::String(s.to_string())); }
 	if let Some(s) = m.value_of("gembs_root") { gem_bs.set_config(Section::Default, "gembs_root", DataValue::String(s.to_string())); }
 	if m.is_present("keep_logs") { gem_bs.set_config(Section::Default, "keep_logs", DataValue::Bool(true)); }
@@ -94,6 +119,9 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 		},
 		("clear", Some(m_sum)) => {
 			commands::clear::clear_command(m_sum, gem_bs)
+		},
+		("completions", Some(m_sum)) => {
+			generate_completions(m_sum)
 		},
 		_ => {
 			Err("Unknown subcommand".to_string())

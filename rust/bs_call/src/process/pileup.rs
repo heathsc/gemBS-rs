@@ -8,6 +8,7 @@ use super::call_genotypes;
 use crate::htslib::{Sequence, Faidx, CigarOp, hts_err, BSStrand};
 use crate::stats::{StatJob, FSBaseLevelType, FSType, MethProfile};
 use crate::dbsnp::{DBSnpFile, DBSnpContig};
+use crate::rusage::*;
 
 pub struct PileupRegion {
 	start: usize,
@@ -431,5 +432,7 @@ pub fn make_pileup(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<PileupRe
 		let _ = stat_tx.send(StatJob::SetNonCpgReadProfile(pileup_data.meth_prof.take_profile()));
 		if call_handle.join().is_err() { warn!("Error waiting for call_genotype thread to finish") }
 	}
-	info!("pileup_thread shutting down");
+	if let Ok(ru_thread) = Rusage::get(RusageWho::RusageThread) {
+		info!("pileup_thread shutting down: user {} sys {}", ru_thread.utime(), ru_thread.stime());	
+	}
 }	

@@ -6,6 +6,7 @@ use crate::config::GemBS;
 use lazy_static::lazy_static;
 use crate::common::defs::{Section, DataValue, VarType, FileType, JobLen, MemSize, ReadEnd};
 use crate::common::latex_utils::PageSize;
+use clap::Shell;
 
 /*
 pub fn from_arg_matches<T: FromStr>(m: &ArgMatches, option: &str) -> Option<T> {
@@ -23,6 +24,16 @@ pub fn from_arg_matches<T: FromStr>(m: &ArgMatches, option: &str) -> Option<T> {
 	}
 } 
 */
+
+pub fn get_shell(s: &str) -> Shell {
+	match s.to_lowercase().as_str() {
+		"bash" => Shell::Bash,
+		"zsh" => Shell::Zsh,
+		"elvish" => Shell::Elvish,
+		"fish" => Shell::Fish,
+		_ => panic!("Unknown shell {}", s),
+	}
+}
 
 pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
 	match tt {

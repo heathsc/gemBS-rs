@@ -7,6 +7,7 @@ use libc::{c_char, c_int};
 use crate::stats::{StatJob, collect_vcf_stats};
 use crate::process::call_genotypes::{CallBlock, GenotypeCall, CallEntry};
 use crate::dbsnp::DBSnpContig;
+use crate::rusage::*;
 
 pub enum WriteVcfJob {
 	CallBlock(CallBlock),
@@ -558,6 +559,8 @@ pub fn write_vcf_entry(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<WriteVcfJob
 	}
 	if vcf_stats_tx.send(None).is_err() { warn!("Error trying to send QUIT signal to vcf_stats thread") }
 	if vcf_stats_handle.join().is_err() { warn!("Error waiting for vcf_stats thread to finish") }
-	info!("write_vcf thread shutting down");	
+	if let Ok(ru_thread) = Rusage::get(RusageWho::RusageThread) {
+		info!("write_vcf_thread shutting down: user {} sys {}", ru_thread.utime(), ru_thread.stime());	
+	}
 }
 

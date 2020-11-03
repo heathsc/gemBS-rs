@@ -3,8 +3,36 @@ use std::fs::File;
 use std::sync::Arc;
 use std::io::{Error, ErrorKind, Read, BufReader, Seek, SeekFrom};
 use std::convert::TryInto;
-use libflate::zlib::Decoder;
 use std::collections::HashMap;
+use libc::{c_int, c_ulong};
+
+#[link(name = "z")]
+extern "C" {
+	fn uncompress(dest: *mut u8, dlen: *mut c_ulong, src: *const u8, slen: c_ulong) -> c_int;
+}
+
+struct Uncompress {
+	dest_buf: Box<[u8]>,
+}
+
+const Z_OK: c_int = 0;
+const Z_DATA_ERROR: c_int = -3;
+const Z_MEM_ERROR: c_int = -4;
+const Z_BUF_ERROR: c_int = -5;
+
+impl Uncompress {
+	fn new(dest_buf: Box<[u8]>) -> Self { Self {dest_buf}}
+	fn uncompress(&mut self, src: &[u8]) -> io::Result<&[u8]> {
+		let mut dlen = self.dest_buf.len() as c_ulong;
+		match unsafe { uncompress(self.dest_buf.as_mut_ptr(), &mut dlen as *mut c_ulong, src.as_ptr(), src.len() as c_ulong )} {
+			Z_OK => Ok(&self.dest_buf[..dlen as usize]),
+			Z_DATA_ERROR => Err(new_err("Compressed data corrupt".to_string())),
+			Z_MEM_ERROR => Err(new_err("Out of memory when uncompressing data".to_string())),
+			Z_BUF_ERROR => Err(new_err("Buffer too small for uncompressed data".to_string())),
+			_ => Err(new_err("Unknown error".to_string())),
+		}
+	}
+}
 
 pub fn new_err(s: String) -> io::Error {
 	Error::new(ErrorKind::Other, s)	
@@ -76,21 +104,20 @@ pub struct DBSnpCtg {
 }
 
 impl DBSnpCtg {
-	fn load_data(&mut self, mut file: &mut BufReader<File>, prefixes: &[String]) -> io::Result<()> {
+	fn load_data(&mut self, mut file: &mut BufReader<File>, prefixes: &[String], bufsize: usize) -> io::Result<()> {
 		file.seek(SeekFrom::Start(self.file_offset))?;
 		let mut bins = Vec::with_capacity(self.max_bin + 1 - self.min_bin);
-		let mut ubuf = Vec::new();
+		let ubuf: Vec<u8> = vec!(0; bufsize);
+		let mut uncomp = Uncompress::new(ubuf.into_boxed_slice());
 		loop {
 			let mut size = [0u64; 1];
 			read_u64(&mut file, &mut size)?;
 			if size[0] == 0 { break; }
 			let cbuf = read_n(&mut file, size[0] as usize)?;
 			trace!("Read in compressed data for bin");
-			let mut decoder = Decoder::new(&*cbuf)?;
-			ubuf.clear();
-			decoder.read_to_end(&mut ubuf)?;
+			let buf = uncomp.uncompress(&cbuf)?;
 			trace!("bin data uncompressed OK");	
-			bins.append(&mut load_bins(&ubuf, self.max_bin + 1 - self.min_bin - bins.len(), prefixes)?);				
+			bins.append(&mut load_bins(&buf, self.max_bin + 1 - self.min_bin - bins.len(), prefixes)?);				
 		}
 		if bins.len() != self.max_bin + 1 - self.min_bin { Err(new_err(format!("Wrong number of bins read in.  Expected {}, Found {}", self.max_bin + 1 - self.min_bin, bins.len()))) }
 		else {
@@ -197,6 +224,7 @@ impl DBSnpContig {
 pub struct DBSnpIndex {
 	filename: String,
 	dbsnp: HashMap<String, DBSnpCtg>,
+	bufsize: usize,
 	prefixes: Arc<Vec<String>>,
 	header: String,	
 }
@@ -217,9 +245,10 @@ impl DBSnpIndex {
 		read_u32(&mut file, &mut[td[0]])?;
 		if td[0] != 0xd7278434 { return Err(new_err("Invalid format: bad second magic number".to_string())) }
 		trace!("Header data read in OK");
-		let mut decoder = Decoder::new(&*cbuf)?;
-		let mut ubuf = Vec::new();
-		decoder.read_to_end(&mut ubuf)?;
+		let ubuf: Vec<u8> = vec!(0; td1[1] as usize);
+		let mut uncomp = Uncompress::new(ubuf.into_boxed_slice());
+		let ubuf = uncomp.uncompress(&cbuf)?;
+		
 		trace!("Header data uncompressed OK");
 		if ubuf.len() < 9 { return Err(new_err("Invalid format: short header".to_string())) }
 		let n_prefix = u16::from_le_bytes((&ubuf[2..4]).try_into().unwrap());
@@ -242,7 +271,7 @@ impl DBSnpIndex {
 		trace!("Contigs read in OK");
 		info!("Read dbSNP header from {} with data on {} contigs", filename, n_ctgs);
 		info!("Header line: {}", header);
-		Ok(Self{filename: filename.to_owned(), dbsnp, prefixes: Arc::new(prefixes), header})
+		Ok(Self{filename: filename.to_owned(), dbsnp, bufsize: td1[1] as usize, prefixes: Arc::new(prefixes), header})
 	}
 	pub fn header(&self) -> &str { &self.header }
 }
@@ -272,7 +301,7 @@ impl DBSnpFile {
 		Ok(match self.index.dbsnp.get_mut(name) {
 			Some(ctg) => {
 				info!("Loading dbSNP data for {}", name);	
-				ctg.load_data(&mut self.file, &self.index.prefixes)?;			
+				ctg.load_data(&mut self.file, &self.index.prefixes, self.index.bufsize)?;			
 				info!("dbSNP data loaded");
 				Some(ctg)				
 			},

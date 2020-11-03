@@ -15,6 +15,7 @@ pub mod fisher;
 
 use model::Model;
 use fisher::FisherTest;
+use crate::rusage::*;
 
 pub enum CallEntry {
 	Call(GenotypeCall),
@@ -116,5 +117,7 @@ pub fn call_genotypes(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<Pileu
 	}
 	if write_tx.send(WriteVcfJob::Quit).is_err() { warn!("Error trying to send QUIT signal to write_vcf thread") }
 	if write_handle.join().is_err() { warn!("Error waiting for call_genotype thread to finish") }
-	info!("call_genotypes thread shutting down");	
+	if let Ok(ru_thread) = Rusage::get(RusageWho::RusageThread) {
+		info!("call_genotypes thread shutting down: user {} sys {}", ru_thread.utime(), ru_thread.stime());	
+	}
 }

@@ -12,7 +12,7 @@ use crate::config::{BsCallConfig, BsCallFiles, ConfVar};
 
 pub fn process_cli() -> io::Result<(BsCallConfig, BsCallFiles)> {
 	let yaml = load_yaml!("cli/cli.yml");
-    let app = App::from_yaml(yaml);
+    let app = App::from_yaml(yaml).version(crate_version!());
 	let mut vbuf: Vec<u8> = Vec::new();
 	app.write_version(&mut vbuf).expect("Error getting version from clap");
 	let version = std::str::from_utf8(&vbuf).expect("Version string not utf8");

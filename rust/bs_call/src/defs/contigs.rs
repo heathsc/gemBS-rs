@@ -36,11 +36,12 @@ impl CtgRegion {
 	}	
 }
 
-fn read_omit_ctg_list(chash: &ConfHash, sam_file: &SamFile) -> io::Result<HashSet<usize>> {
-	let mut omit_ctgs = HashSet::new();
-	if let Some(fname) = chash.get_str("contig_exclude") {
+fn read_ctg_list(chash: &ConfHash, sam_file: &SamFile, key: &str) -> io::Result<HashSet<usize>> {
+	let mut ctgs = HashSet::new();
+	let vname = format!("exclude_{}", key);
+	if let Some(fname) = chash.get_str(&vname) {
 		let mut rdr = compress::open_bufreader(fname)?;
-		debug!("Reading contig exclude list from {}", fname);
+		debug!("Reading contig {} list from {}", key, fname);
 		let mut line = String::with_capacity(256);
 		loop {
 			match rdr.read_line(&mut line) {
@@ -51,9 +52,9 @@ fn read_omit_ctg_list(chash: &ConfHash, sam_file: &SamFile) -> io::Result<HashSe
 						let ctg = ctg.trim();
 						if !ctg.is_empty() {
 							if let Some(x) = sam_file.name2tid(ctg) { 
-								trace!("Adding {} (tid = {}) to omit list", ctg, x);
-								omit_ctgs.insert(x); 
-							} else { warn!("Contig {} in contig exclude file {} not present in SAM header (ignored)", ctg, fname)}
+								trace!("Adding {} (tid = {}) to contig {} list", ctg, x, key);
+								ctgs.insert(x); 
+							} else { warn!("Contig {} in contig {} file {} not present in SAM header (ignored)", ctg, key, fname)}
 						}
 					}
 					line.clear();
@@ -63,7 +64,7 @@ fn read_omit_ctg_list(chash: &ConfHash, sam_file: &SamFile) -> io::Result<HashSe
 		}
 		debug!("Done");
 	}
-	Ok(omit_ctgs)
+	Ok(ctgs)
 }
 
 fn init_sam_contigs(sam_file: &SamFile) -> Vec<CtgInfo> {
@@ -80,10 +81,14 @@ fn setup_ref_ids(ctgs: &mut Vec<CtgInfo>, sam_file: &SamFile, ref_idx: &Faidx) {
 	}
 }
 
-fn setup_regions_with_contig_bed(fname: &str, filter: bool, ctgs: &mut Vec<CtgInfo>, sam_file: &SamFile, ref_idx: &Faidx, omit_ctgs: &HashSet<usize>) -> io::Result<Vec<CtgRegion>> {
+fn setup_regions_with_contig_bed(fname: &str, filter: bool, ctgs: &mut Vec<CtgInfo>, sam_file: &SamFile, ref_idx: &Faidx, 
+	omit_ctgs: &HashSet<usize>, include_ctgs: &HashSet<usize>) -> io::Result<Vec<CtgRegion>> {
 	let mut ctg_regions = Vec::new();
 	// If we are not filtering then mark all contigs from SAM header that are *not* in omit_ctgs for output in VCF header
-	if !filter { ctgs.iter_mut().enumerate().for_each(|(i, c)| c.in_header = !omit_ctgs.contains(&i)) }
+	if !filter { 
+		if include_ctgs.is_empty() { ctgs.iter_mut().enumerate().for_each(|(i, c)| c.in_header = !omit_ctgs.contains(&i)) }
+		else { ctgs.iter_mut().enumerate().for_each(|(i, c)| c.in_header = include_ctgs.contains(&i) && !omit_ctgs.contains(&i)) }
+	}
 	let mut rdr = compress::open_bufreader(fname)?;
 	debug!("Reading region list from {}", fname);
 	let mut line = String::with_capacity(256);
@@ -126,36 +131,36 @@ fn setup_regions_with_contig_bed(fname: &str, filter: bool, ctgs: &mut Vec<CtgIn
 	Ok(ctg_regions)	
 }
 
-fn setup_regions_from_sam_header(ctgs: &mut Vec<CtgInfo>, sam_file: &SamFile, ref_idx: &Faidx, omit_ctgs: &HashSet<usize>) -> io::Result<Vec<CtgRegion>> {
+fn setup_regions_from_sam_header(ctgs: &mut Vec<CtgInfo>, sam_file: &SamFile, ref_idx: &Faidx, omit_ctgs: &HashSet<usize>, include_ctgs: &HashSet<usize>) -> io::Result<Vec<CtgRegion>> {
 	let mut ctg_regions = Vec::new();
 	for (i, c) in ctgs.iter_mut().enumerate() {
-		if !omit_ctgs.contains(&i) {
+		if !omit_ctgs.contains(&i) && (include_ctgs.is_empty() || include_ctgs.contains(&i)) {
 			let name = sam_file.tid2name(i);
 			if c.ref_id.is_some() {
 				if let Some(l) = ref_idx.seq_len(name) {
-					if sam_file.tid2len(i) != l { return Err(new_err(format!("Mismatch in sequence lengths between reference and SAM header for contig {}: {}, {}", name, l, sam_file.tid2len(i)))); }
+				if sam_file.tid2len(i) != l { return Err(new_err(format!("Mismatch in sequence lengths between reference and SAM header for contig {}: {}, {}", name, l, sam_file.tid2len(i)))); }
 					c.in_header = true;
 					trace!("Contig {} will be output in VCF header", name);
 					ctg_regions.push(CtgRegion::new(i, 0, l - 1));
 					trace!("Added region {}:{}-{}", name, 1, l);
 				} else { panic!("Missing sequence length from reference index for contig {}", name); }
 			} else { return Err(new_err(format!("Contig {} missing in reference FASTA", name))); } 
-		}
+		}	
 	}
 	Ok(ctg_regions)
 }
 
 pub fn setup_contigs(chash: &ConfHash, sam_file: &SamFile, ref_idx: &Faidx) -> io::Result<(Vec<CtgInfo>, Vec<CtgRegion>)> {
-	let omit_ctgs = read_omit_ctg_list(chash, sam_file)?;
+	let omit_ctgs = read_ctg_list(chash, sam_file, "exclude")?;
+	let include_ctgs = read_ctg_list(chash, sam_file, "include")?;
 	let mut ctgs = init_sam_contigs(sam_file);
 	setup_ref_ids(&mut ctgs, sam_file, ref_idx);
 	let ctg_regions = if let Some(fname) = chash.get_str("contig_bed") {
 		let filter = chash.get_bool("filter_contigs");
-		setup_regions_with_contig_bed(fname, filter, &mut ctgs, sam_file, ref_idx, &omit_ctgs)?
+		setup_regions_with_contig_bed(fname, filter, &mut ctgs, sam_file, ref_idx, &omit_ctgs, &include_ctgs)?
 	} else {
-		setup_regions_from_sam_header(&mut ctgs, sam_file, ref_idx, &omit_ctgs)?
-	};
-	
+		setup_regions_from_sam_header(&mut ctgs, sam_file, ref_idx, &omit_ctgs, &include_ctgs)?
+	};	
 	Ok((ctgs, ctg_regions))
 }
 

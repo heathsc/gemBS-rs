@@ -1,5 +1,4 @@
 name: bs_call
-version: "3.0.0"
 author: Simon Heath <simon.heath@gmail.com>
 about: bs_call is an application for calling methylation values and SNV from bisulfite treated sequence data
 setting: GlobalVersion
@@ -25,7 +24,8 @@ args:
     - report_file: {short: j, long: report-file, takes_value: true, value_name: FILE, help: Output JSON file with statistics of the analysis }
     - sample: {short: n, long: sample, takes_value: true, value_name: SAMPLE, help: Set sample name }
     - contig_bed: {short: C, long: contig-bed, takes_value: true, value_name: FILE, help: BED file with contigs to be processed}
-    - contig_exclude: {short: s, long: contig-exclude, takes_value: true, value_name: FILE, help: List of contigs to be excluded}
+    - contig_include: {short: s, long: contig-include, takes_value: true, value_name: FILE, help: List of contigs to be included}
+    - contig_exclude: {short: x, long: contig-exclude, takes_value: true, value_name: FILE, help: List of contigs to be excluded}
     - filter_contigs: {short: F, long: filter-contigs, requires: contig_bed, help: Only include contigs found in the contig-bed file in the output header}
     - dbsnp: {short: D, long: dbsnp, takes_value: true, value_name: FILE, help: dbSNP processed index file}
     - all_positions: {short: A, long: all-positions, help: Output all covered positions }

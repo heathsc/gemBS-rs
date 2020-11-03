@@ -8,6 +8,7 @@ pub mod vcf_stats;
 pub use stats_json::*;
 pub use meth_profile::MethProfile;
 pub use vcf_stats::{collect_vcf_stats, VcfStats, MUT_NAMES, SITE_TYPE_ALL, SITE_TYPE_VARIANT, SITE_TYPE_CPG_REF, SITE_TYPE_CPG_NON_REF};
+use crate::rusage::*;
 
 pub struct Stats {
 	stats: stats_json::CallJson,
@@ -64,7 +65,9 @@ fn accumulate_stats(name: String, source: String, rx: mpsc::Receiver<StatJob>) {
 			}
 		}
 	}
-	info!("stat_thread shutting down");
+	if let Ok(ru_thread) = Rusage::get(RusageWho::RusageThread) {
+		info!("stat_thread shutting down: user {} sys {}", ru_thread.utime(), ru_thread.stime());	
+	}
 }
 
 // No output stats file supplied so we just throw away all messages apart from Quit

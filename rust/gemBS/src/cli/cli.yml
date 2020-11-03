@@ -1,5 +1,4 @@
 name: gemBS
-version: "4.0.0"
 author: Simon Heath <simon.heath@gmail.com>
 about: gemBS is a bioinformatics pipeline for analyzing whole genome bisulfite data (WGBS) data
 setting: GlobalVersion
@@ -175,6 +174,11 @@ subcommands:
           - memory: {short: m, long: memory, value_name: MEMORY, takes_value: true, help: Memory required for a job (default - available memory / jobs)}
     - run:
         about: Run all pending pipeline commands
+    - completions: 
+        about: Generate shell completion files
+        args:
+          - shell: {short: s, long: shell, help: Destination shell for completion file, takes_value: true, value_name: SHELL, possible_values: [bash, zsh, fish, elvish], case_insensitive: true }
+          - output: {short: o, long: output, help: Output file, takes_value: true, value_name: FILE}
     - clear:
         setting: DeriveDisplayOrder
         about: Clear up incomplete files after aborted run

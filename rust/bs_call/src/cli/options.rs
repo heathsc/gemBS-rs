@@ -9,7 +9,7 @@ use super::cli_utils;
 use clap::ArgMatches;
 use crate::dbsnp;
 
-pub const OPTS: [(&str, ConfVar);20] = [
+pub const OPTS: [(&str, ConfVar);21] = [
 	("haploid", ConfVar::Bool(false)),
 	("keep_duplicates", ConfVar::Bool(false)),
 	("keep_supplementary", ConfVar::Bool(false)),
@@ -28,6 +28,7 @@ pub const OPTS: [(&str, ConfVar);20] = [
 	("reference", ConfVar::String(None)),
 	("contig_bed", ConfVar::String(None)),
 	("contig_exclude", ConfVar::String(None)),
+	("contig_include", ConfVar::String(None)),
 	("dbsnp", ConfVar::String(None)),	
 	("report_file", ConfVar::String(None)),	
 ];

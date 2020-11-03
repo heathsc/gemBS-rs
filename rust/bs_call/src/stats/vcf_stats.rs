@@ -6,6 +6,7 @@ use crate::stats::*;
 use crate::process::vcf::*;
 use crate::process::pileup::GC_BIN_SIZE;
 use crate::process::call_genotypes::fisher::FisherTest;
+use crate::rusage::*;
 
 const GT_HET: [bool; 10] = [false, true, true, true, false, true, true, false, true, false];
 
@@ -246,7 +247,9 @@ pub fn collect_vcf_stats(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<Ve
 			}
 		}
 	}
-	let _ = stat_tx.send(StatJob::AddVcfStats(vcf_stats)); 	
-	info!("collect_vcf_stats shutting down");	
-}
+	let _ = stat_tx.send(StatJob::AddVcfStats(vcf_stats));
+	if let Ok(ru_thread) = Rusage::get(RusageWho::RusageThread) {
+		info!("collect_vcf_stats_thread shutting down: user {} sys {}", ru_thread.utime(), ru_thread.stime());	
+	}
+ }
 

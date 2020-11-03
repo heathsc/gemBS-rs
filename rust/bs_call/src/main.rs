@@ -13,6 +13,9 @@ pub mod htslib;
 pub mod process;
 pub mod stats;
 pub mod dbsnp;
+pub mod rusage;
+
+use rusage::*;
 
 fn main() -> Result<(), &'static str> {
 	let (bs_cfg, bs_files) = match cli::process_cli() {
@@ -26,5 +29,12 @@ fn main() -> Result<(), &'static str> {
 	if let Err(e) = process::process(Arc::new(bs_cfg), bs_files) {
 		error!("bs_call ended with error: {}", e);
 		Err("Failed")
-	} else { Ok(()) }
+	} else { 
+		if let Ok(ru_thread) = Rusage::get(RusageWho::RusageThread) {
+			info!("CPU usage main thread: user {}, sys {}", ru_thread.utime(), ru_thread.stime());
+		}
+		let ru_self = Rusage::get(RusageWho::RusageSelf).unwrap();
+		info!("CPU usage total: user {}, sys {}", ru_self.utime(), ru_self.stime());
+		Ok(()) 
+	}
 }
