@@ -6,15 +6,18 @@ ifeq ($(INSTALL_TEXLIVE),yes)
 endif
 
 GEMBS_INSTALL_ROOT ?= /usr/local/lib/gemBS
-export GEMBS_INSTALL_ROOT
+TMP_ROOT=$(abspath c_tools/tmp_root)
+
+export GEMBS_INSTALL_ROOT TMP_ROOT
 
 bin_dir = $(GEMBS_INSTALL_ROOT)/bin
 etc_dir = $(GEMBS_INSTALL_ROOT)/etc
+lib_dir = $(GEMBS_INSTALL_ROOT)/lib
 css_dir = $(etc_dir)/css
 cfg_dir = $(etc_dir)/config_scripts
 
 SUBDIRS = rust c_tools
-INSTALLDIRS = $(GEMBS_INSTALL_ROOT) $(bin_dir) $(etc_dir) $(css_dir) $(cfg_dir)
+INSTALLDIRS = $(GEMBS_INSTALL_ROOT) $(bin_dir) $(lib_dir) $(etc_dir) $(css_dir) $(cfg_dir)
 
 .PHONY: subdirs $(SUBDIRS) installdirs all clean distclean texlive
 
@@ -23,12 +26,12 @@ all: $(TARGETS)
 install: all installdirs
 	cp rust/bin/* $(bin_dir)
 	cp c_tools/bin/* $(bin_dir)
-#	cp c_tools/bcftools/bcftools $(bin_dir)
-#	cp c_tools/samtools/samtools $(bin_dir)
-#	cp c_tools/htslib/bgzip $(bin_dir)
-#	cp c_tools/bs_call/bin/* $(bin_dir)
+	cp c_tools/bcftools/bcftools $(bin_dir)
+	cp c_tools/samtools/samtools $(bin_dir)
+	cp $(TMP_ROOT)/bin/bgzip $(bin_dir)
 	cp c_tools/gem3-mapper/bin/gem-mapper $(bin_dir)
 	cp c_tools/gem3-mapper/bin/gem-indexer $(bin_dir)
+	cp -P $(TMP_ROOT)/lib/libhts* $(lib_dir)
 	cp etc/css/style.css $(css_dir)
 	cp etc/config_scripts/*.conf $(cfg_dir)
 
@@ -55,7 +58,8 @@ $(INSTALLDIRS):
 
 $(bin_dir): $(GEMBS_INSTALL_ROOT)
 $(etc_dir): $(GEMBS_INSTALL_ROOT)
-$(css_dir): $(css_dir)
+$(lib_dir): $(GEMBS_INSTALL_ROOT)
+$(css_dir): $(etc_dir)
 $(cfg_dir): $(etc_dir)
 
 texlive/gemBS_texlive.profile: texlive/gemBS_texlive.profile.in gemBS_config.mk

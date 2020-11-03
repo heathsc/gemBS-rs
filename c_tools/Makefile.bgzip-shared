@@ -1,0 +1,4 @@
+include Makefile
+
+bgzip-shared: bgzip.o lib-shared
+	$(CC) $(LDFLAGS) -o $@ bgzip.o -L. -lhts $(LIBS) -lpthread

@@ -9,6 +9,7 @@
 # Definitions
 ROOT_PATH=$(CURDIR)
 GEMBS_INSTALL_ROOT ?= /usr/local/lib/gemBS
+TMP_ROOT ?= $(abspath c_tools/tmp_root)
 
 # samtools and bcftools definitions
 SAMTOOLS_VERSION=1.11
@@ -26,7 +27,7 @@ SAMTOOLS_URL=https://github.com/samtools/samtools/archive/$(SAMTOOLS_VERSION).ta
 BCFTOOLS_URL=https://github.com/samtools/bcftools/archive/$(BCFTOOLS_VERSION).tar.gz
 HTSLIB_URL=https://github.com/samtools/htslib/archive/$(HTSLIB_VERSION).tar.gz
 
-HTSLIB_INSTALL=$(GEMBS_INSTALL_ROOT)/include/htslib/hts.h
+HTSLIB_INSTALL=$(TMP_ROOT)/include/htslib/hts.h
 
 MACHTYPE:=$(shell uname -m)
 ifneq (,$(findstring -,$(MACHTYPE)))
@@ -35,20 +36,19 @@ endif
 		  
 FOLDER_BIN=bin
 
-all: setup gem3 _samtools _bcftools _bs_call _utils
-
-all_static: setup gem3-static _samtools _bcftools _bs_call _utils
+all: setup gem3 $(HTSLIB_INSTALL) _samtools _bcftools _bs_call _utils
 
 all_debug: setup gem3-debug $(HTSLIB_INSTALL) _samtools _bcftools _bs_call _utils
 
-$(HTSLIB_INSTALL): $(HTSLIB_DIR) $(HTSLIB_DIR)/config.mk 
+$(HTSLIB_INSTALL): $(HTSLIB_DIR) $(HTSLIB_DIR)/config.mk $(HTSLIB_DIR)/Makefile.bgzip-shared
 	$(MAKE) --directory=$(HTSLIB_DIR) && $(MAKE) --directory=$(HTSLIB_DIR) install
+	$(MAKE) --directory=$(HTSLIB_DIR) -f Makefile.bgzip-shared bgzip-shared && cp $(HTSLIB_DIR)/bgzip-shared $(TMP_ROOT)/bin/bgzip
 
 _samtools: $(HTSLIB_INSTALL) $(SAMTOOLS_DIR) $(SAMTOOLS_DIR)/config.mk 
-	$(MAKE) --directory=$(SAMTOOLS_DIR) all && $(MAKE) --directory=$(SAMTOOLS_DIR) install
+	$(MAKE) --directory=$(SAMTOOLS_DIR) all
 
 _bcftools: $(HTSLIB_INSTALL) $(BCFTOOLS_DIR) $(BCFTOOLS_DIR)/config.h
-	$(MAKE) $(FOLDER_BIN)/bcftools && $(MAKE) --directory=$(BCFTOOLS_DIR) install
+	$(MAKE) $(FOLDER_BIN)/bcftools
 
 _bs_call: bs_call/src/Makefile.mk
 	$(MAKE) --directory=bs_call
@@ -57,19 +57,20 @@ _utils: utils/Makefile
 	$(MAKE) --directory=utils
 
 utils/Makefile: utils/Makefile.in utils/configure _samtools
-	cd utils; ./configure --with-htslib=${GEMBS_INSTALL_ROOT}
+	cd utils; ./configure --with-htslib=${TMP_ROOT}
 
 utils/configure: utils/configure.ac
 	cd utils; autoconf
 	
 setup:
-	@mkdir -p $(FOLDER_BIN) 
+	echo Hola $(TMP_ROOT)
+	@mkdir -p $(FOLDER_BIN) $(TMP_ROOT)
 
 bs_call/configure: bs_call/configure.ac
 	cd bs_call; autoconf
 	
 bs_call/src/Makefile.mk: bs_call/src/Makefile.mk.in bs_call/gt/Makefile.mk.in bs_call/configure _samtools
-	cd bs_call; ./configure ${BS_CALL_CONFIG} --with-htslib=$(GEMBS_INSTALL_ROOT)
+	cd bs_call; ./configure ${BS_CALL_CONFIG} --with-htslib=$(TMP_ROOT)
 
 gem3: gem3-mapper/Makefile.mk
 	$(MAKE) --directory=gem3-mapper
@@ -87,16 +88,19 @@ gem3-mapper/Makefile.mk: gem3-mapper/Makefile.mk.in gem3-mapper/configure
 	cd gem3-mapper; ./configure ${GEM3_CONFIG}
 
 $(HTSLIB_DIR)/config.mk:
-	cd $(HTSLIB_DIR); ./configure --prefix=$(GEMBS_INSTALL_ROOT)
+	cd $(HTSLIB_DIR); ./configure --prefix=$(TMP_ROOT)
+
+$(HTSLIB_DIR)/Makefile.bgzip-shared:
+	cd $(HTSLIB_DIR); ln -s ../Makefile.bgzip-shared .
 
 $(SAMTOOLS_DIR)/config.mk:
-	cd $(SAMTOOLS_DIR); ./configure --prefix=$(GEMBS_INSTALL_ROOT) --with-htslib=$(GEMBS_INSTALL_ROOT)
+	cd $(SAMTOOLS_DIR); ./configure --prefix=$(GEMBS_INSTALL_ROOT) --with-htslib=$(TMP_ROOT)
 
 $(FOLDER_BIN)/bcftools: $(BCFTOOLS_DIR) 
 	$(MAKE) --directory=$(BCFTOOLS_DIR) all
 
 $(BCFTOOLS_DIR)/config.h:
-	cd $(BCFTOOLS_DIR); ./configure --prefix=$(GEMBS_INSTALL_ROOT) --with-htslib=$(GEMBS_INSTALL_ROOT)
+	cd $(BCFTOOLS_DIR); ./configure --prefix=$(GEMBS_INSTALL_ROOT) --with-htslib=$(TMP_ROOT)
 	touch $(BCFTOOLS_DIR)/config.h
 
 $(HTSLIB_DIR):
@@ -116,7 +120,7 @@ $(BCFTOOLS_DIR):
 
 clean:
 	@rm -f *~
-	@rm -rf $(FOLDER_BIN) 
+	@rm -rf $(FOLDER_BIN) $(TMP_ROOT)
 	if [ -f $(SAMTOOLS_DIR)/Makefile ]; then $(MAKE) --directory=$(SAMTOOLS_DIR) clean; fi
 	if [ -f $(BCFTOOLS_DIR)/Makefile ]; then $(MAKE) --directory=$(BCFTOOLS_DIR) clean; fi
 	if [ -f "gem3-mapper/Makefile.mk" ]; then $(MAKE) --directory=gem3-mapper clean; fi
@@ -125,7 +129,7 @@ clean:
 
 distclean:
 	@rm -f *~
-	@rm -rf $(FOLDER_BIN) 
+	@rm -rf $(FOLDER_BIN) $(TMP_ROOT)
 	if [ -f $(SAMTOOLS_DIR)/Makefile ]; then cd $(SAMTOOLS_DIR); $(MAKE) clean; rm -f config.h config.log config.status config.mk; fi
 	if [ -f $(BCFTOOLS_DIR)/Makefile ]; then cd $(BCFTOOLS_DIR); $(MAKE) clean; rm -f config.h config.log config.status config.mk; fi
 	if [ -f $(HTSLIB_DIR)/Makefile ]; then cd $(HTSLIB_DIR); $(MAKE) clean; rm -f config.h config.log config.status config.mk; fi
