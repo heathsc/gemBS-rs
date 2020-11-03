@@ -7,7 +7,7 @@ GEMBSDIR=gemBS
 GEMBS_CTOML=$(GEMBSDIR)/Cargo.toml
 
 all: $(GEMBS_CTOML) $(BINDIR)
-	GEMBS_INSTALL_ROOT=$(GEMBS_INSTALL_ROOT) -L $(GEMBS_INSTALL_ROOT)/lib cargo build --release 
+	GEMBS_INSTALL_ROOT=$(GEMBS_INSTALL_ROOT) RUSTFLAGS="-L $(TMP_ROOT)/lib" cargo build --release 
 	cp target/release/gem_bs $(BINDIR)/gemBS
 	cp target/release/read_filter $(BINDIR)/
 	cp target/release/bs_call $(BINDIR)/
