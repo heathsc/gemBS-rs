@@ -33,6 +33,10 @@ Use ``git clone --recursive`` to retrieve the complete source code including the
 
     git clone --recursive https://github.com/heathsc/gemBS-rs.git
 
+-------------------
+Configure & Install
+-------------------
+
 Before starting the installation of gemBS, you will need to install
 or check the installation of several packages.
 
@@ -63,4 +67,5 @@ Then look at the file gemBS_config.mk and make any changes that are required.  W
 
     make install
 
+If the make and install process is successful, a shell script called gemBS will be created in the main gemBS-rs directory.  This file should be copied to a directory that is in your PATH so that gemBS can be invoked from anywhere.
 
