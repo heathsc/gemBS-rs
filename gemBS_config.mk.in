@@ -1,4 +1,24 @@
+#
+# The main installation directory for gemBS is
+# given by GEMBS_INSTALL_ROOT.  To perform a
+# local installation comment out the following line
+# and uncomment the line INSTALL_PREFIX=$(HOME)
+#
 INSTALL_PREFIX=/usr/local
+#INSTALL_PREFIX=$(HOME)
 GEMBS_INSTALL_ROOT=$(INSTALL_PREFIX)/lib/gemBS
+
+#
+# Set INSTALL_TEXLIVE to install a local minimal
+# texlive distribution in GEMBS_INSTALL_ROOT
+#
+# A working texlive distribution is required to 
+# produce pdf versions of the QC reports
+#
 INSTALL_TEXLIVE=yes
+
+#
+# Add support for submitting the pipeline directly to the Slurm
+# workflow manager
+#
 SLURM_SUPPORT=yes
