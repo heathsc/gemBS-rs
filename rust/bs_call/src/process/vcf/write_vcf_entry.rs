@@ -480,7 +480,7 @@ impl WriteState {
 					if (ref_context[2] == b'C' && ref_context[3] == b'G') || (ref_context[1] == b'C' && ref_context[2] == b'G') { CPG_STATUS_REF_CPG } else { 0 }
 				};
 				let flags = if skip { CALL_STATS_SKIP } else { 0 } | if rs_found { CALL_STATS_RS_FOUND } else { 0 };
-				let meth_cts = CPG_ST_CTS[call.max_gt as usize];
+				let meth_cts = CPG_ST_CTS[call.max_gt as usize].map(|(x, y)| (call.counts[x] as usize, call.counts[y] as usize));
 				let mut call_stats = CallStats{sam_tid: self.sam_tid, phred, fs, dp1, d_inf, qd, cpg_status, flags, gc: call.gc, 
 					meth_cts, filter: 0, gt: call.max_gt, mq: call.mq, ref_base: call.ref_base};
 				if !skip {
