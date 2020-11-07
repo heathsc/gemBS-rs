@@ -327,7 +327,10 @@ fn worker_thread(tx: mpsc::Sender<isize>, rx: mpsc::Receiver<Option<QPipe>>, idx
 						if let Some(file) = log { pipeline.log_file(file.clone()); }
 						let opath = &qpipe.output.to_owned();
 						if let Some(path) = opath { pipeline.out_filepath(&path); }
-						pipeline.run(qpipe.sig)
+						trace!("Launching external pipeline");
+						let res = pipeline.run(qpipe.sig);
+						trace!("External pipeline ended");
+						res
 					},
 					QPipeStage::Internal(com) => {
 						let ret = match com {

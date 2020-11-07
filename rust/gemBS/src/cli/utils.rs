@@ -158,6 +158,7 @@ lazy_static! {
  	  	m.push(("sampling", OptionType::Global("sampling_rate", VarType::Int)));
  	  	m.push(("min_contig_size", OptionType::Global("min_contig_size", VarType::Int)));
 	  	m.push(("make_bs_index", OptionType::Local(VarType::Bool)));
+	  	m.push(("make_nonbs_index", OptionType::Local(VarType::Bool)));
 	  	m.push(("make_dbsnp_index", OptionType::Local(VarType::Bool)));
 	  	m.push(("dbsnp_files", OptionType::Global("dbsnp_files", VarType::StringVec)));
 	  	m.push(("project", OptionType::Global("project", VarType::String)));

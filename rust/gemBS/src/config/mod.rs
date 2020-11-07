@@ -22,8 +22,6 @@ use utils::find_exec_path;
 use crate::config::contig::{Contig, ContigPool};
 use crate::cli::utils::LogLevel;
 
-use std::slice;
-
 pub mod contig;
 mod check_ref;
 mod check_map;
@@ -190,7 +188,6 @@ impl GemBS {
 		debug!("Adding task: {} {} {:?} {}", id, desc, command, args);
 		self.tasks.add_task(id, desc, command, args)
 	}
-	pub fn get_tasks_iter(&self) -> slice::Iter<'_, Task> { self.tasks.iter() }
 	pub fn get_tasks(&self) -> &TaskList { &self.tasks }
 	pub fn get_assets(&self) -> &AssetList { &self.assets }
 	pub fn add_parent_child(&mut self, child: usize, parent: usize) {
@@ -323,6 +320,7 @@ impl GemBS {
 		self.rescan_assets_and_tasks(lock)
 	}
 	pub fn rescan_assets_and_tasks(&mut self, lock: &FileLock) -> Result<(), String> {
+		trace!("Running rescan_assets_and_tasks()");
 		let running = get_running_tasks(lock)?;		
 		let running_ids = running.iter().map(|x| self.tasks.find_task(x.id())).fold(HashSet::new(), |mut h, x| {
 			if let Some(t) = x { self.tasks[t].outputs().for_each(|y| {h.insert(*y);}) }
