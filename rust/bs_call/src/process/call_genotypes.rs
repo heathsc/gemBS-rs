@@ -94,10 +94,11 @@ fn send_write_job(job: WriteVcfJob, write_tx: &mpsc::SyncSender<WriteVcfJob>) ->
 pub fn call_genotypes(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<Pileup>>, bs_files: BsCallFiles, stat_tx: mpsc::Sender<StatJob>) {
 	info!("call_genotypes_thread starting up");
 	let ref_bias = bs_cfg.conf_hash.get_float("reference_bias");
+	let haploid = bs_cfg.conf_hash.get_bool("haploid");
 	let conversion = (bs_cfg.conf_hash.get_float("under_conversion"), bs_cfg.conf_hash.get_float("over_conversion"));
 	let (write_tx, write_rx) = mpsc::sync_channel(32);
 	let write_handle = thread::spawn(move || { write_vcf_entry(Arc::clone(&bs_cfg), write_rx, bs_files, stat_tx) });
-	let model = Model::new(63, conversion, ref_bias);
+	let model = Model::new(63, conversion, ref_bias, haploid);
 	let fisher = FisherTest::new();
 	loop {
 		match rx.recv() {

@@ -8,7 +8,7 @@ args:
     - quiet: {short: q, long: quiet, help: Silence all output}
     - timestamp: {short: T, long: time, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
     - loglevel: {short: v, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
-    - haploid: {short: '1', long: quiet, help: Assume genome is haploid}
+    - haploid: {short: '1', long: haploid, help: Assume genome is haploid}
     - keep_duplicates: {short: d, long: keep-duplicates, help: Don't merge duplicate reads}
     - keep_supplementary: {short: S, long: keep-supplementary, help: Don't discard supplementary (split) alignments}
     - ignore_duplicates: {short: e, long: ignore-duplicates, help: Ignore duplicate record flag from SAM}
