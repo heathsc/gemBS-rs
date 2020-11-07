@@ -460,7 +460,7 @@ impl GemBS {
 				} 
 			}
 		}
-		tlist.sort();
+		tlist.sort_unstable();
 		if ignore { tlist }
 		else {
 			let mut tlist1 = Vec::new();
