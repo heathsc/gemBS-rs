@@ -315,6 +315,14 @@ impl GemBS {
 		check_report::check_call_report(self)?;
 		check_extract::check_extract(self)?;
 		check_report::check_report(self)?;
+		for asset in self.get_assets().iter() {
+			let i = asset.idx();
+			for j in asset.parents() {
+				if *j > i {
+					error!("Parent asset {}:{} large number than child {}:{}", *j, self.get_asset(*j).unwrap().id(), i, self.get_asset(i).unwrap().id());
+				}
+			}
+		}
 		self.assets.calc_mod_time_ances();
 		self.assets.check_delete_status();
 		self.rescan_assets_and_tasks(lock)

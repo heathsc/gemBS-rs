@@ -120,19 +120,22 @@ fn check_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 	}
 	gem_bs.set_config(Section::Index, "need_bs_index", DataValue::Bool(need_bs_index));
 	gem_bs.set_config(Section::Index, "need_nonbs_index", DataValue::Bool(need_nonbs_index));
-	if need_bs_index {
+	gem_bs.check_signal()	
+}
+
+fn add_index_assets(gem_bs: &mut GemBS) -> Result<(), String> {
+	if gem_bs.get_config_bool(Section::Index, "need_bs_index") {
 		if let Some(DataValue::String(index)) = gem_bs.get_config(Section::Index, "index").cloned() {
 			gem_bs.insert_asset("index", Path::new(&index), AssetType::Derived);			
 		} else { return Err("Internal error - no index".to_string()); }
 	}
-	if need_nonbs_index {
+	if gem_bs.get_config_bool(Section::Index, "need_nonbs_index") {
 		if let Some(DataValue::String(index)) = gem_bs.get_config(Section::Index, "nonbs_index").cloned() {
 			gem_bs.insert_asset("nonbs_index", Path::new(&index), AssetType::Derived);			
 		} else { return Err("Internal error - no index".to_string()); }
-	}
-	gem_bs.check_signal()	
+	}	
+	Ok(())
 }
-
 
 fn make_dbsnp_tasks(gem_bs: &mut GemBS, dbsnp_files: Vec<PathBuf>) {
 	let dbsnp_index = if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::Index, "dbsnp_index") { PathBuf::from(idx) } 
@@ -283,6 +286,7 @@ pub fn check_ref_and_indices(gem_bs: &mut GemBS) -> Result<(), String> {
 	check_ref(gem_bs)?;
 	check_indices(gem_bs)?;
 	make_gem_ref(gem_bs)?;
+	add_index_assets(gem_bs)?;
 	check_dbsnp_ref(gem_bs)?;
 	make_index_tasks(gem_bs)
 }
