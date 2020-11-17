@@ -1,5 +1,5 @@
 [workspace]
-members = ["gemBS", "read_filter", "bs_call", "dbsnp_index"]
+members = ["gemBS", "read_filter", "bs_call"]
 
 [profile.release]
 lto = "thin"
