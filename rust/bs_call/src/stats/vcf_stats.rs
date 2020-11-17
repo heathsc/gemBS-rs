@@ -95,11 +95,11 @@ pub struct CovStats {
 	pub cpg: [usize; 2],
 	pub cpg_inf: [usize; 2],
 	pub all: usize,
-	pub gc_pcent: [usize; GC_BIN_SIZE as usize],
+	pub gc_pcent: [usize; (GC_BIN_SIZE + 1) as usize],
 }
 
 impl CovStats { 
-	fn new() -> Self { Self{var: 0, all: 0, cpg: [0; 2], cpg_inf: [0; 2], gc_pcent: [0; GC_BIN_SIZE as usize] }}
+	fn new() -> Self { Self{var: 0, all: 0, cpg: [0; 2], cpg_inf: [0; 2], gc_pcent: [0; (GC_BIN_SIZE + 1) as usize] }}
 }
 
 #[derive(Default)]
