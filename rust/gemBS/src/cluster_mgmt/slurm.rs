@@ -19,7 +19,7 @@ use crate::common::defs::{DataValue, JobLen, MemSize, Command};
 use crate::common::dry_run;
 use crate::common::utils::Pipeline;
 use crate::common::tasks::TaskList;
-use crate::cli::utils::LogLevel;
+use utils::log_level::LogLevel;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct SlurmDep {

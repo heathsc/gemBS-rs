@@ -110,6 +110,7 @@ pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
         	m.push(("right_trim", "right-trim", VarType::IntVec));
         	m.push(("keep_unmatched", "keep-unmatched", VarType::Bool));
         	m.push(("keep_duplicates", "keep-duplicates", VarType::Bool));
+        	m.push(("keep_improper_pairs", "keep-unmatched", VarType::Bool));
         	m.push(("ignore_duplicate_flag", "ignore-duplicates", VarType::Bool));
         	m.push(("benchmark_mode", "benchmark-mode", VarType::Bool));
 	       	m.push(("haploid", "haploid", VarType::Bool));

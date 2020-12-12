@@ -1,7 +1,7 @@
-use std::str::FromStr;
 use std::{env, fs};
 use std::path::Path;
 use clap::{App, AppSettings, ArgGroup, ArgMatches, Shell};
+use utils::log_level::init_log;
 
 #[cfg(feature = "slurm")]
 use clap::Arg;
@@ -11,7 +11,7 @@ use crate::commands;
 use crate::config::GemBS;
 use crate::common::defs::{Section, DataValue};
 
-use super::utils::{LogLevel, get_shell};
+use super::utils::get_shell;
 
 fn gen_cli(yaml: &yaml::Yaml) -> App {
 
@@ -56,23 +56,7 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 	let m = gen_cli(yaml).get_matches();		
 	// Interpret global command line flags and set up logging
     
-    let ts = m.value_of("timestamp").map(|v| {
-        stderrlog::Timestamp::from_str(v).unwrap_or_else(|_| {
-            clap::Error {
-                message: "invalid value for 'timestamp'".into(),
-                kind: clap::ErrorKind::InvalidValue,
-                info: None,
-            }.exit()
-        })
-    }).unwrap_or(stderrlog::Timestamp::Off);
-	let verbose = value_t!(m.value_of("loglevel"), LogLevel).unwrap_or_else(|_| LogLevel::from_str("info").expect("Could not set loglevel info"));
-	let quiet = verbose.is_none() || m.is_present("quiet");
-    stderrlog::new()
-        .quiet(quiet)
-        .verbosity(verbose.get_level())
-        .timestamp(ts)
-        .init()
-        .unwrap();
+	let(verbose, _) = init_log(&m);
 	gem_bs.set_verbose(verbose);
 	if let Some(f) = m.value_of("dir") {
 		let wd = Path::new(f);

@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use std::io;
 
 use clap::App;
@@ -6,7 +5,7 @@ use clap::App;
 mod cli_utils;
 mod options;
 
-use cli_utils::LogLevel;
+use utils::log_level::init_log;
 use super::process;
 use crate::config::{BsCallConfig, BsCallFiles, ConfVar};
 
@@ -19,24 +18,7 @@ pub fn process_cli() -> io::Result<(BsCallConfig, BsCallFiles)> {
 	
 	// Setup logging
 	let m = app.get_matches();	
-	    let ts = m.value_of("timestamp").map(|v| {
-        stderrlog::Timestamp::from_str(v).unwrap_or_else(|_| {
-            clap::Error {
-                message: "invalid value for 'timestamp'".into(),
-                kind: clap::ErrorKind::InvalidValue,
-                info: None,
-            }.exit()
-        })
-    }).unwrap_or(stderrlog::Timestamp::Off);
-	let verbose = value_t!(m.value_of("loglevel"), LogLevel).unwrap_or_else(|_| LogLevel::from_str("info").expect("Could not set loglevel info"));
-	let quiet = verbose.is_none() || m.is_present("quiet");
-    stderrlog::new()
-        .quiet(quiet)
-        .verbosity(verbose.get_level())
-        .timestamp(ts)
-        .init()
-        .unwrap();
-
+	let _ = init_log(&m);
 	// Process arguments
 	let (mut bs_cfg, mut bs_files) = options::handle_options(&m)?;
 

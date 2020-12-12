@@ -1,9 +1,15 @@
+#[macro_use]
+extern crate clap;
+#[macro_use]
+extern crate lazy_static;
+
 use std::path::{Path, PathBuf};
 use std::ffi::{OsString, OsStr, CString};
 use std::os::unix::ffi::OsStrExt;
 use std::env;
 
 pub mod compress;
+pub mod log_level;
 
 fn access(p: &Path) -> Result<bool, String> {
 	let cstr = CString::new(p.as_os_str().as_bytes()).map_err(|e| format!("access(): error converting {}: {}", p.display(), e))?;

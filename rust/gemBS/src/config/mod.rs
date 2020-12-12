@@ -18,9 +18,9 @@ use crate::common::defs::{Section, Metadata, DataValue, JobLen, MemSize, Command
 use crate::common::assets::{Asset, AssetList, AssetType, AssetStatus, GetAsset};
 use crate::common::tasks::{Task, TaskList, TaskStatus, RunningTask};
 use crate::common::utils::{FileLock, timed_wait_for_lock, get_phys_memory};
-use utils::find_exec_path;
+
 use crate::config::contig::{Contig, ContigPool};
-use crate::cli::utils::LogLevel;
+use utils::{log_level::LogLevel, find_exec_path};
 
 pub mod contig;
 mod check_ref;
