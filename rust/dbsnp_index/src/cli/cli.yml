@@ -1,0 +1,19 @@
+name: dbsnp_index
+author: Simon Heath <simon.heath@gmail.com>
+about: dbsnp_index is an application for generating an index of the dbSNP database for gemBS to allow assigning public IDs to SNPs
+setting: GlobalVersion
+setting: DeriveDisplayOrder
+args:
+    - quiet: {short: q, long: quiet, help: Silence all output}
+    - timestamp: {short: T, long: time, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
+    - loglevel: {short: v, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
+    - threads: {short: t, long: threads, takes_value: true, value_name: "THREADS", help: "Set number of additional threads (default: number of cores)"} 
+    - output: {short: o, long: output, takes_value: true, value_name: INDEX, help: "Set file name for output index (default: stdout)" }
+    - description: {short: d, long: desc, takes_value: true, value_name: DESCRIPTION, help: Description of dataset }
+    - chrom_alias: {short: c, long: chrom-alias, takes_value: true, value_name: FILE, help: Chromosome name alias file }
+    - type: {short: X, long: type, takes_value: true, value_name: TYPE, possible_values: [AUTO, BED, JSON, VCF], case_insensitive: true, help: "Input file type (default: BED)"}
+    - unsorted_file: {short: u, long: unsorted-file, takes_value: true, value_name: FILE, help: Input file with uncorted entries" }
+    - sorted: {short: S, long: sorted, help: Assume input files are sorted by contig (unless specified with -u command)}
+    - maf_limit: {short: m, long: maf-limit, takes_value: true, value_name: VALUE, help: Flags SNP with maf >= VALUE so that these position will always be reported in the output VCF from bs_call" }
+    - selected: {short: s, long: selected, takes_value: true, value_name: FILE, help: File with list of SNPs (one per line) to be flagged as for --maf above" }
+    - input: {value_name: FILE, multiple: true, help: "Input BED/VCF/JSON files (default: <stdin>)" }
