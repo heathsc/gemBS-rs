@@ -13,5 +13,6 @@ clap = {version = "2.3.3", features = ["yaml"]}
 num_cpus = "1.13.0"
 libc = "0.2"
 chrono = "0.4"
+crossbeam-channel = "0.5"
 utils = { path = "../utils" }
 json_rs = { git = "https://github.com/heathsc/json_rs" }

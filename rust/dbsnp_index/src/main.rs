@@ -12,7 +12,7 @@ pub mod config;
 
 fn main()  -> Result<(), String> {
 	let (conf, files) = cli::process_cli().map_err(|e| format!("dbsnp_index initialization failed with error: {}", e))?;
-	match process::process(&conf, &files) {
+	match process::process(conf, files) {
 		Ok(_) => Ok(()),
 		Err(e) => {
 			error!("dbsnp failed with error: {}", e);

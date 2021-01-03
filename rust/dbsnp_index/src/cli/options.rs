@@ -53,8 +53,10 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[String]>)> {
 		Some(s) => read_select_file(s)?,
 		None => HashSet::new(),
 	};
-	let files: Vec<String> = m.values_of("input").unwrap().map(|s| s.to_owned()).collect();
-
+	let files: Vec<String> = match m.values_of("input") {
+		Some(v) => v.map(|s| s.to_owned()).collect(),
+		None => Vec::new(),
+	};
 	trace!("Finished handling command line options");
 	Ok((Config::new(threads, maf_limit, output, description, input_type, chrom_alias, selected), files.into_boxed_slice()))
 }

@@ -21,11 +21,16 @@ impl PrefixHash {
 		let x = hash.len() as u32;
 		assert!(x < 0xffffffff);
 		drop(hash);
-		debug!("Adding new prefix {} ({})", name, x);
 		let mut hash = self.prefix_hash.write().unwrap();
-		let k: Arc<str> = Arc::from(name);
-		hash.insert(k.clone(), x);
-		(k, x)
+		if let Some((k, x)) = hash.get_key_value(name) {
+			trace!("Got prefix {} ({}) from hash", name, x); 
+			(k.clone(), *x) 			
+		} else {
+			debug!("Adding new prefix {} ({})", name, x);
+			let k: Arc<str> = Arc::from(name);
+			hash.insert(k.clone(), x);
+			(k, x)		
+		}
 	}
 }
 
