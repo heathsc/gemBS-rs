@@ -8,13 +8,13 @@ pub mod read_bed;
 pub struct RawSnp {
 	name: String,
 	pos: u32,
-	prefix: u32,
+	prefix: u16,
 	maf: Option<f32>,
 }
 
 impl RawSnp {
 	pub fn name(&self) -> &str { &self.name }
-	pub fn prefix(&self) -> &u32 { &self.prefix }
+	pub fn prefix(&self) -> u16 { self.prefix }
 	pub fn pos(&self) -> u32 { self.pos }
 	pub fn maf(&self) -> Option<f32> { self.maf }
 }
@@ -40,6 +40,13 @@ impl SnpBlock {
 	pub fn new(contig: Arc<Contig>, snps: Vec<RawSnp>) -> Self { Self{contig, snps}}
 	pub fn contig(&self) -> Arc<Contig> { self.contig.clone() }
 	pub fn snps(&self) -> &[RawSnp] { &self.snps } 	
+	// Get minimum and maximum positions in SnpBlock
+	pub fn min_max(&self) -> Option<(u32, u32)> {
+		let mut it = self.snps.iter();
+		if let Some(x) = it.next() {
+			Some(it.fold((x.pos(), x.pos()), |(a, b), y| (a.min(y.pos()), b.max(y.pos()))))
+		} else { None }		
+	}
 }	
 
 pub struct SnpBuilder<'a> {

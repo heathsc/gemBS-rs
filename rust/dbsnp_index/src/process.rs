@@ -3,11 +3,13 @@ use std::thread;
 use std::sync::{Arc, atomic::{Ordering, AtomicUsize}};
 use std::collections::HashMap;
 use std::time::Duration;
+use std::ops::DerefMut;
 
 use crossbeam_channel::{bounded, Receiver, Select};
 
 use crate::config::*;
 use super::snp::{*, read_bed::snp_from_bed, SnpBlock};
+use super::contig::ContigData;
 use utils::compress::get_reader;
 
 struct ReaderBuf {
@@ -22,7 +24,7 @@ impl ReaderBuf {
 	fn add_snp(&mut self, snp: Snp) {
 		let (raw_snp, contig) = snp.components();
 		let cname = contig.ref_name();
-		let v = self.buffer.entry(cname).or_insert(Vec::new());	
+		let v = self.buffer.entry(cname).or_insert_with(Vec::new);	
 		v.push(raw_snp);
 		if v.len() >= self.limit {
 			let v = self.buffer.remove(contig.name()).unwrap();
@@ -61,18 +63,26 @@ fn read_bed_thread(conf: Arc<Config>, ifiles: Arc<InputFiles>, mut rbuf: ReaderB
 	}
 }
 
-fn store_snp_block(sb: &SnpBlock) {
-	
+fn store_snp_block(sb: &SnpBlock, data: &mut ContigData, conf: &Config) {
+	for snp in sb.snps().iter() { data.add_snp(snp, conf); }
 }
 
 fn store_thread(conf: Arc<Config>, control_receiver: Receiver<bool>, thread_id: usize) {
 	let mut ending = false;
-
 	loop {	
 		// Build up list of channels to watch
 		let ctgs = conf.ctg_hash().get_avail_contig_list();
 		let mut sel = Select::new();
 		for(_, r) in ctgs.iter() { sel.recv(&r); }
+		let min_max = |v: &[SnpBlock]| {
+			if let Some(sb) = v.first() {
+				let (x, y) = &v[1..].iter().fold(sb.min_max().unwrap(), |(a, b), s| {
+					let (mn, mx) = s.min_max().unwrap();
+					(a.min(mn), b.max(mx))
+				});				
+				Some((*x, *y))
+			} else { None }
+		};
 		if !ending {
 			let ctr_idx = sel.recv(&control_receiver);
 			if let Ok(op) = sel.ready_timeout(Duration::from_millis(100)) {
@@ -86,9 +96,14 @@ fn store_thread(conf: Arc<Config>, control_receiver: Receiver<bool>, thread_id: 
 					},
 					idx => {
 						// Try to bind this contig
-						if let Some(g) = ctgs[idx].0.try_bind() { 
-							for sb in g.recv().try_iter() {
-								store_snp_block(&sb);
+						if let Some(mut g) = ctgs[idx].0.try_bind() { 
+							let v: Vec<_> = g.recv().try_iter().collect();
+							if let Some((min, max)) = min_max(&v) {
+								let data = g.deref_mut();
+								data.check_bins(min, max);
+								for sb in v.iter() {
+									store_snp_block(&sb, data, conf.as_ref());
+								}
 							}
 						}				
 					},
@@ -99,10 +114,15 @@ fn store_thread(conf: Arc<Config>, control_receiver: Receiver<bool>, thread_id: 
 			if !ctgs.is_empty() {
 				while let Ok(idx) = sel.try_ready() {
 					// Try to bind this contig
-					if let Some(g) = ctgs[idx].0.try_bind() { 
-						for sb in g.recv().try_iter() {
-							store_snp_block(&sb);
-							processed = true;
+					if let Some(mut g) = ctgs[idx].0.try_bind() { 
+						let v: Vec<_> = g.recv().try_iter().collect();
+						if let Some((min, max)) = min_max(&v) {
+							let data = g.deref_mut();
+							data.check_bins(min, max);
+							for sb in v.iter() {
+								store_snp_block(&sb, data, conf.as_ref());
+								processed = true;
+							}
 						}
 					}
 				}
