@@ -13,20 +13,32 @@ pub struct ContigBin {
 	name_buf: Vec<u8>,	
 }
 
-
 struct ContigInnerData {
 	min_bin: usize,	
-	bins: Vec<ContigBin>,
+	bins: Vec<Option<ContigBin>>,
+}
+
+#[derive(Default, Debug, Copy, Clone)]
+pub struct ContigStats {
+	n_snps: usize,
+	n_selected_snps: usize,
+	n_non_empty_bins: usize,	
+}
+
+impl ContigStats {
+	pub fn n_snps(&self) -> usize { self.n_snps }	
+	pub fn n_selected_snps(&self) -> usize { self.n_selected_snps }	
+	pub fn n_non_empty_bins(&self) -> usize { self.n_non_empty_bins }	
 }
 
 impl ContigInnerData {
 	fn new(min_bin: usize, max_bin: usize) -> Self {
-		let bins: Vec<ContigBin> = vec!(Default::default(); max_bin - min_bin + 1);
+		let bins: Vec<Option<ContigBin>> = vec!(None; max_bin - min_bin + 1);
 		Self{min_bin, bins}
 	}
 	fn check_min(&mut self, min_bin: usize) {
 		if min_bin < self.min_bin {
-			let mut v: Vec<ContigBin> = vec!(Default::default(); self.min_bin - min_bin);
+			let mut v: Vec<Option<ContigBin>> = vec!(None; self.min_bin - min_bin);
 			v.append(&mut self.bins);
 			self.bins = v;
 			self.min_bin = min_bin;
@@ -35,7 +47,7 @@ impl ContigInnerData {
 	fn check_max(&mut self, max_bin: usize) {
 		let mb = self.min_bin + self.bins.len() - 1;
 		if max_bin > mb {
-			let mut v: Vec<ContigBin> = vec!(Default::default(); max_bin - mb);
+			let mut v: Vec<Option<ContigBin>> = vec!(None; max_bin - mb);
 			self.bins.append(&mut v);
 		}
 	}
@@ -43,6 +55,7 @@ impl ContigInnerData {
 pub struct ContigData {
 	recv: Receiver<SnpBlock>,
 	inner: Option<ContigInnerData>,
+	stats: ContigStats,
 }
 
 static DTAB: [u8; 256] = [
@@ -77,10 +90,16 @@ impl ContigData {
 	}
 	pub fn add_snp(&mut self, snp: &RawSnp, conf: &Config) -> usize {
 		let idata = self.inner.as_mut().unwrap();
-		let bin = &mut idata.bins[((snp.pos() >> 6) as usize) - idata.min_bin];		
+		let bin_idx = ((snp.pos() >> 6) as usize) - idata.min_bin;
+		if idata.bins[bin_idx].is_none() { 
+			self.stats.n_non_empty_bins += 1;
+			idata.bins[bin_idx] = Some(Default::default());
+		};
+		let bin = idata.bins[bin_idx].as_mut().unwrap();	
 		let off = (snp.pos() & 63) as u16;
 		let mask = 1 << off;
 		if (bin.mask & mask) == 0 { 
+			self.stats.n_snps += 1;
 			bin.mask |= mask;
 			let name = snp.name();
 			if name.len() > 510 { panic!("The name for SNP {} is too long (Max <= 510)", name)}
@@ -88,12 +107,15 @@ impl ContigData {
 			let select = {
 				let s = if let Some(maf_limit) = conf.maf_limit() {
 					if let Some(maf) = snp.maf() { maf >= maf_limit as f32 }
-					else { true }
-				} else { true };
-				if !s { conf.selected(name) } else { s }
+					else { false }
+				} else { false };
+				if !s { conf.selected(name) } else { false }
 			};
-			let n_entries = bin.entries.len() >> 1;
-			if select { bin.fq_mask |= 1 << n_entries }
+			if select { 
+				self.stats.n_selected_snps += 1; 
+				let n_entries = bin.entries.len() >> 1;
+				bin.fq_mask |= 1 << n_entries; 
+			}
 			bin.entries.extend_from_slice(&[(l1 << 8) | off, snp.prefix()]);
 			let it = name.as_bytes().chunks_exact(2);
 			let rem = it.remainder();
@@ -102,6 +124,7 @@ impl ContigData {
 			1
 		} else { 0 }
 	}
+	pub fn stats(&self) -> &ContigStats { &self.stats }
 }
 
 pub struct Contig {
@@ -113,7 +136,7 @@ pub struct Contig {
 impl Contig {
 	pub fn new<S: AsRef<str>>(name: S, channel_size: usize) -> Self {
 		let (send, recv) = bounded(channel_size);
-		let data = RwLock::new(ContigData{recv, inner: None});
+		let data = RwLock::new(ContigData{recv, inner: None, stats: Default::default() });
 		Self {name: Arc::from(name.as_ref()), data, send}
 	}
 	pub fn send_message(&self, sb: SnpBlock) { self.send.send(sb).unwrap(); }
@@ -133,6 +156,12 @@ impl Contig {
 	}
 	pub fn name(&self) -> &str { &self.name }
 	pub fn ref_name(&self) -> Arc<str> { self.name.clone() }
+	pub fn stats(&self) -> Option<ContigStats> {
+		match self.data.try_write() {
+			Ok(cdata) => Some(*cdata.stats()),
+			Err(_) => None,
+		}
+	}
 }
 
 pub struct ContigHash {
@@ -175,6 +204,18 @@ impl ContigHash {
 			}
 		}
 		v
+	}
+	pub fn get_stats(&self) -> ContigStats {
+		let mut cs: ContigStats = Default::default();
+		let h = self.contig_hash.read().unwrap();
+		for ctg in h.values() {
+			let stats = ctg.stats().expect("Couldn't get contig stats");			
+			println!("{} {:?}", ctg.name(), stats);
+			cs.n_snps += stats.n_snps;
+			cs.n_selected_snps += stats.n_selected_snps;
+			cs.n_non_empty_bins += stats.n_non_empty_bins;
+		}
+		cs
 	}
 }
 

@@ -37,7 +37,7 @@ impl ReaderBuf {
 fn read_bed_file(conf: &Config, file: Option<&str>, rbuf: &mut ReaderBuf) -> io::Result<()> {
 	let mut builder = SnpBuilder::new(conf.ctg_hash(), conf.pref_hash());
 	let mut rdr = get_reader(file)?;
-	info!("Reading from {:?}", file);
+	info!("Reading from {}", file.unwrap_or("<stdin>"));
 	let mut buf = String::new();
 	loop {
 		match rdr.read_line(&mut buf) {
@@ -59,7 +59,8 @@ fn read_bed_file(conf: &Config, file: Option<&str>, rbuf: &mut ReaderBuf) -> io:
 
 fn read_bed_thread(conf: Arc<Config>, ifiles: Arc<InputFiles>, mut rbuf: ReaderBuf) {
 	while let Some(f) = ifiles.next_file() {
-		let _ = read_bed_file(conf.as_ref(), Some(f), &mut rbuf);
+		let file = if f == "-" { None } else { Some(f) }; 
+		let _ = read_bed_file(conf.as_ref(), file, &mut rbuf);
 	}
 }
 
@@ -148,33 +149,29 @@ impl InputFiles {
 }
 
 pub fn process(conf: Config, files: Box<[String]>) -> io::Result<()> {
-	if files.is_empty() {
-//		let mut rdr = ReaderBuf::new(128);
-//		read_bed_file(&conf, None, &mut rdr)?;
-	} else {
-		let conf_ref = Arc::new(conf);
-		let n_readers = conf_ref.threads().min(files.len());
-		let mut readers = Vec::with_capacity(n_readers);
-		let ifiles = Arc::new(InputFiles{idx: AtomicUsize::new(0), files});
-		for _ in 0..n_readers {
-			let cf = conf_ref.clone();
-			let inp_files = ifiles.clone();			
-			let rdr = ReaderBuf::new(256);
-			let th = thread::spawn(move || {read_bed_thread(cf, inp_files, rdr)});
-			readers.push(th);
-		}
-		let n_storers = conf_ref.threads();
-		let mut storers = Vec::with_capacity(n_storers);
-		for ix in 0..n_storers {
-			let (s, r) = bounded(1);
-			let cref = conf_ref.clone();
-			let th = thread::spawn(move || {store_thread(cref, r, ix)});
-			storers.push((th, s));
-		}		
-		for th in readers { th.join().unwrap(); }
-		for (_, s) in storers.iter() { s.send(true).unwrap() }
-		for (th, _) in storers { th.join().unwrap(); }
+	let conf_ref = Arc::new(conf);
+	let n_readers = conf_ref.threads().min(files.len());
+	let mut readers = Vec::with_capacity(n_readers);
+	let ifiles = Arc::new(InputFiles{idx: AtomicUsize::new(0), files});
+	for _ in 0..n_readers {
+		let cf = conf_ref.clone();
+		let inp_files = ifiles.clone();			
+		let rdr = ReaderBuf::new(256);
+		let th = thread::spawn(move || {read_bed_thread(cf, inp_files, rdr)});
+		readers.push(th);
 	}
-
+	let n_storers = conf_ref.threads();
+	let mut storers = Vec::with_capacity(n_storers);
+	for ix in 0..n_storers {
+		let (s, r) = bounded(1);
+		let cref = conf_ref.clone();
+		let th = thread::spawn(move || {store_thread(cref, r, ix)});
+		storers.push((th, s));
+	}		
+	for th in readers { th.join().unwrap(); }
+	for (_, s) in storers.iter() { s.send(true).unwrap() }
+	for (th, _) in storers { th.join().unwrap(); }
+	let stats = conf_ref.ctg_hash().get_stats();
+	println!("Total: {:?}", stats);
 	Ok(())	
 }

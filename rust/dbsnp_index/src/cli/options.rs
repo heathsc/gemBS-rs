@@ -1,4 +1,5 @@
 use std::io;
+use std::fs::metadata;
 use std::collections::{HashMap, HashSet};
 use clap::ArgMatches;
 
@@ -54,8 +55,23 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[String]>)> {
 		None => HashSet::new(),
 	};
 	let files: Vec<String> = match m.values_of("input") {
-		Some(v) => v.map(|s| s.to_owned()).collect(),
-		None => Vec::new(),
+		Some(v) => { 
+			// Sort input files by file size in reverse order so that larger files are processed first
+			let mut f: Vec<String> = v.map(|s| s.to_owned()).collect();
+			let mut sizes: HashMap<String, i64> = HashMap::with_capacity(f.len());
+			for file in f.iter() {
+				match metadata(file) {
+					Ok(m) => { sizes.insert(file.to_owned(), m.len() as i64); },
+					Err(e) => {
+						error!("Couldn't get information on input file {}: {}", file, e);
+						return Err(e);
+					},
+				}
+			}
+			f.sort_unstable_by_key(|s| -sizes.get(s.as_str()).unwrap());
+			f
+		},
+		None => vec!("-".to_string()),
 	};
 	trace!("Finished handling command line options");
 	Ok((Config::new(threads, maf_limit, output, description, input_type, chrom_alias, selected), files.into_boxed_slice()))
