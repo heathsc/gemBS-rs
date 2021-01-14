@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock, TryLockError, RwLockWriteGuard};
+use std::io::Write;
 
 use crossbeam_channel::{bounded, Sender, Receiver};
 use super::snp::{RawSnp, SnpBlock};
@@ -7,10 +8,93 @@ use crate::config::Config;
 
 #[derive(Clone, Default)]
 pub struct ContigBin {
-	mask: u64,
-	fq_mask: u64,
-	entries: Vec<u16>,
+	mask: [u128; 2],
+	half_full: bool,
+	entries: Vec<u8>,
 	name_buf: Vec<u8>,	
+	idx: Vec<(u8, usize)>,
+}
+
+impl ContigBin {
+	pub fn name_buf(&self) -> &[u8] { &self.name_buf }
+	pub fn mask(&self) -> &[u128; 2] { &self.mask }
+	pub fn entries(&self) -> &[u8] { &self.entries }
+	fn sort_idx(&mut self) {
+		let mut start_ix = 0;
+		let mut left = 0; 
+		let mut it = self.name_buf.iter();
+		self.idx.clear();
+		for off in self.entries.iter() {
+			self.idx.push((*off, start_ix));
+			start_ix += left;
+			left = 0;
+			loop {
+				match it.next() {
+					None => break,
+					Some(x) if (x & 0xf0) >= 0xe0 => {
+						start_ix += 1;
+						left = 1;
+						break;
+					},
+					Some(x) => {
+						start_ix += 2;
+						if (x & 0xf) >= 0xe { break }
+					},
+				}
+			}
+		}
+		self.idx.sort_unstable_by_key(|(off, _)| *off)
+	}
+	
+	// Write names sorted by position within bin
+	pub fn write_names<W: Write>(&mut self, w: W) {
+		self.sort_idx();
+		let mut writer = NameWriter::new(w);
+		for (_, x) in self.idx.iter() {
+			let mut it = self.name_buf[x>>1..].iter(); 
+			if (x & 1) == 1 { writer.write_u4(*it.next().expect("Short name buffer")) }
+			loop {
+				match it.next() {
+					None => break,
+					Some(x) if (x & 0xf0) >= 0xe0 => {
+						writer.write_u4(x >> 4);
+						break;
+					},
+					Some(x) => {
+						writer.write_u8(*x);
+						if (x & 0xf) >= 0xe { break }
+					},
+				}
+			}
+		}
+	}
+}
+
+struct NameWriter<W: Write> {
+	writer: W,
+	buf: Option<u8>,	
+}
+
+impl <W: Write>NameWriter<W> {
+	fn new(w: W) -> Self { Self{writer: w, buf: None} }
+	
+	fn write_u4(&mut self, c: u8) {
+		if let Some(x) = self.buf.take() { self.writer.write_all(&[x | (c & 0xf)]).expect("Write error") }
+		else { self.buf = Some(c << 4) }
+	}
+	
+	fn write_u8(&mut self, c: u8) {
+		if let Some(x) = self.buf {
+			self.writer.write_all(&[x | (c >> 4)]).expect("Write error");
+			self.buf = Some(c << 4);
+		} else { self.writer.write_all(&[c]).expect("Write error") }
+	}
+}
+
+impl <W: Write> Drop for NameWriter<W> {
+	fn drop(&mut self) {
+		if let Some(c) = self.buf.take() { self.writer.write_all(&[c]).expect("Write error") }
+	}	
 }
 
 struct ContigInnerData {
@@ -34,7 +118,7 @@ impl ContigStats {
 impl ContigInnerData {
 	fn new(min_bin: usize, max_bin: usize) -> Self {
 		let bins: Vec<Option<ContigBin>> = vec!(None; max_bin - min_bin + 1);
-		Self{min_bin, bins}
+		Self{min_bin, bins }
 	}
 	fn check_min(&mut self, min_bin: usize) {
 		if min_bin < self.min_bin {
@@ -58,52 +142,33 @@ pub struct ContigData {
 	stats: ContigStats,
 }
 
-static DTAB: [u8; 256] = [
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 
-	0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 0xf, 	
-];
-
 impl ContigData {
 	pub fn recv(&self) -> &Receiver<SnpBlock> { &self.recv }
 	pub fn check_bins(&mut self, min: u32, max: u32) {
 		assert!(max >= min);
-		let min_bin = (min >> 6) as usize;
-		let max_bin = (max >> 6) as usize;		
+		let min_bin = (min >> 8) as usize;
+		let max_bin = (max >> 8) as usize;		
 		if let Some(idata) = self.inner.as_mut() {
 			idata.check_min(min_bin);
 			idata.check_max(max_bin);
 		} else { self.inner = Some(ContigInnerData::new(min_bin, max_bin)) }
 	}
-	pub fn add_snp(&mut self, snp: &RawSnp, conf: &Config) -> usize {
+	pub fn add_snp(&mut self, snp: &RawSnp, conf: &Config) {
 		let idata = self.inner.as_mut().unwrap();
-		let bin_idx = ((snp.pos() >> 6) as usize) - idata.min_bin;
+		let bin_idx = ((snp.pos() >> 8) as usize) - idata.min_bin;
 		if idata.bins[bin_idx].is_none() { 
 			self.stats.n_non_empty_bins += 1;
 			idata.bins[bin_idx] = Some(Default::default());
 		};
 		let bin = idata.bins[bin_idx].as_mut().unwrap();	
-		let off = (snp.pos() & 63) as u16;
-		let mask = 1 << off;
-		if (bin.mask & mask) == 0 { 
+		let off = (snp.pos() & 255) as u8;
+		let (ix, off1) = if off < 128 { (0, off) } else { (1, off & 127) };
+		let mask = 1 << off1;
+		if (bin.mask[ix] & mask) == 0 { 
 			self.stats.n_snps += 1;
-			bin.mask |= mask;
+			bin.mask[ix] |= mask;
 			let name = snp.name();
-			if name.len() > 510 { panic!("The name for SNP {} is too long (Max <= 510)", name)}
-			let l1: u16 = ((name.len() + 1) >> 1) as u16;
+			if name.len() > 254 { panic!("The name for SNP {} is too long (Max <= 254)", name)}
 			let select = {
 				let s = if let Some(maf_limit) = conf.maf_limit() {
 					if let Some(maf) = snp.maf() { maf >= maf_limit as f32 }
@@ -111,21 +176,32 @@ impl ContigData {
 				} else { false };
 				if !s { conf.selected(name) } else { false }
 			};
-			if select { 
-				self.stats.n_selected_snps += 1; 
-				let n_entries = bin.entries.len() >> 1;
-				bin.fq_mask |= 1 << n_entries; 
-			}
-			bin.entries.extend_from_slice(&[(l1 << 8) | off, snp.prefix()]);
-			let it = name.as_bytes().chunks_exact(2);
+			let term_code = if select { 0xf } else { 0xe };
+			let nbuf = name.as_bytes();
+			let it = if bin.half_full {
+				*bin.name_buf.last_mut().unwrap() |= nbuf.first().unwrap() - b'0';
+				&nbuf[1..]
+			} else { nbuf }.chunks_exact(2);
 			let rem = it.remainder();
-			for v in it { bin.name_buf.push((DTAB[v[0] as usize] << 4) | DTAB[v[1] as usize]) }
-			for c in rem.iter() { bin.name_buf.push((DTAB[*c as usize] << 4) | 0xf) }		
-			1
-		} else { 0 }
+			for v in it { bin.name_buf.push((v[0] << 4) + v[1])}
+			if rem.is_empty() {
+				bin.name_buf.push(term_code << 4);
+				bin.half_full = true;
+			} else {
+				bin.name_buf.push((rem.first().unwrap() << 4) | term_code);
+				bin.half_full = false;
+			}	
+			bin.entries.push(off);
+		}
 	}
 	pub fn stats(&self) -> &ContigStats { &self.stats }
-}
+	pub fn min_bin(&self) -> Option<usize> { self.inner.as_ref().map(|x| x.min_bin) }
+	pub fn min_max(&self) -> Option<(usize, usize)> { self.inner.as_ref().map(|x| (x.min_bin, x.bins.len() + x.min_bin - 1)) }
+	pub fn bins(&mut self) -> Option<&mut Vec<Option<ContigBin>>> {
+		if let Some(idata) = &mut self.inner { Some(&mut idata.bins) }
+		else { None }
+	}
+} 
 
 pub struct Contig {
 	name: Arc<str>,
@@ -136,7 +212,7 @@ pub struct Contig {
 impl Contig {
 	pub fn new<S: AsRef<str>>(name: S, channel_size: usize) -> Self {
 		let (send, recv) = bounded(channel_size);
-		let data = RwLock::new(ContigData{recv, inner: None, stats: Default::default() });
+		let data = RwLock::new(ContigData{recv, inner: None, stats: Default::default()});
 		Self {name: Arc::from(name.as_ref()), data, send}
 	}
 	pub fn send_message(&self, sb: SnpBlock) { self.send.send(sb).unwrap(); }
@@ -162,6 +238,7 @@ impl Contig {
 			Err(_) => None,
 		}
 	}
+	pub fn data(&self) -> &RwLock<ContigData> { &self.data }
 }
 
 pub struct ContigHash {
@@ -205,17 +282,15 @@ impl ContigHash {
 		}
 		v
 	}
-	pub fn get_stats(&self) -> ContigStats {
-		let mut cs: ContigStats = Default::default();
+	pub fn get_ctg_stats(&self) -> Vec<(Arc<Contig>, ContigStats)> {
 		let h = self.contig_hash.read().unwrap();
+		let mut v = Vec::with_capacity(h.len());
 		for ctg in h.values() {
-			let stats = ctg.stats().expect("Couldn't get contig stats");			
-			println!("{} {:?}", ctg.name(), stats);
-			cs.n_snps += stats.n_snps;
-			cs.n_selected_snps += stats.n_selected_snps;
-			cs.n_non_empty_bins += stats.n_non_empty_bins;
+			let stats = ctg.stats().expect("Couldn't get contig stats");	
+			v.push((ctg.clone(), stats));		
 		}
-		cs
+		v.sort_unstable_by_key(|x| -(x.1.n_non_empty_bins() as i64));
+		v
 	}
 }
 
