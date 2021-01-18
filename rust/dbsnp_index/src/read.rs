@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::io::{self, BufRead};
 use std::thread;
 
-use crossbeam_channel::{bounded, Receiver};
+use crossbeam_channel::{bounded, Sender, Receiver};
 
 use utils::compress::get_reader;
 
@@ -71,67 +71,33 @@ pub fn proc_read_thread(conf: Arc<Config>, r: Receiver<(Vec<String>, IType)>) {
 	rbuf.flush();
 }
 
-fn read_input_file(conf: Arc<Config>, file: Option<&str>) -> io::Result<()> {
-	let mut rdr = get_reader(file)?;
+fn read_input_file(conf: Arc<Config>, file: Option<&str>, send: &Sender<(Vec<String>, IType)>) -> io::Result<()> {
+	let rdr = get_reader(file)?;
 	info!("Reading from {}", file.unwrap_or("<stdin>"));
-	let nt = conf.threads();
 	let mut itype = conf.input_type();
-	if nt < 2 { // Single threaded reader
-		let mut rbuf = ReaderBuf::new(256);
-		let mut builder = SnpBuilder::new(conf.ctg_hash());
-		let mut buf = String::new();
-		loop {
-			match rdr.read_line(&mut buf) {
-				Ok(0) => break,
-				Ok(_) => {
-					if let IType::Auto = itype { itype = check_file_type(&buf) }					
-					match itype {
-						IType::Bed => process_bed_line(&conf, &buf, &mut builder, &mut rbuf),
-						IType::Json => process_json_line(&buf, &mut builder, &mut rbuf),
-						IType::Vcf => process_vcf_line(&buf, &mut builder, &mut rbuf),
-						_ => panic!("Unknown file type"),
-					}
-					buf.clear();
-				},
-				Err(e) => return Err(e),
-			}
+	let size = 64;
+	let mut buf_vec = Vec::with_capacity(size);
+	for line in rdr.lines() {
+		match line {
+			Ok(buf) => {
+				if let IType::Auto = itype { itype = check_file_type(&buf) }
+				buf_vec.push(buf);
+				if buf_vec.len() == size {					
+					send.send((buf_vec, itype)).expect("Error sending message to read processing thread");
+					buf_vec = Vec::with_capacity(size);
+				}
+			},
+			Err(e) =>return Err(e),
 		}
-		rbuf.flush();
-	} else {
-		let mut proc_jobs = Vec::with_capacity(nt);
-		let (s, r) = bounded(nt * 1024);
-		for _ in 0..nt {
-			let cf = conf.clone();
-			let rc = r.clone();
-			let th = thread::spawn(move || {proc_read_thread(cf, rc)});
-			proc_jobs.push(th);
-		}
-		let size = 64;
-		let mut buf_vec = Vec::with_capacity(size);
-		for line in rdr.lines() {
-			match line {
-				Ok(buf) => {
-					if let IType::Auto = itype { itype = check_file_type(&buf) }
-					buf_vec.push(buf);
-					if buf_vec.len() == size {					
-						s.send((buf_vec, itype)).expect("Error sending message to read processing thread");
-						buf_vec = Vec::with_capacity(size);
-					}
-				},
-				Err(e) =>return Err(e),
-			}
-		}
-		if !buf_vec.is_empty() { s.send((buf_vec, itype)).expect("Error sending message to read processing thread") }
-		drop(s);
-		for th in proc_jobs {	th.join().unwrap()}
 	}
+	if !buf_vec.is_empty() { send.send((buf_vec, itype)).expect("Error sending message to read processing thread") }
 	info!("Finished reading from {:?}", file);
 	Ok(())
 }
 
-pub fn read_thread(conf: Arc<Config>, ifiles: Arc<AtomicServer<String>>) {
+pub fn read_thread(conf: Arc<Config>, ifiles: Arc<AtomicServer<String>>, send: Sender<(Vec<String>, IType)>) {
 	while let Some(f) = ifiles.next_item().map(|s| s.as_str()) {
 		let file = if f == "-" { None } else { Some(f) }; 
-		let _ = read_input_file(conf.clone(), file);
+		let _ = read_input_file(conf.clone(), file, &send);
 	}
 }
