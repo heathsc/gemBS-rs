@@ -7,7 +7,8 @@ args:
     - quiet: {short: q, long: quiet, help: Silence all output}
     - timestamp: {short: T, long: time, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
     - loglevel: {short: v, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
-    - threads: {short: t, long: threads, takes_value: true, value_name: "THREADS", help: "Set number of additional threads (default: number of cores)"} 
+    - threads: {short: t, long: threads, takes_value: true, value_name: "THREADS", help: "Set number of threads per file (default: 1)"} 
+    - jobs: {short: j, long: jobs, takes_value: true, value_name: "JOBS", help: "Number of parallel file reading jobs (default: MIN(no. cores, No. files))"} 
     - output: {short: o, long: output, takes_value: true, value_name: INDEX, help: "Set file name for output index (default: stdout)" }
     - description: {short: d, long: desc, takes_value: true, value_name: DESCRIPTION, help: Description of dataset }
     - chrom_alias: {short: c, long: chrom-alias, takes_value: true, value_name: FILE, help: Chromosome name alias file }

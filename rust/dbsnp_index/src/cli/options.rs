@@ -49,7 +49,8 @@ fn read_alias_file(s: &str) -> io::Result<HashMap<String, String>> {
 
 pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[String]>)> {
 	trace!("Handle command line options");
-	let threads = get_arg_usize(m, "threads")?.unwrap_or_else(num_cpus::get);
+	let threads = get_arg_usize(m, "threads")?.unwrap_or(1);
+	let jobs = get_arg_usize(m, "jobs")?.unwrap_or_else(num_cpus::get);
 	let output = get_arg_string(m, "output");
 	let description = get_arg_string(m, "description");
 	let input_type = get_arg_itype(m, "input_type")?;
@@ -82,5 +83,5 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[String]>)> {
 		None => vec!("-".to_string()),
 	};
 	trace!("Finished handling command line options");
-	Ok((Config::new(threads, maf_limit, output, description, input_type, chrom_alias, selected), files.into_boxed_slice()))
+	Ok((Config::new(threads, jobs, maf_limit, output, description, input_type, chrom_alias, selected), files.into_boxed_slice()))
 }

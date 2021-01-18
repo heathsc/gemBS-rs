@@ -27,17 +27,16 @@ impl <T>AtomicServer<T> {
 
 pub fn process(conf: Config, files: Box<[String]>) -> io::Result<()> {
 	let conf_ref = Arc::new(conf);
-	let n_readers = conf_ref.threads().min(files.len());
+	let n_readers = conf_ref.jobs().min(files.len());
 	let mut readers = Vec::with_capacity(n_readers);
 	let ifiles = Arc::new(AtomicServer::new(files));
 	for _ in 0..n_readers {
 		let cf = conf_ref.clone();
 		let inp_files = ifiles.clone();			
-		let rdr = ReaderBuf::new(256);
-		let th = thread::spawn(move || {read_thread(cf, inp_files, rdr)});
+		let th = thread::spawn(move || {read_thread(cf, inp_files)});
 		readers.push(th);
 	}
-	let n_storers = conf_ref.threads();
+	let n_storers = conf_ref.jobs();
 	let mut storers = Vec::with_capacity(n_storers);
 	for ix in 0..n_storers {
 		let (s, r) = bounded(1);
@@ -51,7 +50,7 @@ pub fn process(conf: Config, files: Box<[String]>) -> io::Result<()> {
 	let ctg_stats_vec = conf_ref.ctg_hash().get_ctg_stats();
 	let ctgs: Vec<Arc<Contig>> = ctg_stats_vec.iter().map(|x| x.0.clone()).collect();
 	let ctg_list = Arc::new(AtomicServer::new(ctgs.into_boxed_slice()));
-	let n_compressors = conf_ref.threads();
+	let n_compressors = conf_ref.jobs();
 	let mut compressors = Vec::with_capacity(n_compressors);
 	let (s, r) = bounded(n_compressors);
 	for ix in 0..n_compressors {
