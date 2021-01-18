@@ -6,8 +6,6 @@ use crossbeam_channel::{Receiver, Select};
 use super::contig::*;
 use crate::config::Config;
 
-
-
 #[derive(Debug)]
 pub struct RawSnp {
 	name: String,
@@ -21,6 +19,7 @@ impl RawSnp {
 	pub fn maf(&self) -> Option<f32> { self.maf }
 }
 
+#[derive(Debug)]
 pub struct Snp {
 	raw_snp: RawSnp,
 	contig: Arc<Contig>,	
@@ -59,20 +58,21 @@ impl <'a>SnpBuilder<'a> {
 	pub fn new(ctg_hash: &'a ContigHash) -> Self {
 		Self{ctg_lookup: ctg_hash.mk_lookup()}
 	}
-	pub fn build_snp(&mut self, name: &str, ctg: &str, pos: u32, maf: Option<f32>) -> Snp {
-		Snp {
-			raw_snp: RawSnp {
-				name: name.to_owned(),
-				pos, maf
-			},
-			contig: self.ctg_lookup.get_contig(ctg),
-		}	
+	pub fn build_snp(&mut self, name: &str, ctg: &str, pos: u32, maf: Option<f32>) -> Option<Snp> {
+		if let Some(contig) = self.ctg_lookup.get_contig(ctg) {
+			Some(Snp {
+				raw_snp: RawSnp {
+					name: name.to_owned(),
+					pos, maf
+				},
+				contig
+			})
+		} else { None }	
 	}
-	pub fn mk_snp(&mut self, name: &str, ctg: &str, pos: u32, maf: Option<f32>) -> Option<Snp> {
-		
+	pub fn mk_snp(&mut self, name: &str, ctg: &str, pos: u32, maf: Option<f32>) -> Option<Snp> {		
 		if let Some(tname) = name.strip_prefix("rs") {
 			if tname.is_empty() || tname.find(|c :char| !char::is_ascii_digit(&c)).is_some() { None }
-            else { Some(self.build_snp(tname, ctg, pos, maf)) }
+            else { self.build_snp(tname, ctg, pos, maf) }
 		} else { None }
 	}
 }

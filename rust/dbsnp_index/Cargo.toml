@@ -15,5 +15,6 @@ libc = "0.2"
 chrono = "0.4"
 crossbeam-channel = "0.5"
 zstd = "0.5"
+lazy_static = "1.4"
 utils = { path = "../utils" }
 json_rs = { git = "https://github.com/heathsc/json_rs" }

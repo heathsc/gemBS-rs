@@ -6,7 +6,7 @@ use crossbeam_channel::{bounded, Sender, Receiver};
 use super::snp::{RawSnp, SnpBlock};
 use crate::config::Config;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct ContigBin {
 	mask: [u128; 2],
 	half_full: bool,
@@ -97,6 +97,7 @@ impl <W: Write> Drop for NameWriter<W> {
 	}	
 }
 
+#[derive(Debug)]
 struct ContigInnerData {
 	min_bin: usize,	
 	bins: Vec<Option<ContigBin>>,
@@ -136,6 +137,8 @@ impl ContigInnerData {
 		}
 	}
 }
+
+#[derive(Debug)]
 pub struct ContigData {
 	recv: Receiver<SnpBlock>,
 	inner: Option<ContigInnerData>,
@@ -203,6 +206,7 @@ impl ContigData {
 	}
 } 
 
+#[derive(Debug)]
 pub struct Contig {
 	name: Arc<str>,
 	data: RwLock<ContigData>,
@@ -233,7 +237,7 @@ impl Contig {
 	pub fn name(&self) -> &str { &self.name }
 	pub fn ref_name(&self) -> Arc<str> { self.name.clone() }
 	pub fn stats(&self) -> Option<ContigStats> {
-		match self.data.try_write() {
+		match self.data.try_read() {
 			Ok(cdata) => Some(*cdata.stats()),
 			Err(_) => None,
 		}
@@ -243,32 +247,39 @@ impl Contig {
 
 pub struct ContigHash {
 	contig_hash: RwLock<HashMap<Arc<str>, Arc<Contig>>>,
+	chrom_alias: Option<HashMap<String, String>>,
 	channel_size: usize,
 }
 
 impl ContigHash {
-	pub fn new(channel_size: usize) -> Self { Self{ contig_hash: RwLock::new(HashMap::new()), channel_size }}
+	pub fn new(channel_size: usize, chrom_alias: Option<HashMap<String, String>>) -> Self { Self{ contig_hash: RwLock::new(HashMap::new()), chrom_alias, channel_size }}
 	
 	pub fn mk_lookup(&self) -> ContigLookup {
 		ContigLookup{cache: None, contig_hash: self}
 	}	
 	
-	pub fn get_contig(&self, name: &str) -> Arc<Contig> {
+	pub fn get_contig(&self, name: &str) -> Option<Arc<Contig>> {
+		// Check for contig alias
+		let name = if let Some(h) = &self.chrom_alias { 
+			trace!("Checking for alias for {}", name);
+			h.get(name)? 
+		} else { name };
+		trace!("Looking up {} from hash", name);
 		let hash = self.contig_hash.read().unwrap();
 		if let Some(ctg) = hash.get(name) {
 			trace!("Got contig {} from hash", name); 
-			return ctg.clone() 
+			return Some(ctg.clone()) 
 		}
 		drop(hash);
 		let mut hash = self.contig_hash.write().unwrap();
 		if let Some(ctg) = hash.get(name) {
 			trace!("Got contig {} from hash", name); 
-			ctg.clone() 			
+			Some(ctg.clone()) 			
 		} else {
 			debug!("Adding new contig {}", name);
 			let ctg = Arc::new(Contig::new(name, self.channel_size));
 			hash.insert(Arc::from(name), ctg.clone());
-			ctg
+			Some(ctg)
 		}
 	}
 	pub fn get_avail_contig_list(&self) -> Vec<(Arc<Contig>, Receiver<SnpBlock>)> {
@@ -295,8 +306,8 @@ impl ContigHash {
 }
 
 struct ContigCache {
-	name: Arc<str>,
-	contig: Arc<Contig>,	
+	name: String,
+	contig: Option<Arc<Contig>>,	
 }
 
 pub struct ContigLookup<'a> {
@@ -305,16 +316,16 @@ pub struct ContigLookup<'a> {
 }
 
 impl <'a> ContigLookup<'a> {
-	pub fn get_contig(&mut self, name: &str) -> Arc<Contig> {
+	pub fn get_contig(&mut self, name: &str) -> Option<Arc<Contig>> {
 		if let Some(c) = &self.cache {
-			if c.name.as_ref() == name { 
+			if c.name == name { 
 				trace!("Got contig {} from cache", name);
 				return c.contig.clone() 
 			}
 		}
 		trace!("Looking up contig {}", name);
 		let ctg = self.contig_hash.get_contig(name);
-		self.cache = Some(ContigCache{name: ctg.name.clone(), contig: ctg.clone()});
+		self.cache = Some(ContigCache{name: name.to_owned(), contig: ctg.clone()});
 		ctg
 	}
 }

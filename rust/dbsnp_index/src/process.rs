@@ -7,7 +7,7 @@ use crossbeam_channel::bounded;
 use crate::config::*;
 use super::snp::*;
 use super::contig::Contig;
-use super::read::{ReaderBuf, read_bed::*};
+use super::read::{ReaderBuf, read_thread};
 use super::write::write_thread;
 use super::compress::compress_thread;
 
@@ -34,7 +34,7 @@ pub fn process(conf: Config, files: Box<[String]>) -> io::Result<()> {
 		let cf = conf_ref.clone();
 		let inp_files = ifiles.clone();			
 		let rdr = ReaderBuf::new(256);
-		let th = thread::spawn(move || {read_bed_thread(cf, inp_files, rdr)});
+		let th = thread::spawn(move || {read_thread(cf, inp_files, rdr)});
 		readers.push(th);
 	}
 	let n_storers = conf_ref.threads();
@@ -63,5 +63,8 @@ pub fn process(conf: Config, files: Box<[String]>) -> io::Result<()> {
 	for th in compressors {	th.join().unwrap()}
 	drop(s);
 	writer.join().unwrap();
+	for (ctg, cstats) in ctg_stats_vec.iter() {
+		println!("Contig {}: n_snps {}, n_selected_snps {}", ctg.name(), cstats.n_snps(), cstats.n_selected_snps());
+	}
 	Ok(())	
 }

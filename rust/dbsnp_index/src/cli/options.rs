@@ -33,7 +33,15 @@ fn read_alias_file(s: &str) -> io::Result<HashMap<String, String>> {
 		let l = rdr.read_line(&mut buf)?;
 		if l == 0 { break }
 		let mut it = buf.split('\t');
-		if let (Some(s1), Some(s2)) = (it.next(), it.next()) { smap.insert(s1.to_owned(), s2.to_owned()); }
+		if let Some(c) = it.next() {
+			let ctg = c.trim();
+			// Insert an alias to the conical contig name
+			smap.insert(ctg.to_owned(), ctg.to_owned());
+			for alias in it {
+				// Insert each alias
+				smap.insert(alias.trim().to_owned(), ctg.to_owned());
+			}
+		}
 	}
 	debug!("Read in {} aliases", smap.len());
 	Ok(smap)	
@@ -47,8 +55,8 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[String]>)> {
 	let input_type = get_arg_itype(m, "input_type")?;
 	let maf_limit = get_arg_f64(m, "maf_limit")?;
 	let chrom_alias = match m.value_of("chrom_alias") {
-		Some(s) => read_alias_file(s)?,
-		None => HashMap::new(),
+		Some(s) => Some(read_alias_file(s)?),
+		None => None,
 	};
 	let selected = match m.value_of("selected") {
 		Some(s) => read_select_file(s)?,

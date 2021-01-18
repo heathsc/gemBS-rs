@@ -76,7 +76,7 @@ fn compress_contig(ctg: &Contig) -> (Vec<CompressBlock>, usize) {
 			ubuf.clear();
 			cblocks.push(CompressBlock{first_bin: first_bin as u32, cbuf});			
 		}
-	}
+	}	
 	let z = if total_usize > 0 { (total_csize as f64) / (total_usize as f64) } else { 1.0 };
 	debug!("contig {}, ubuf {}, cbuf {}, ratio: {}", ctg.name(), total_csize, total_usize, z);
 	(cblocks, max_size)
