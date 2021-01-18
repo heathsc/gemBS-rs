@@ -11,6 +11,7 @@ lazy_static! {
 	pub static ref PIGZ_PATH: Option<PathBuf> = find_exec_path("pigz");
 	pub static ref XZ_PATH: Option<PathBuf> = find_exec_path("xz");
 	pub static ref BZIP2_PATH: Option<PathBuf> = find_exec_path("bzip2");
+	pub static ref PBZIP2_PATH: Option<PathBuf> = find_exec_path("pbzip2");
 	pub static ref ZSTD_PATH: Option<PathBuf> = find_exec_path("zstd");
 	pub static ref LZ4_PATH: Option<PathBuf> = find_exec_path("lz4");
 	pub static ref LZMA_PATH: Option<PathBuf> = find_exec_path("lzma");
@@ -36,7 +37,7 @@ impl CompressType {
 	pub fn get_exec_path(&self) -> Result<&PathBuf> {
 		match self {
 			CompressType::GZIP | CompressType::COMPRESS => get_path(PIGZ_PATH.as_ref().or_else(|| GZIP_PATH.as_ref()).or_else(|| ZSTD_PATH.as_ref()), "pigz, gzip or zstd"),
-			CompressType::BZIP2 => get_path(BZIP2_PATH.as_ref(), "bzip2"),
+			CompressType::BZIP2 => get_path(PBZIP2_PATH.as_ref().or_else(|| BZIP2_PATH.as_ref()), "pbzip2 or bzip2"),
 			CompressType::XZ => get_path(XZ_PATH.as_ref().or_else(|| ZSTD_PATH.as_ref()), "xz or zstd"),
 			CompressType::LZ4 => get_path(LZ4_PATH.as_ref().or_else(|| ZSTD_PATH.as_ref()), "lz4 or zstd"),
 			CompressType::LZMA => get_path(LZMA_PATH.as_ref().or_else(|| ZSTD_PATH.as_ref()), "lzma or zstd"),
