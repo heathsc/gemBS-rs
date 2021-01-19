@@ -18,7 +18,10 @@ extern "C" {
 	fn bcf_enc_vfloat(s: *mut kstring_t, l: c_int, a: *const c_float) -> c_int;
 }
 
+impl Default for kstring_t { fn default() -> Self { Self::new() }}
+
 impl kstring_t {
+	pub fn new() -> Self {Self{l:0, m:0, s: null_mut::<c_char>()}}
 	pub fn initialize(&mut self) {
 		self.l = 0;
 		self.m = 0;
@@ -27,6 +30,15 @@ impl kstring_t {
 	pub fn free(&mut self) { 
 		if !self.s.is_null() { unsafe{libc::free(self.s as *mut c_void)} }	
 		self.initialize();	
+	}
+	pub fn to_str(&self) -> Option<&str> {
+		if self.s.is_null() || self.l == 0 { None }
+		else {
+			match std::str::from_utf8(unsafe {std::slice::from_raw_parts(self.s as *const u8, self.l as usize)} ) {
+				Ok(s) => Some(s),
+				Err(_) => None,
+			}
+		}
 	}
 	pub fn clear(&mut self) { self.l = 0 }
 	pub fn resize(&mut self, size: size_t) -> bool {

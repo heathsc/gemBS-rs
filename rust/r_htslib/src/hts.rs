@@ -1,12 +1,14 @@
 use std::io;
-use std::ptr::{null_mut, NonNull};
-use std::ffi::{CString, c_void};
+use std::ptr::{null_mut, NonNull, null};
+use std::ffi::{CString, c_void, CStr};
 use libc::{c_char, c_int, c_short, c_uint, c_uchar};
 use c2rust_bitfields::BitfieldStruct;
 use super::{hts_err, get_cstr, SamHeader, SamReadResult, sam_hdr_t, bam1_t, BamRec, kstring_t};
 
 pub type HtsPos = i64;
 
+pub const HTS_POS_MAX: HtsPos = ((i32::MAX as i64) << 32) | (i32::MAX as i64);
+pub const HTS_POS_MIN: HtsPos = i64::MIN;
 pub const HTS_IDX_NOCOOR: HtsPos = -2;
 pub const HTS_IDX_START: HtsPos = -3;
 pub const HTS_IDX_REST: HtsPos = -4;
@@ -56,7 +58,7 @@ pub struct BGZF { _unused: [u8; 0], }
 #[repr(C)]
 pub enum htsFormatCategory { UnknownCategory, SequenceData, VariantData, IndexFile, RegionList }
 #[repr(C)]
-#[derive(PartialEq)]
+#[derive(PartialEq,Clone,Copy)]
 pub enum htsExactFormat { 
 	UnknownFormat, BinaryFormat, TextFormat, 
 	Sam, Bam, Bai, Cram, Crai, Vcf, Bcf, Csi, Gzi, Tbi, Bed,
@@ -80,6 +82,23 @@ pub struct htsFormat {
 	_unused: [u8; 0],
 }
 
+#[repr(C)]
+struct tbx_conf_t {
+	preset: i32,
+	sc: i32,
+	bc: i32,
+	ec: i32,
+	meta_char: i32,
+	line_skip: i32,
+}
+
+#[repr(C)]
+pub(crate) struct tbx_t {
+	conf: tbx_conf_t,
+	index: *const hts_idx_t,
+	dict: *mut c_void,
+}
+
 #[link(name = "hts")]
 extern "C" {
 	fn hts_open(fn_: *const c_char, mode: *const c_char) -> *mut htsFile;
@@ -89,10 +108,67 @@ extern "C" {
 	fn sam_index_load(fp_ : *mut htsFile, name: *const c_char) -> *mut hts_idx_t;
 	fn hts_set_fai_filename(fp_ : *mut htsFile, fn_aux: *const c_char) -> c_int;
 	fn hts_itr_destroy(iter: *mut hts_itr_t);
+	fn hts_itr_query(idx: *const hts_idx_t, tid: c_int, beg: HtsPos, end: HtsPos,
+		readrec: unsafe extern "C" fn (*mut BGZF, *mut c_void, *mut c_void, *mut c_int, *mut HtsPos, *mut HtsPos) -> c_int) -> *mut hts_itr_t;
 	fn sam_itr_queryi(idx: *const hts_idx_t, tid: c_int, start: HtsPos, end: HtsPos) -> *mut hts_itr_t; 
 	fn sam_itr_regarray(idx: *const hts_idx_t, hdr: *mut sam_hdr_t, regarray: *const *const c_char, count: c_uint) -> *mut hts_itr_t; 
 	fn hts_itr_multi_next(fp: *mut htsFile, itr: *mut hts_itr_t, r: *mut c_void) -> c_int;
 	fn hts_itr_next(fp: *mut BGZF, itr: *mut hts_itr_t, r: *mut c_void, data: *mut c_void) -> c_int;
+	fn tbx_index_load3(fname: *const c_char, fnidx: *const c_char, flags: c_int) -> *mut tbx_t;
+	fn tbx_seqnames(tbx: *const tbx_t, n: *mut c_int) -> *mut *const c_char;
+	fn tbx_readrec(fp: *mut BGZF, tbxv: *mut c_void, sv: *mut c_void, tid: *mut c_int, beg: *mut HtsPos, end: *mut HtsPos) -> c_int;
+	fn tbx_destroy(tbx: *mut tbx_t);
+}
+
+pub struct Tbx {
+	inner: NonNull<tbx_t>
+} 
+
+unsafe impl Sync for Tbx {}
+unsafe impl Send for Tbx {}
+
+impl Drop for Tbx {
+	fn drop(&mut self) {
+		unsafe { tbx_destroy(self.inner_mut()) };
+	}
+}
+
+impl Tbx {
+	pub fn new<S: AsRef<str>>(name: S) -> io::Result<Self> {
+		let name = name.as_ref();
+		match NonNull::new(unsafe{ tbx_index_load3(get_cstr(name).as_ptr(), null::<c_char>(), 0)}) {
+			None =>	Err(hts_err(format!("Couldn't open tabix index for file {}", name))),
+			Some(p) => Ok(Tbx{inner: p}), 
+		}
+	}
+	pub(crate) fn inner(&self) -> &tbx_t { unsafe{self.inner.as_ref()} }
+	pub(crate) fn inner_mut(&mut self) -> &mut tbx_t { unsafe{ self.inner.as_mut() }} 
+	pub fn seq_names(&self) -> Option<Vec<&str>> {
+		let mut n_seq: c_int = 0;
+		let p = unsafe{tbx_seqnames(self.inner(), &mut n_seq as *mut c_int)};
+		if p.is_null() {
+			None	
+		} else {
+			let mut v = Vec::with_capacity(n_seq as usize);
+			for i in 0..n_seq {
+				let c_str: &CStr = unsafe { CStr::from_ptr(*p.offset(i as isize)) };
+    			let str_slice: &str = c_str.to_str().unwrap();
+				v.push(str_slice);
+			}
+			unsafe {libc::free(p as *mut c_void)};
+			Some(v)
+		}
+		
+	}
+	pub fn tbx_itr_queryi(&self, tid: c_int, beg: HtsPos, end: HtsPos) -> io::Result<HtsItr> {
+		let it = NonNull::new(unsafe {hts_itr_query(self.inner().index, tid, beg, end, tbx_readrec)});
+		if let Some(itr) = it { Ok(HtsItr{inner: itr}) } else { Err(hts_err("Failed to obtain tbx iterator".to_string())) }	}
+}
+
+pub enum TbxReadResult { 
+	Ok(kstring_t),
+	EOF,	
+	Error,
 }
 
 pub struct HtsFile {
@@ -141,7 +217,7 @@ impl HtsFile {
 		if ret != 0 { Err(hts_err(format!("Failed to attach reference index {} to file {}", name, self.name))) } 
 		else { Ok(()) }
 	}
-
+	pub fn is_bgzf(&self) -> bool { self.inner().is_bgzf() != 0 }
 }
 
 pub struct HtsIndex {
@@ -174,9 +250,10 @@ pub struct HtsFormat {
 }
 
 impl HtsFormat {
+	fn inner(&self) -> &htsFormat { unsafe{self.inner.as_ref()} }
+	pub fn format(&self) -> htsExactFormat { self.inner().format }
 	pub fn is_compressed(&self) -> bool {
-		let format = unsafe { self.inner.as_ref() };
-		format.compression == htsCompression::Bgzf || format.format == htsExactFormat::Cram
+		self.inner().compression == htsCompression::Bgzf || self.format() == htsExactFormat::Cram
 	}	
 }
 
@@ -205,6 +282,16 @@ impl HtsItr {
 			0..=c_int::MAX => SamReadResult::Ok(brec),
 			-1 => SamReadResult::EOF,
 			_ => SamReadResult::Error,
+		}
+	}
+	pub fn tbx_itr_next(&mut self, fp: &mut HtsFile, tbx: &mut Tbx, mut kstr: kstring_t) -> TbxReadResult {
+		match unsafe {
+			hts_itr_next(if fp.inner().is_bgzf() != 0 { fp.inner().fp as *mut BGZF } else { null_mut::<BGZF>() },
+				self.inner.as_ptr(), &mut kstr as *mut _ as *mut c_void, tbx.inner_mut() as *mut tbx_t as *mut c_void)
+			} {
+			0..=c_int::MAX => TbxReadResult::Ok(kstr),
+			-1 => TbxReadResult::EOF,
+			_ => TbxReadResult::Error,
 		}
 	}
 }
