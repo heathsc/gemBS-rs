@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use clap::ArgMatches;
 
 use utils::compress;
+use r_htslib::*;
 
 use crate::config::*;
 use super::cli_utils::*;
@@ -47,7 +48,7 @@ fn read_alias_file(s: &str) -> io::Result<HashMap<String, String>> {
 	Ok(smap)	
 }
 
-pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[String]>)> {
+pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[DbInput]>)> {
 	trace!("Handle command line options");
 	let threads = get_arg_usize(m, "threads")?.unwrap_or_else(num_cpus::get);
 	let jobs = get_arg_usize(m, "jobs")?.unwrap_or(1);
@@ -63,24 +64,48 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[String]>)> {
 		Some(s) => read_select_file(s)?,
 		None => HashSet::new(),
 	};
-	let files: Vec<String> = match m.values_of("input") {
+	let files: Vec<DbInput> = match m.values_of("input") {
 		Some(v) => { 
 			// Sort input files by file size in reverse order so that larger files are processed first
-			let mut f: Vec<String> = v.map(|s| s.to_owned()).collect();
-			let mut sizes: HashMap<String, i64> = HashMap::with_capacity(f.len());
-			for file in f.iter() {
+			let mut tf: Vec<(DbInput, i64)> = Vec::with_capacity(v.len());
+			for file in v {
 				match metadata(file) {
-					Ok(m) => { sizes.insert(file.to_owned(), m.len() as i64); },
+					Ok(m) => {
+						let indexed_vcf = match input_type {
+							IType::Auto | IType::Vcf => {
+								let hfile = HtsFile::new(file, "r")?;
+								if hfile.format().format() == htsExactFormat::Vcf && hfile.is_bgzf() {
+									if let Ok(tbx) = Tbx::new(file) {
+										if let Some(v) = tbx.seq_names() {
+											if let Some(alias) = &chrom_alias {
+												for (tid, c) in v.iter().enumerate() {
+													if let Some(ctg) = alias.get(*c) { tf.push((DbInput::VcfContig(file.to_owned(), ctg.to_string(), tid as libc::c_int), 1))}
+												}
+											} else {
+												for (tid, c) in v.iter().enumerate() { tf.push((DbInput::VcfContig(file.to_owned(), c.to_string(), tid as libc::c_int), 1))}
+											}
+											true
+										} else { false }
+									} else { false }
+								} else { false }
+							},
+							_ => false,
+						};
+						if !indexed_vcf { 
+							tf.push((DbInput::File(file.to_owned()), m.len() as i64)); 
+						}
+					},
 					Err(e) => {
 						error!("Couldn't get information on input file {}: {}", file, e);
 						return Err(e);
 					},
 				}
 			}
-			f.sort_unstable_by_key(|s| -sizes.get(s.as_str()).unwrap());
+			tf.sort_unstable_by_key(|(_, s)| -s);
+			let f: Vec<_> = tf.drain(..).map(|(d, _)| d).collect();
 			f
 		},
-		None => vec!("-".to_string()),
+		None => vec!(DbInput::File("-".to_string())),
 	};
 	trace!("Finished handling command line options");
 	Ok((Config::new(threads, jobs, maf_limit, output, description, input_type, chrom_alias, selected), files.into_boxed_slice()))

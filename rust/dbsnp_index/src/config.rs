@@ -49,3 +49,9 @@ impl Config {
 	}
 }
 
+
+pub enum DbInput {
+	File(String),
+	VcfContig(String, String, libc::c_int),	
+}
+

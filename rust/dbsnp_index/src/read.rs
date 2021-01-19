@@ -1,14 +1,14 @@
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::io::{self, BufRead};
-use std::thread;
 
-use crossbeam_channel::{bounded, Sender, Receiver};
+use crossbeam_channel::{Sender, Receiver};
+use r_htslib::*;
 
 use utils::compress::get_reader;
 
 use super::snp::{RawSnp, Snp, SnpBlock};
-use crate::config::{IType, Config};
+use crate::config::{IType, Config, DbInput};
 use crate::process::AtomicServer;
 use crate::snp::SnpBuilder;
 use crate::contig::Contig;
@@ -75,7 +75,7 @@ fn read_input_file(conf: Arc<Config>, file: Option<&str>, send: &Sender<(Vec<Str
 	let rdr = get_reader(file)?;
 	info!("Reading from {}", file.unwrap_or("<stdin>"));
 	let mut itype = conf.input_type();
-	let size = 64;
+	let size = 256;
 	let mut buf_vec = Vec::with_capacity(size);
 	for line in rdr.lines() {
 		match line {
@@ -95,9 +95,44 @@ fn read_input_file(conf: Arc<Config>, file: Option<&str>, send: &Sender<(Vec<Str
 	Ok(())
 }
 
-pub fn read_thread(conf: Arc<Config>, ifiles: Arc<AtomicServer<String>>, send: Sender<(Vec<String>, IType)>) {
-	while let Some(f) = ifiles.next_item().map(|s| s.as_str()) {
-		let file = if f == "-" { None } else { Some(f) }; 
-		let _ = read_input_file(conf.clone(), file, &send);
+fn read_vcf_contig(file: &str, ctg: &str, tid: libc::c_int, send: &Sender<(Vec<String>, IType)>) -> io::Result<()> {
+	let mut hfile = HtsFile::new(file, "r")?;
+	let mut tbx = Tbx::new(file)?;
+	let mut hitr = tbx.tbx_itr_queryi(tid, 0, HTS_POS_MAX)?;
+	info!("Reading from {}:{}", file, ctg);
+	let size = 256;
+	let mut buf_vec = Vec::with_capacity(size);
+	let mut kstr = kstring_t::new();
+	loop {
+		match hitr.tbx_itr_next(&mut hfile, &mut tbx, kstr) {
+			TbxReadResult::Ok(s) => {
+				buf_vec.push(s.to_str().expect("File not Utf8").to_owned());
+				if buf_vec.len() == size {
+					send.send((buf_vec, IType::Vcf)).expect("Error sending message to read processing thread");
+					buf_vec = Vec::with_capacity(size);
+				}
+				kstr = s;
+			},
+			TbxReadResult::EOF => break,
+			TbxReadResult::Error => {
+				error!("Error reading from file {}:{}", file, ctg);
+				break;
+			},
+		}
+	}
+	if !buf_vec.is_empty() { send.send((buf_vec, IType::Vcf)).expect("Error sending message to read processing thread") }
+	info!("Finished reading from {}:{}", file, ctg);
+	Ok(())
+}
+
+pub fn read_thread(conf: Arc<Config>, ifiles: Arc<AtomicServer<DbInput>>, send: Sender<(Vec<String>, IType)>) {
+	while let Some(f) = ifiles.next_item() {
+		match f {
+			DbInput::File(fname) => {
+				let file = if fname == "-" { None } else { Some(fname.as_str()) };
+				let _ = read_input_file(conf.clone(), file, &send);
+			},	 
+			DbInput::VcfContig(file, ctg, tid) => { let _ = read_vcf_contig(file.as_str(), ctg.as_str(), *tid, &send); },
+		}	
 	}
 }

@@ -25,7 +25,7 @@ impl <T>AtomicServer<T> {
 	}
 }
 
-pub fn process(conf: Config, files: Box<[String]>) -> io::Result<()> {
+pub fn process(conf: Config, files: Box<[DbInput]>) -> io::Result<()> {
 	let conf_ref = Arc::new(conf);
 	let n_readers = conf_ref.jobs().min(files.len());
 	let n_proc_threads = conf_ref.threads();
