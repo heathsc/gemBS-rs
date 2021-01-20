@@ -2,6 +2,3 @@
 	path = c_tools/gem3-mapper
 	url = https://github.com/smarco/gem3-mapper.git
 	branch = gembs
-[submodule "c_tools/bs_call"]
-	path = c_tools/bs_call
-	url = https://github.com/heathsc/bs_call.git
