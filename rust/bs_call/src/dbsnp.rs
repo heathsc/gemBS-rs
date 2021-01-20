@@ -4,96 +4,67 @@ use std::sync::Arc;
 use std::io::{Error, ErrorKind, Read, BufReader, Seek, SeekFrom};
 use std::convert::TryInto;
 use std::collections::HashMap;
-use libc::{c_int, c_ulong};
 
-#[link(name = "z")]
-extern "C" {
-	fn uncompress(dest: *mut u8, dlen: *mut c_ulong, src: *const u8, slen: c_ulong) -> c_int;
-}
-
-struct Uncompress {
-	dest_buf: Box<[u8]>,
-}
-
-const Z_OK: c_int = 0;
-const Z_DATA_ERROR: c_int = -3;
-const Z_MEM_ERROR: c_int = -4;
-const Z_BUF_ERROR: c_int = -5;
-
-impl Uncompress {
-	fn new(dest_buf: Box<[u8]>) -> Self { Self {dest_buf}}
-	fn uncompress(&mut self, src: &[u8]) -> io::Result<&[u8]> {
-		let mut dlen = self.dest_buf.len() as c_ulong;
-		match unsafe { uncompress(self.dest_buf.as_mut_ptr(), &mut dlen as *mut c_ulong, src.as_ptr(), src.len() as c_ulong )} {
-			Z_OK => Ok(&self.dest_buf[..dlen as usize]),
-			Z_DATA_ERROR => Err(new_err("Compressed data corrupt".to_string())),
-			Z_MEM_ERROR => Err(new_err("Out of memory when uncompressing data".to_string())),
-			Z_BUF_ERROR => Err(new_err("Buffer too small for uncompressed data".to_string())),
-			_ => Err(new_err("Unknown error".to_string())),
-		}
-	}
-}
+use zstd::block::decompress_to_buffer;
 
 pub fn new_err(s: String) -> io::Error {
 	Error::new(ErrorKind::Other, s)	
 }
 
 pub struct DBSnpBin {
-	mask: u64,
-	fq_mask: u64,
-	entries: Box<[u16]>,
+	mask: [u128; 2],
+	name_len: Box<[u8]>,
 	name_buf: Box<[u8]>,
 }
 
-const DTAB: [char; 16] = [ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ' ', ' ', ' ', ' ', ' ', ' '];
+const DTAB: [char; 16] = [ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '?', '?', '?', '?', '?', '?'];
+
+const WTAB: [&str; 256] = [
+	"00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "0?", "0?", "0?", "0?", "0", "0",
+	"10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "1?", "1?", "1?", "1?", "1", "1",
+	"20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "2?", "2?", "2?", "2?", "2", "2",
+	"30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "3?", "3?", "3?", "3?", "3", "3",
+	"40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "4?", "4?", "4?", "4?", "4", "4",
+	"50", "51", "52", "53", "54", "55", "56", "57", "58", "59", "5?", "5?", "5?", "5?", "5", "5",
+	"60", "61", "62", "63", "64", "65", "66", "67", "68", "69", "6?", "6?", "6?", "6?", "6", "6",
+	"70", "71", "72", "73", "74", "75", "76", "77", "78", "79", "7?", "7?", "7?", "7?", "7", "7",
+	"80", "81", "82", "83", "84", "85", "86", "87", "88", "89", "8?", "8?", "8?", "8?", "8", "8",
+	"90", "91", "92", "93", "94", "95", "96", "97", "98", "99", "9?", "9?", "9?", "9?", "9", "9",
+	"?0", "?1", "?2", "?3", "?4", "?5", "?6", "?7", "?8", "?9", "??", "??", "??", "??", "?", "?",
+	"?0", "?1", "?2", "?3", "?4", "?5", "?6", "?7", "?8", "?9", "??", "??", "??", "??", "?", "?",
+	"?0", "?1", "?2", "?3", "?4", "?5", "?6", "?7", "?8", "?9", "??", "??", "??", "??", "?", "?",
+	"?0", "?1", "?2", "?3", "?4", "?5", "?6", "?7", "?8", "?9", "??", "??", "??", "??", "?", "?",
+	"?0", "?1", "?2", "?3", "?4", "?5", "?6", "?7", "?8", "?9", "??", "??", "??", "??", "?", "?",
+	"?0", "?1", "?2", "?3", "?4", "?5", "?6", "?7", "?8", "?9", "??", "??", "??", "??", "?", "?",	
+];
 
 impl DBSnpBin {
-	pub fn lookup_rs(&self, ix: usize, prefixes: &Arc<Vec<String>>) -> Option<(String, bool)> {
-		let mk = 1u64 << ix;
-		if (self.mask & mk) != 0 {
-			let res = (self.fq_mask & mk) != 0;
-			let mut rs = String::new();
-			let n_prev_entries = (self.mask & (mk - 1)).count_ones();
-			let mut entries = self.entries.iter().copied();
-			let mut ix = 0;
-			for _ in 0..n_prev_entries {
-				let en = entries.next().unwrap() as usize;
-				ix += (en >> 8) + if (en >> 6).trailing_zeros() >= 2 { 2 } else { 0 };				
-			}
-			let en = entries.next().unwrap() as usize;
-			let ix1 = ix + (en >> 8) as usize;
-			let mut nm = self.name_buf[ix..ix1].iter().copied();
-			rs.push_str(&prefixes [{
-				let t = (en >> 6) & 3;
-				if t == 0 {
-					((nm.next().unwrap() as usize) << 8) | (nm.next().unwrap() as usize)
-				} else { t - 1 }
-			}]);
-			for c in nm {
-				rs.push(DTAB[(c >> 4) as usize]);
-				if (c & 15) < 10 { rs.push(DTAB[(c & 15) as usize]) };
-			}
-			Some((rs, res))
+	fn lookup_rs(&self, ix: usize) -> Option<(String, bool)> {
+		let (k, mk) = if ix < 128 { (0, 1u128 << ix) } else { (1, 1u128 << (ix & 127)) };
+		if (self.mask[k] & mk) != 0 {
+			let n_prev_entries = if k == 0 {
+				(self.mask[k] & (mk - 1)).count_ones() as usize
+			} else {
+				(self.mask[0].count_ones() + (self.mask[1] & (mk - 1)).count_ones()) as usize
+			};
+			let start_x: usize = self.name_len[0..n_prev_entries].iter().map(|x| *x as usize).sum();
+			let mut rs = String::with_capacity(self.name_len[n_prev_entries] as usize + 2);
+			rs.push_str("rs");
+			let mut it = self.name_buf[start_x>>1..].iter(); 
+			if (start_x & 1) != 0 {	rs.push(DTAB[(it.next().expect("Short name buf") & 0xf) as usize]) }
+			let select = loop {
+				let c = it.next().expect("Short name buf");
+				if (c & 0xf0) >= 0xe0 { break (c & 0xf0) == 0xf0 }
+				if (c & 0xf) > 9 && (c & 0xf) < 0xe { println!("OOOK! {:x}", c)};
+				rs.push_str(WTAB[*c as usize]);
+				if (c & 0xf) >= 0xe { break (c & 0xf) == 0xf }
+			};
+			Some((rs, select))
 		} else {
 			None
+			
 		}
-	}
-}
-
-pub struct TempBin {
-	mask: u64,
-	fq_mask: u64,
-	entries: Vec<u16>,
-	name_buf: Vec<u8>,	
-	prev_ix: Option<usize>,
-}
-
-impl TempBin {
-	fn new() -> Self { Self {mask: 0, fq_mask: 0, entries: Vec::new(), name_buf: Vec::new(), prev_ix: None }}
-	fn convert_to_bin(self) -> DBSnpBin {
-		DBSnpBin { mask: self.mask, fq_mask: self.fq_mask, entries: self.entries.into_boxed_slice(), name_buf: self.name_buf.into_boxed_slice() }
-	}
-	fn is_empty(&self) -> bool { self.entries.is_empty() }
+	} 
 }
 
 pub struct DBSnpCtg {
@@ -104,24 +75,29 @@ pub struct DBSnpCtg {
 }
 
 impl DBSnpCtg {
-	fn load_data(&mut self, mut file: &mut BufReader<File>, prefixes: &[String], bufsize: usize) -> io::Result<()> {
+	fn load_data(&mut self, mut file: &mut BufReader<File>, bufsize: usize) -> io::Result<()> {
 		file.seek(SeekFrom::Start(self.file_offset))?;
 		let mut bins = Vec::with_capacity(self.max_bin + 1 - self.min_bin);
-		let ubuf: Vec<u8> = vec!(0; bufsize);
-		let mut uncomp = Uncompress::new(ubuf.into_boxed_slice());
+		let mut ubuf: Vec<u8> = vec!(0; bufsize);
 		loop {
 			let mut size = [0u64; 1];
 			read_u64(&mut file, &mut size)?;
 			if size[0] == 0 { break; }
+			let mut tt = [0u32; 1];
+			read_u32(&mut file, &mut tt)?;
+			let first_bin = tt[0] as usize;	
+			if first_bin < self.min_bin + bins.len() { return Err(new_err("Error: index data corrupt".to_string())) }	
+			let gap = first_bin - self.min_bin - bins.len();
 			let cbuf = read_n(&mut file, size[0] as usize)?;
 			trace!("Read in compressed data for bin");
-			let buf = uncomp.uncompress(&cbuf)?;
+			let sz = decompress_to_buffer(&cbuf, &mut ubuf)?;
 			trace!("bin data uncompressed OK");	
-			bins.append(&mut load_bins(&buf, self.max_bin + 1 - self.min_bin - bins.len(), prefixes)?);				
+			trace!("loading bins (min_bin: {}, max_bin: {}, curr_bin: {}, first_bin: {}, gap: {})", self.min_bin, self.max_bin, self.min_bin + bins.len(), first_bin, gap);			
+			bins.append(&mut load_bins(&ubuf[..sz], gap)?);				
 		}
 		if bins.len() != self.max_bin + 1 - self.min_bin { Err(new_err(format!("Wrong number of bins read in.  Expected {}, Found {}", self.max_bin + 1 - self.min_bin, bins.len()))) }
 		else {
-			let n_snps = bins.iter().fold(0, |s, b| if let Some(bin) = b {s + bin.entries.len()} else { s } );
+			let n_snps = bins.iter().fold(0, |s, b| if let Some(bin) = b {s + bin.name_len.len()} else { s } );
 			info!("Contig dbSNP data read: number of snps = {}", n_snps);
 			self.bins = Some(Arc::new(bins));
 			Ok(())
@@ -129,93 +105,81 @@ impl DBSnpCtg {
 	}
 }
 
-const DB_TAB: [u8; 256]	= [
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13, 0x14,
-	0x15, 0x16, 0x17, 0x18, 0x19, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x30,
-	0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46,
-	0x47, 0x48, 0x49, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x60, 0x61, 0x62,
-	0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78,
-	0x79, 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x90, 0x91, 0x92, 0x93, 0x94,
-	0x95, 0x96, 0x97, 0x98, 0x99, 0x0f, 0x1f, 0x2f, 0x3f, 0x4f, 0x5f, 0x6f, 0x7f, 0x8f, 0x9f, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
-];
-
-fn load_bins(buf: &[u8], n_bins: usize, prefixes: &[String]) -> io::Result<Vec<Option<DBSnpBin>>> {
+fn load_bins(mut buf: &[u8], gap: usize) -> io::Result<Vec<Option<DBSnpBin>>> {
 	let format_err = || Err(new_err("Format error".to_string()));
-	let mut bins = Vec::with_capacity(n_bins);
-	let mut tbin = TempBin::new();
-	let mut b = buf.iter().copied();
-	let mut get = || b.next().ok_or_else(|| new_err("Short bin entry".to_string()));
+	let mut bins = Vec::with_capacity(256);	
+	let mut first = true;
+	let mut mask = [0u128; 2]; 
+	let mut x16 = [0u16; 1];	
+	let mut x32 = [0u32; 1];	
 	loop {
-		if tbin.is_empty() {
-			let x = match get() {
-				Ok(c) => c,
-				Err(_) => break,
+		let bin_inc = if first {
+			first = false; 
+			gap
+		} else {
+			let x = match read_1(&mut buf) {
+				Ok(x) => x,
+				Err(e) if e.kind() == ErrorKind::UnexpectedEof =>  break,
+				Err(e) => return Err(e),
 			};
-			let bin_inc = match x & 3 {
-				0 => (x >> 2) as usize,
-				1 => get()? as usize,
-				2 => u16::from_le_bytes([get()?, get()?]) as usize,
-				_ => u32::from_le_bytes([get()?, get()?, get()?, get()?]) as usize,
-			};
-			if bin_inc + bins.len() > n_bins { error!("Too many bins"); return format_err() }
-			if bin_inc > 1 { for _ in 0..bin_inc - 1 { bins.push(None) } }				
-		}
-		let x = get()?;
-		let prefix_ix = (x >> 6) as usize;
-		if prefix_ix == 0 {
-			tbin.name_buf.push(get()?);
-			tbin.name_buf.push(get()?);
-		}
-		let ix = (x & 63) as usize;
-		if let Some(x) = tbin.prev_ix { if ix <= x {
-			error!("index problem {} {}", x, ix); 
-			return format_err() } 
-		}
-		if prefix_ix > prefixes.len() { error!("Bad prefix ix: {}", prefix_ix); return format_err() }
-		tbin.prev_ix = Some(ix);
-		let k = tbin.name_buf.len();
-		let tm = loop {
-			let t = get()?;
-			if t <= 3 { break t } 
-			tbin.name_buf.push(DB_TAB[t as usize])
+			match x & 192 {
+				0 => x as usize,
+				64 => read_1(&mut buf)? as usize,
+				128 => {
+					read_u16(&mut buf, &mut x16)?;
+					x16[0] as usize
+				},
+				_ => {
+					read_u32(&mut buf, &mut x32)?;
+					x32[0] as usize
+				},
+			}
 		};
-		let k = tbin.name_buf.len() - k;
-		if k > 255 { error!("SNP name too long"); return format_err() }
-		let msk = 1u64 << ix;	
-		tbin.mask |= msk;
-		if (tm & 2) == 2 { tbin.fq_mask |= msk }
-		if tbin.entries.len() == 64 { error!("Too many bin entries"); return format_err() }
-		tbin.entries.push(((k as u16) << 8) | (x as u16));
-		if (tm & 1) == 1 { // End of bin
-			bins.push(Some(tbin.convert_to_bin()));
-			tbin = TempBin::new();
+		for _ in 0..bin_inc { bins.push(None) }
+		read_u128(&mut buf, &mut mask)?;
+		let n = mask[0].count_ones() + mask[1].count_ones();
+		if n == 0 { return format_err() }
+		let mut name_buf = Vec::new();
+		let mut name_len = Vec::with_capacity(n as usize);
+		let mut len = 0;
+		let mut ix = 0;
+		loop {
+			let x = read_1(&mut buf)?;
+			name_buf.push(x);
+			if len == 255 { return format_err() }
+			len += 1;
+			if (x & 0xf0) >= 0xe0 {
+				name_len.push(len);
+				ix += 1;
+				if ix == n { break; } 
+				len = 0;
+			}
+			if len == 255 { return format_err() } 
+			len += 1;
+			if (x & 0xf) >= 0xe {
+				name_len.push(len);				
+				ix += 1;
+				if ix == n { break; }
+				len = 0; 
+			}
 		}
-	}		
+		bins.push(Some(DBSnpBin{mask, name_buf: name_buf.into_boxed_slice(), name_len: name_len.into_boxed_slice()}));
+	}
 	Ok(bins)
 }	
 
 pub struct DBSnpContig {
 	min_bin: usize,
 	max_bin: usize,
-	prefixes: Arc<Vec<String>>,
 	bins: Option<Arc<Vec<Option<DBSnpBin>>>>,	
 }
 
 impl DBSnpContig {
 	pub fn lookup_rs(&self, x: usize) -> Option<(String, bool)> {
 		if let Some(bins) = &self.bins {
-			let bn = (x + 1) >> 6;
+			let bn = (x + 1) >> 8;
 			if bn >= self.min_bin && bn <= self.max_bin {
-				if let Some(bin) = &bins[bn - self.min_bin] { return bin.lookup_rs((x + 1) & 63, &self.prefixes) }
+				if let Some(bin) = &bins[bn - self.min_bin] { return bin.lookup_rs((x + 1) & 255) }
 			}
 		}
 		None
@@ -225,7 +189,6 @@ pub struct DBSnpIndex {
 	filename: String,
 	dbsnp: HashMap<String, DBSnpCtg>,
 	bufsize: usize,
-	prefixes: Arc<Vec<String>>,
 	header: String,	
 }
 
@@ -234,44 +197,45 @@ impl DBSnpIndex {
 		let filename = name.as_ref();
 		let mut file = BufReader::new(fs::File::open(filename)?);
 		debug!("Reading dbSNP header from {}", filename);
-		let mut td = [0u32; 2];
+		let mut td = [0u32; 1];
 		read_u32(&mut file, &mut td)?;
-		if td[0] != 0xd7278434 { return Err(new_err("Invalid format: bad magic number".to_string())) }
+		if td[0] != 0xd7278434 { return Err(new_err(format!("Invalid format: bad magic number {:x}",td[0]))) }
 		trace!("Magic number OK");
+		let vs = read_n(&mut file, 4)?;
+		if vs[0] != 2 { return Err(new_err("Invalid version number".to_string())) }
 		let mut td1 = [0u64; 3];
 		read_u64(&mut file, &mut td1)?;
 		file.seek(SeekFrom::Start(td1[0]))?;
 		let cbuf = read_n(&mut file, td1[2] as usize)?;
-		read_u32(&mut file, &mut[td[0]])?;
+		read_u32(&mut file, &mut td)?;
 		if td[0] != 0xd7278434 { return Err(new_err("Invalid format: bad second magic number".to_string())) }
 		trace!("Header data read in OK");
-		let ubuf: Vec<u8> = vec!(0; td1[1] as usize);
-		let mut uncomp = Uncompress::new(ubuf.into_boxed_slice());
-		let ubuf = uncomp.uncompress(&cbuf)?;
-		
-		trace!("Header data uncompressed OK");
-		if ubuf.len() < 9 { return Err(new_err("Invalid format: short header".to_string())) }
-		let n_prefix = u16::from_le_bytes((&ubuf[2..4]).try_into().unwrap());
-		let n_ctgs = u32::from_le_bytes((&ubuf[4..8]).try_into().unwrap());
-		let (header, mut p) = get_string(&ubuf[8..])?;
-		let mut prefixes = Vec::with_capacity(n_prefix as usize);
-		for _ in 0..n_prefix { 
+		let mut ubuf: Vec<u8> = vec!(0; td1[1] as usize);
+		let sz = decompress_to_buffer(&cbuf, &mut ubuf)?;
+		trace!("Header data uncompressed OK ({} bytes)", sz);
+		if sz < 4 { return Err(new_err("Invalid format: short header".to_string())) }
+		let n_ctgs = u32::from_le_bytes((&ubuf[0..4]).try_into().unwrap());
+		let mut p = &ubuf[4..sz];
+		let mut dbsnp = HashMap::new();
+		let mut ctgs = Vec::with_capacity(n_ctgs as usize);
+		for _ in 0..n_ctgs {
+			ctgs.push(get_ctg_header(p)?);
+			p = &p[16..];
+		}
+		let (header, mut p) = get_string(p)?;
+		for ctg in ctgs.drain(..) {
 			let (s, p1) = get_string(p)?;
 			p = p1;
-			prefixes.push(s);
+			trace!("Inserting ctg {} {}-{}", s, ctg.min_bin, ctg.max_bin);
+			dbsnp.insert(s, ctg);			
 		}
-		trace!("Prefixes read in OK");
-		let mut dbsnp = HashMap::new();
-		for _ in 0..n_ctgs {
-			let ctg = get_ctg_header(p)?;
-			let (s, p1) = get_string(&p[16..])?;
-			p = p1;
-			dbsnp.insert(s, ctg);
+		if !p.is_empty() { Err(new_err("Error with dbSNP index header - excess data".to_string())) } 
+		else {
+			trace!("Contigs read in OK");
+			info!("Read dbSNP header from {} with data on {} contigs", filename, n_ctgs);
+			info!("Header line: {}", header);
+			Ok(Self{filename: filename.to_owned(), dbsnp, bufsize: td1[1] as usize, header})
 		}
-		trace!("Contigs read in OK");
-		info!("Read dbSNP header from {} with data on {} contigs", filename, n_ctgs);
-		info!("Header line: {}", header);
-		Ok(Self{filename: filename.to_owned(), dbsnp, bufsize: td1[1] as usize, prefixes: Arc::new(prefixes), header})
 	}
 	pub fn header(&self) -> &str { &self.header }
 }
@@ -301,7 +265,7 @@ impl DBSnpFile {
 		Ok(match self.index.dbsnp.get_mut(name) {
 			Some(ctg) => {
 				info!("Loading dbSNP data for {}", name);	
-				ctg.load_data(&mut self.file, &self.index.prefixes, self.index.bufsize)?;			
+				ctg.load_data(&mut self.file, self.index.bufsize)?;			
 				info!("dbSNP data loaded");
 				Some(ctg)				
 			},
@@ -315,18 +279,17 @@ impl DBSnpFile {
 	pub fn get_dbsnp_contig<S: AsRef<str>>(&self, name: S) -> Option<DBSnpContig> {
 		if let Some(ctg) = self.get_ctg(name) {
 			let bins = if let Some(b) = &ctg.bins { Some(Arc::clone(&b)) } else { None };
-			let prefixes = Arc::clone(&self.index.prefixes);
 			Some(DBSnpContig {
 				min_bin: ctg.min_bin,
 				max_bin: ctg.max_bin,
-				prefixes, bins
+				bins
 			})
 		} else { None }
 	}
 }
 
 fn get_ctg_header(buf: &[u8]) -> io::Result<DBSnpCtg> {
-	if buf.len() > 16 {
+	if buf.len() >= 16 {
 		let min_bin = u32::from_le_bytes((&buf[0..4]).try_into().unwrap()) as usize;
 		let max_bin = u32::from_le_bytes((&buf[4..8]).try_into().unwrap()) as usize;
 		let file_offset = u64::from_le_bytes((&buf[8..16]).try_into().unwrap());
@@ -348,29 +311,50 @@ fn get_string(buf: &[u8]) -> io::Result<(String, &[u8])> {
 	Err(new_err("Bad format: String terminator not found".to_string()))
 }
 
-fn read_n<R: Read>(reader: R, n: usize) -> io::Result<Vec<u8>> {
+fn read_1<R: Read>(reader: &mut R) -> io::Result<u8> {
+	let mut x = [0u8; 1];
+	reader.read_exact(&mut x).map(|_| x[0])
+}
+
+fn read_n<R: Read>(reader: &mut R, n: usize) -> io::Result<Vec<u8>> {
 	let mut buf = vec![];
     let mut chunk = reader.take(n as u64);
     let n_read = chunk.read_to_end(&mut buf)?;
 	if n == n_read { Ok(buf) } else { Err(new_err("Unexpected number of bytes read".to_string())) }
 }
 
-fn read_u32<R: Read>(mut file: R, buf: &mut[u32]) -> io::Result<()> {
+fn read_u16<R: Read>(file: &mut R, buf: &mut[u16]) -> io::Result<()> {
+	let mut p = [0u8; 2];
+	for x in buf.iter_mut() {
+		file.read_exact(&mut p)?;
+		*x = u16::from_le_bytes(p);
+	}
+	Ok(())
+}
+
+fn read_u32<R: Read>(file: &mut R, buf: &mut[u32]) -> io::Result<()> {
 	let mut p = [0u8; 4];
 	for x in buf.iter_mut() {
-		let n = file.read(&mut p)?;
-		if n != 4 { return Err(new_err("Error reading from file".to_string())) }
+		file.read_exact(&mut p)?;
 		*x = u32::from_le_bytes(p);
 	}
 	Ok(())
 }
 
-fn read_u64<R: Read>(mut file: R, buf: &mut[u64]) -> io::Result<()> {
+fn read_u64<R: Read>(file: &mut R, buf: &mut[u64]) -> io::Result<()> {
 	let mut p = [0u8; 8];
 	for x in buf.iter_mut() {
-		let n = file.read(&mut p)?;
-		if n != 8 { return Err(new_err("Error reading from file".to_string())) }
+		file.read_exact(&mut p)?;
 		*x = u64::from_le_bytes(p);
+	}
+	Ok(())
+}
+
+fn read_u128<R: Read>(file: &mut R, buf: &mut[u128]) -> io::Result<()> {
+	let mut p = [0u8; 16];
+	for x in buf.iter_mut() {
+		file.read_exact(&mut p)?;
+		*x = u128::from_le_bytes(p);
 	}
 	Ok(())
 }
