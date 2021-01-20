@@ -108,6 +108,7 @@ dependencies = [
  "serde_json",
  "stderrlog",
  "utils",
+ "zstd",
 ]
 
 [[package]]
@@ -341,6 +342,7 @@ dependencies = [
  "libc",
  "log",
  "num_cpus",
+ "r_htslib",
  "stderrlog",
  "utils",
  "zstd",
