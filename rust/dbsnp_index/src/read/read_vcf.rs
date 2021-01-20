@@ -2,7 +2,6 @@ use std::str::FromStr;
 
 use super::*;
 use crate::snp::SnpBuilder;
-use crate::config::Config;
 
 fn snp_from_vcf(s: &str, rb: &mut SnpBuilder) -> Option<Snp> {
 	let v: Vec<&str> = s.split('\t').collect();

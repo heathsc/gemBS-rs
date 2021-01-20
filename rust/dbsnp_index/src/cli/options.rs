@@ -12,15 +12,18 @@ use super::cli_utils::*;
 fn read_select_file(s: &str) -> io::Result<HashSet<String>> {
 	let mut sel_set = HashSet::new();
 	let mut rdr = compress::open_bufreader(s)?;
-	debug!("Reading selected SNP list from {}", s);
+	info!("Reading selected SNP list from {}", s);
 	let mut buf = String::with_capacity(256);
 	loop {
 		buf.clear();
 		let l = rdr.read_line(&mut buf)?;
 		if l == 0 { break }
-		if let Some(sname) = buf.split_ascii_whitespace().next() { sel_set.insert(sname.to_owned()); }
+		if let Some(sname) = buf.split_ascii_whitespace().next() { 
+			if let Some(name) = sname.strip_prefix("rs") { sel_set.insert(name.to_owned()); }
+			else { sel_set.insert(sname.to_owned()); } 
+		}
 	}
-	debug!("Read in {} unique SNP IDs", sel_set.len());
+	info!("Read in {} unique SNP IDs", sel_set.len());
 	Ok(sel_set)	
 }
 

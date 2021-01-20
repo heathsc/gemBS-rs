@@ -7,7 +7,7 @@ use crossbeam_channel::bounded;
 use crate::config::*;
 use super::snp::*;
 use super::contig::Contig;
-use super::read::{ReaderBuf, read_thread, proc_read_thread};
+use super::read::{read_thread, proc_read_thread};
 use super::write::write_thread;
 use super::compress::compress_thread;
 
@@ -74,8 +74,12 @@ pub fn process(conf: Config, files: Box<[DbInput]>) -> io::Result<()> {
 	for th in compressors {	th.join().unwrap()}
 	drop(s);
 	writer.join().unwrap();
-	for (ctg, cstats) in ctg_stats_vec.iter() {
-		println!("Contig {}: n_snps {}, n_selected_snps {}", ctg.name(), cstats.n_snps(), cstats.n_selected_snps());
+	let mut n_snps = 0;
+	let mut n_selected_snps = 0;
+	for (_, cstats) in ctg_stats_vec.iter() {
+		n_snps += cstats.n_snps();
+		n_selected_snps += cstats.n_selected_snps();
 	}
+	println!("n_snps {}, n_selected_snps {}", n_snps, n_selected_snps);
 	Ok(())	
 }

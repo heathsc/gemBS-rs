@@ -32,7 +32,7 @@ pub fn new_err(s: String) -> io::Error {
 /// Name           Size         Description
 /// ---------------------------------------------------------------------------
 /// magic          32           Magic number (0xd7278434)
-/// compress       8            Compression type (0 = zlib, 1 = zstd)
+/// version        8            Version number (should be 2)
 /// reserved       24           For future use
 /// header_idx     64           File offset of contig header
 /// ubuf_size      64           Maximum size of uncompressed data block
@@ -120,6 +120,7 @@ pub fn write_thread(conf: Arc<Config>, recv: Receiver<(Arc<Contig>, Vec<Compress
 			write_u32(ofile.by_ref(), &[cb.first_bin()]).expect("Write error");
 			ofile.write_all(cbuf).expect("Write error");
 		}
+		write_u64(ofile.by_ref(), &[0u64]).expect("Write error");
 		debug!("Writer thread finished writing out data for contig {}", ctg.name());
 		ctgs.push((ctg.clone(), pos));
 		max_size = max_size.max(msize);
@@ -147,7 +148,7 @@ pub fn write_thread(conf: Arc<Config>, recv: Receiver<(Arc<Contig>, Vec<Compress
 	write_u32(ofile.by_ref(), &[IDX_MAGIC]).expect("Write error");
 	ofile.seek(SeekFrom::Start(0)).expect("IO error - can't seek to start of output file");
 	write_u32(ofile.by_ref(), &[IDX_MAGIC]).expect("Write error");
-	ofile.write_all(&[8,0,0,0]).expect("Write error");
+	ofile.write_all(&[2,0,0,0]).expect("Write error");
 	write_u64(ofile.by_ref(), &[pos, max_size as u64, cbuf.len() as u64]).expect("Write error");
 	debug!("Writer thread terminating");
 }

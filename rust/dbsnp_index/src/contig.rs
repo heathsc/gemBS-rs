@@ -12,20 +12,19 @@ pub struct ContigBin {
 	half_full: bool,
 	entries: Vec<u8>,
 	name_buf: Vec<u8>,	
-	idx: Vec<(u8, usize)>,
 }
 
 impl ContigBin {
 	pub fn name_buf(&self) -> &[u8] { &self.name_buf }
 	pub fn mask(&self) -> &[u128; 2] { &self.mask }
 	pub fn entries(&self) -> &[u8] { &self.entries }
-	fn sort_idx(&mut self) {
+	fn sort_idx(&mut self) -> Vec<(u8, usize)> {
+		let mut idx = Vec::with_capacity(256);
 		let mut start_ix = 0;
 		let mut left = 0; 
 		let mut it = self.name_buf.iter();
-		self.idx.clear();
 		for off in self.entries.iter() {
-			self.idx.push((*off, start_ix));
+			idx.push((*off, start_ix));
 			start_ix += left;
 			left = 0;
 			loop {
@@ -43,14 +42,15 @@ impl ContigBin {
 				}
 			}
 		}
-		self.idx.sort_unstable_by_key(|(off, _)| *off)
+		idx.sort_unstable_by_key(|(off, _)| *off);
+		idx
 	}
 	
 	// Write names sorted by position within bin
 	pub fn write_names<W: Write>(&mut self, w: W) {
-		self.sort_idx();
+		let idx = self.sort_idx();
 		let mut writer = NameWriter::new(w);
-		for (_, x) in self.idx.iter() {
+		for (_, x) in idx.iter() {
 			let mut it = self.name_buf[x>>1..].iter(); 
 			if (x & 1) == 1 { writer.write_u4(*it.next().expect("Short name buffer")) }
 			loop {
@@ -100,6 +100,7 @@ impl <W: Write> Drop for NameWriter<W> {
 #[derive(Debug)]
 struct ContigInnerData {
 	min_bin: usize,	
+	max_bin: usize,
 	bins: Vec<Option<ContigBin>>,
 }
 
@@ -119,7 +120,7 @@ impl ContigStats {
 impl ContigInnerData {
 	fn new(min_bin: usize, max_bin: usize) -> Self {
 		let bins: Vec<Option<ContigBin>> = vec!(None; max_bin - min_bin + 1);
-		Self{min_bin, bins }
+		Self{min_bin, max_bin, bins }
 	}
 	fn check_min(&mut self, min_bin: usize) {
 		if min_bin < self.min_bin {
@@ -134,6 +135,7 @@ impl ContigInnerData {
 		if max_bin > mb {
 			let mut v: Vec<Option<ContigBin>> = vec!(None; max_bin - mb);
 			self.bins.append(&mut v);
+			self.max_bin = max_bin;
 		}
 	}
 }
@@ -166,7 +168,7 @@ impl ContigData {
 		let bin = idata.bins[bin_idx].as_mut().unwrap();	
 		let off = (snp.pos() & 255) as u8;
 		let (ix, off1) = if off < 128 { (0, off) } else { (1, off & 127) };
-		let mask = 1 << off1;
+		let mask = 1u128 << off1;
 		if (bin.mask[ix] & mask) == 0 { 
 			self.stats.n_snps += 1;
 			bin.mask[ix] |= mask;
@@ -179,19 +181,22 @@ impl ContigData {
 				} else { false };
 				if !s { conf.selected(name) } else { false }
 			};
-			let term_code = if select { 0xf } else { 0xe };
+			let term_code = if select { 
+				self.stats.n_selected_snps += 1;
+				0xf 
+			} else { 0xe };
 			let nbuf = name.as_bytes();
 			let it = if bin.half_full {
 				*bin.name_buf.last_mut().unwrap() |= nbuf.first().unwrap() - b'0';
 				&nbuf[1..]
 			} else { nbuf }.chunks_exact(2);
 			let rem = it.remainder();
-			for v in it { bin.name_buf.push((v[0] << 4) + v[1])}
+			for v in it { bin.name_buf.push(((v[0] - b'0') << 4) | (v[1] - b'0'))}
 			if rem.is_empty() {
 				bin.name_buf.push(term_code << 4);
 				bin.half_full = true;
 			} else {
-				bin.name_buf.push((rem.first().unwrap() << 4) | term_code);
+				bin.name_buf.push(((rem.first().unwrap() - b'0') << 4) | term_code);
 				bin.half_full = false;
 			}	
 			bin.entries.push(off);
@@ -199,7 +204,8 @@ impl ContigData {
 	}
 	pub fn stats(&self) -> &ContigStats { &self.stats }
 	pub fn min_bin(&self) -> Option<usize> { self.inner.as_ref().map(|x| x.min_bin) }
-	pub fn min_max(&self) -> Option<(usize, usize)> { self.inner.as_ref().map(|x| (x.min_bin, x.bins.len() + x.min_bin - 1)) }
+	pub fn max_bin(&self) -> Option<usize> { self.inner.as_ref().map(|x| x.max_bin) }
+	pub fn min_max(&self) -> Option<(usize, usize)> { self.inner.as_ref().map(|x| (x.min_bin, x.max_bin)) }
 	pub fn bins(&mut self) -> Option<&mut Vec<Option<ContigBin>>> {
 		if let Some(idata) = &mut self.inner { Some(&mut idata.bins) }
 		else { None }
