@@ -36,9 +36,9 @@ endif
 		  
 FOLDER_BIN=bin
 
-all: setup gem3 $(HTSLIB_INSTALL) _samtools _bcftools _bs_call _utils
+all: setup gem3 $(HTSLIB_INSTALL) _samtools _bcftools _utils
 
-all_debug: setup gem3-debug $(HTSLIB_INSTALL) _samtools _bcftools _bs_call _utils
+all_debug: setup gem3-debug $(HTSLIB_INSTALL) _samtools _bcftools _utils
 
 $(HTSLIB_INSTALL): $(HTSLIB_DIR) $(HTSLIB_DIR)/config.mk $(HTSLIB_DIR)/Makefile.bgzip-shared
 	$(MAKE) --directory=$(HTSLIB_DIR) && $(MAKE) --directory=$(HTSLIB_DIR) install
@@ -49,9 +49,6 @@ _samtools: $(HTSLIB_INSTALL) $(SAMTOOLS_DIR) $(SAMTOOLS_DIR)/config.mk
 
 _bcftools: $(HTSLIB_INSTALL) $(BCFTOOLS_DIR) $(BCFTOOLS_DIR)/config.h
 	$(MAKE) $(FOLDER_BIN)/bcftools
-
-_bs_call: bs_call/src/Makefile.mk
-	$(MAKE) --directory=bs_call
 
 _utils: utils/Makefile 
 	$(MAKE) --directory=utils
@@ -65,12 +62,6 @@ utils/configure: utils/configure.ac
 setup:
 	echo Hola $(TMP_ROOT)
 	@mkdir -p $(FOLDER_BIN) $(TMP_ROOT)
-
-bs_call/configure: bs_call/configure.ac
-	cd bs_call; autoconf
-	
-bs_call/src/Makefile.mk: bs_call/src/Makefile.mk.in bs_call/gt/Makefile.mk.in bs_call/configure _samtools
-	cd bs_call; ./configure ${BS_CALL_CONFIG} --with-htslib=$(TMP_ROOT)
 
 gem3: gem3-mapper/Makefile.mk
 	$(MAKE) --directory=gem3-mapper
@@ -124,7 +115,6 @@ clean:
 	if [ -f $(SAMTOOLS_DIR)/Makefile ]; then $(MAKE) --directory=$(SAMTOOLS_DIR) clean; fi
 	if [ -f $(BCFTOOLS_DIR)/Makefile ]; then $(MAKE) --directory=$(BCFTOOLS_DIR) clean; fi
 	if [ -f "gem3-mapper/Makefile.mk" ]; then $(MAKE) --directory=gem3-mapper clean; fi
-	if [ -f "bs_call/src/Makefile.mk" ]; then $(MAKE) --directory=bs_call clean; fi
 	if [ -f "utils/Makefile" ]; then $(MAKE) --directory=utils clean; fi
 
 distclean:
@@ -134,5 +124,4 @@ distclean:
 	if [ -f $(BCFTOOLS_DIR)/Makefile ]; then cd $(BCFTOOLS_DIR); $(MAKE) clean; rm -f config.h config.log config.status config.mk; fi
 	if [ -f $(HTSLIB_DIR)/Makefile ]; then cd $(HTSLIB_DIR); $(MAKE) clean; rm -f config.h config.log config.status config.mk; fi
 	if [ -f "gem3-mapper/Makefile.mk" ]; then $(MAKE) --directory=gem3-mapper distclean; fi
-	if [ -f "bs_call/src/Makefile.mk" ]; then $(MAKE) --directory=bs_call distclean; fi
 	if [ -f "utils/Makefile" ]; then $(MAKE) --directory=utils distclean; fi
