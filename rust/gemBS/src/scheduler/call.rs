@@ -117,6 +117,7 @@ pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	       	m.push(("reference_bias", "reference-bias", VarType::Float));
 	       	m.push(("mapq_threshold", "mapq-threshold", VarType::Int));
 	       	m.push(("qual_threshold", "bq-threshold", VarType::Int));
+	       	m.push(("dbsnp_index", "dbsnp", VarType::String));
 			m
 		};
 	}

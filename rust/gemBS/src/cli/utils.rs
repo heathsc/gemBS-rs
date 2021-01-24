@@ -128,6 +128,7 @@ lazy_static! {
 		m.push(("sample", OptionType::Special("_sample", VarType::StringVec)));
 		m.push(("barcode", OptionType::Special("_barcode", VarType::StringVec)));
 		m.push(("dataset", OptionType::Special("_dataset", VarType::StringVec)));
+		m.push(("dbsnp_index", OptionType::Global("dbsnp_index", VarType::StringVec)));
       	m.push(("list_pools", OptionType::Special("_list_pools", VarType::Int)));
       	m.push(("pool", OptionType::Special("_pool", VarType::StringVec)));
       	m.push(("haploid", OptionType::Global("haploid", VarType::Bool)));
