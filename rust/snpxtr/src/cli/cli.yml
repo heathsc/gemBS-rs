@@ -1,0 +1,24 @@
+name: snpxtr
+author: Simon Heath <simon.heath@gmail.com>
+about: snpxtr is an application for extracting SNPS from VCF/BCF file
+setting: GlobalVersion
+setting: DeriveDisplayOrder
+args:
+    - quiet: {short: q, long: quiet, help: Silence all output}
+    - timestamp: {short: T, long: time, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
+    - loglevel: {short: v, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
+    - threads: {short: t, long: threads, takes_value: true, value_name: "THREADS", help: "Set number of threads per file (default: number of cores)"} 
+    - output: {short: o, long: output, takes_value: true, value_name: INDEX, help: "Set file name for output file (default: stdout)" }
+    - selected: {short: s, long: selected, takes_value: true, value_name: FILE, help: "File with list of SNPs to be selected (default, select all sites with PASS)" }
+    - dbsnp: {short: D, long: dbsnp, takes_value: true, value_name: INDEX FILE, help: "dbSNP index file (used to add external ids if not present in input file" }
+    - region_list: {short: r, long: regions, takes_value: true, multiple: false, conflicts_with: region_file, use_delimiter: true, value_name: REGION, help: "restrict to comma separated list of regions" }
+    - region_file: {short: R, long: region-file, multiple: false, conflicts_with: region_desc, takes_value: true, value_name: REGION_FILE, help: "restrict to regions listed in file" }
+    - compress: {short: z, long: compress, help: "compress output file with bgzip" }
+    - md5: {short: m, long: md5, requires: output, help: "generate md5 digest for output file (if not stdout)" }
+    - tabix: {short: x, long: tabix, requires: output, help: "generate tabix (tbx) index for compressed output file" }
+    - input: {value_name: FILE, required: true, multiple: false, help: "Input BCF/VCF files" }
+    - regions: {value_name: REGIONS, multiple: true, use_delimiter: true, conflicts_with: region_file, help: "Chromosome regions"}
+groups:
+    - region_desc:
+         args: [regions, region_list]
+
