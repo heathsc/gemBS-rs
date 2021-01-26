@@ -12,6 +12,8 @@ pub mod faidx;
 pub use faidx::*;
 pub mod kstring;
 pub use kstring::*;
+pub mod malloc_data_block;
+pub use malloc_data_block::*;
 
 fn get_cstr<S: AsRef<str>>(s: S) -> CString { CString::new(s.as_ref().as_bytes()).unwrap() }
 

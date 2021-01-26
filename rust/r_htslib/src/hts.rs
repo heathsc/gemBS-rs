@@ -1,7 +1,7 @@
 use std::io;
 use std::ptr::{null_mut, NonNull, null};
 use std::ffi::{CString, c_void, CStr};
-use libc::{c_char, c_int, c_short, c_uint, c_uchar};
+use libc::{c_char, c_int, c_short, c_uint, c_uchar, size_t, ssize_t};
 use c2rust_bitfields::BitfieldStruct;
 use super::{hts_err, get_cstr, SamHeader, SamReadResult, sam_hdr_t, bam1_t, BamRec, kstring_t};
 
@@ -24,6 +24,31 @@ pub const FT_STDIN: u32 = 8;
 
 #[repr(C)]
 #[derive(BitfieldStruct)]
+pub struct hFILE { 
+	buffer: *mut c_char,
+	begin: *mut c_char,
+	end: *mut c_char,
+	limit: *mut c_char,
+	backend: *const c_void,
+	#[bitfield(name = "at_eof", ty = "c_uchar", bits = "0..=0")]
+	#[bitfield(name = "mobile", ty = "c_uchar", bits = "1..=1")]
+	#[bitfield(name = "readonly", ty = "c_uchar", bits = "2..=2")]
+	bfield: [u8; 1],
+	has_errno: c_int,
+}
+
+#[repr(C)]
+pub struct cram_fd { _unused: [u8; 0], }
+
+#[repr(C)]
+union file_ptr {
+	bgzf: *mut BGZF,
+	cram: *mut cram_fd,
+	hfile: *mut hFILE,
+}
+
+#[repr(C)]
+#[derive(BitfieldStruct)]
 pub struct htsFile { 
 	#[bitfield(name = "is_bin", ty = "c_uchar", bits = "0..=0")]
 	#[bitfield(name = "is_write", ty = "c_uchar", bits = "1..=1")]
@@ -36,8 +61,12 @@ pub struct htsFile {
 	line: kstring_t,
 	fn_: *mut c_char,
 	fn_aux: *mut c_char,
-	fp: *mut c_void,
-	_unused: [u8; 0], 
+	fp: file_ptr,
+	state: *mut c_void,
+	format: htsFormat,
+	idx: *mut hts_idx_t,
+	fnidx: *const c_char,
+	bam_header: *mut sam_hdr_t,
 }
 #[repr(C)]
 pub struct hts_idx_t { _unused: [u8; 0], }
@@ -83,6 +112,9 @@ pub struct htsFormat {
 }
 
 #[repr(C)]
+pub struct htsThreadPool { _unused: [u8; 0], }
+
+#[repr(C)]
 struct tbx_conf_t {
 	preset: i32,
 	sc: i32,
@@ -118,6 +150,9 @@ extern "C" {
 	fn tbx_seqnames(tbx: *const tbx_t, n: *mut c_int) -> *mut *const c_char;
 	fn tbx_readrec(fp: *mut BGZF, tbxv: *mut c_void, sv: *mut c_void, tid: *mut c_int, beg: *mut HtsPos, end: *mut HtsPos) -> c_int;
 	fn tbx_destroy(tbx: *mut tbx_t);
+	fn bgzf_write(fp: *mut BGZF, data: *const c_void, length: size_t) -> ssize_t;
+	fn hwrite2(fp: *mut hFILE, srcv: *const c_void, total_bytes: size_t, ncopied: size_t) -> ssize_t; 	
+	fn hfile_set_blksize(fp: *mut hFILE, bufsize: size_t) -> c_int;	
 }
 
 pub struct Tbx {
@@ -220,6 +255,43 @@ impl HtsFile {
 	pub fn is_bgzf(&self) -> bool { self.inner().is_bgzf() != 0 }
 }
 
+fn hwrite(fp: &mut hFILE, buffer: *const c_void, nbytes: size_t) -> ssize_t {
+	let nbytes1 = nbytes as isize;
+	if fp.mobile() != 0 {
+		let n = unsafe{fp.limit.offset_from(fp.begin)};
+		if n < nbytes1 {
+			let s = unsafe{fp.limit.offset_from(fp.buffer)} + nbytes1;
+			unsafe{hfile_set_blksize(fp as *mut hFILE, s as size_t)};
+			fp.end = fp.limit;
+		}
+	}
+	let mut n = unsafe{fp.limit.offset_from(fp.begin)};
+	if nbytes1 >= n && fp.begin == fp.buffer {
+		unsafe{hwrite2(fp as *mut hFILE, buffer, nbytes, n as size_t)}		
+	} else {
+		if n > nbytes1 { n = nbytes1 }
+		unsafe{libc::memcpy(fp.begin as *mut c_void, buffer, n as size_t); }
+		fp.begin = unsafe {fp.begin.add(n as usize)};
+		if n == nbytes1 { n } else { unsafe {hwrite2(fp as *mut hFILE, buffer, nbytes, n as size_t) }}	
+	}
+}
+
+impl io::Write for HtsFile {
+	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+		let fp = &self.inner().fp;
+		let l = buf.len();
+		let wlen = if self.inner().format.compression != htsCompression::NoCompression { 
+			let bgzf = unsafe { fp.bgzf };
+			unsafe {bgzf_write(bgzf, buf.as_ptr() as *const c_void, l as libc::size_t)}
+		} else {
+			let hfile = unsafe { fp.hfile.as_mut().unwrap() };
+			hwrite(hfile, buf.as_ptr() as *const c_void, l as libc::size_t)
+		};
+		if wlen < l as libc::ssize_t { Err(hts_err(format!("Error writing to {}", self.name()))) }
+		else { Ok(l) }
+	}
+	fn flush(&mut self) -> io::Result<()> { Ok(())}
+}
 pub struct HtsIndex {
 	inner: NonNull<hts_idx_t>,	
 }
@@ -275,7 +347,7 @@ impl HtsItr {
 			if (*self.inner.as_ref()).multi() != 0 {
 				hts_itr_multi_next(fp.inner_mut(), self.inner.as_ptr(), p as *mut bam1_t as *mut c_void)
 			} else {
-				hts_itr_next(if fp.inner().is_bgzf() != 0 { fp.inner().fp as *mut BGZF } else { null_mut::<BGZF>() },
+				hts_itr_next(if fp.inner().is_bgzf() != 0 { fp.inner().fp.bgzf } else { null_mut::<BGZF>() },
 					self.inner.as_ptr(), p as *mut bam1_t as *mut c_void, fp.inner_mut() as *mut htsFile as *mut c_void)
 			}
 		} {
@@ -286,7 +358,7 @@ impl HtsItr {
 	}
 	pub fn tbx_itr_next(&mut self, fp: &mut HtsFile, tbx: &mut Tbx, mut kstr: kstring_t) -> TbxReadResult {
 		match unsafe {
-			hts_itr_next(if fp.inner().is_bgzf() != 0 { fp.inner().fp as *mut BGZF } else { null_mut::<BGZF>() },
+			hts_itr_next(if fp.inner().is_bgzf() != 0 { fp.inner().fp.bgzf } else { null_mut::<BGZF>() },
 				self.inner.as_ptr(), &mut kstr as *mut _ as *mut c_void, tbx.inner_mut() as *mut tbx_t as *mut c_void)
 			} {
 			0..=c_int::MAX => TbxReadResult::Ok(kstr),
