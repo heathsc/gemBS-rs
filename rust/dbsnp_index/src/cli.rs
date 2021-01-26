@@ -1,6 +1,5 @@
 use std::io;
 
-
 mod cli_utils;
 use utils::log_level::init_log;
 use clap::App;
