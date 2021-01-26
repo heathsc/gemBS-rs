@@ -1,32 +1,29 @@
 use std::io;
 use std::io::Write;
-use std::thread;
-use std::sync::{Arc, atomic::{Ordering, AtomicUsize}};
 
-use crossbeam_channel::bounded;
 use r_htslib::*;
 use crate::config::*;
 use crate::dbsnp::DBSnpContig;
 
 pub fn process(mut conf: Config) -> io::Result<()> {
+	let mut dbsnp_file = conf.dbsnp_file(); 
+	let sel_hash = conf.selected_hash();
+	let mut sr = conf.synced_reader().expect("Synced reader is not set");
+	let hdr = sr.get_reader_hdr(0)?;
+	let ns = hdr.nsamples();
+	assert!(ns > 0);	
+	assert_eq!(Some(0), hdr.id2int(BCF_DT_ID as usize, "PASS"));
 	// Get output filename
 	let output_name = conf.output().filename().unwrap_or("-");
 	// Open output file
 	let output_mode = if conf.output().compress() { "wz" } else { "w" };
 	let mut out = HtsFile::new(output_name, output_mode)?;
 	if conf.threads() > 0 { out.set_threads(conf.threads())? }
-	let mut dbsnp_file = conf.dbsnp_file(); 
-	let sel_hash = conf.selected_hash();
-	let sr = conf.synced_reader();
-	let hdr = sr.get_reader_hdr(0)?;
-	let ns = hdr.nsamples();
-	assert!(ns > 0);	
-	assert_eq!(Some(0), hdr.id2int(BCF_DT_ID as usize, "PASS"));
-	
+
 	let mut brec = BcfRec::new()?;
 	let mut curr_ctg: Option<(usize, String, Option<DBSnpContig>)> = None;
+	let mut buffer: Vec<u8> = Vec::with_capacity(80);
 	let mut mdb = MallocDataBlock::<i32>::new();
-	let mut gt_string = String::with_capacity(2);
 	while sr.next_line() > 0 {
 		brec = sr.swap_line(0, brec)?;
 		let changed = if let Some((rid, cname, dbsnp_ctg)) = &curr_ctg {
@@ -68,14 +65,14 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 		let alls = {
 			let v = brec.alleles();
 			if v.len() > 4 || v.iter().any(|x| x.len() != 1) { continue; }
-			let mut a: Vec<char> = Vec::with_capacity(v.len() + 1);
-			a.push('0');
-			for all in v { a.push(all.chars().next().unwrap())}	
+			let mut a: Vec<u8> = Vec::with_capacity(v.len() + 1);
+			a.push(b'0');
+			for all in v { a.push(all.as_bytes()[0])}	
 			a
 		};
 		let get_gt = |x: i32| {
 			let i = (x >> 1) as usize;
-			if i >= alls.len() { '.' }
+			if i >= alls.len() { b'.' }
 			else { alls[i] }
 		};
 		mdb = brec.get_genotypes(&hdr, mdb)?;
@@ -83,14 +80,15 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 			let ploidy = mdb.len() / ns;
 			if ploidy == 0 { continue }
 			let ctg_name = &curr_ctg.as_ref().unwrap().1;
-			write!(out, "{}\t{}\t{}", ctg_name, pos + 1, rs_id.unwrap())?;
+			buffer.clear();
+			write!(buffer, "{}\t{}\t{}", ctg_name, pos + 1, rs_id.unwrap())?;
 			for gt in mdb.chunks(ploidy) {
-				gt_string.clear();
-				for i in gt { gt_string.push(get_gt(*i)) }		
-				write!(out, "\t{}", gt_string)?;
+				buffer.push(b'\t');
+				for i in gt { buffer.push(get_gt(*i)) }		
 			}
-			writeln!(out)?;
+			buffer.push(b'\n');
+			out.write_all(&buffer)?;
 		}
-	}
+	}	
 	Ok(())
 }

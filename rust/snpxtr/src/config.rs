@@ -50,7 +50,7 @@ impl OutputOpt {
 }
 
 pub struct Config {
-	synced_reader: BcfSrs, 
+	synced_reader: Option<BcfSrs>, 
 	threads: usize,
 	output: OutputOpt,
 	selected_hash: Option<HashSet<String>>,
@@ -58,7 +58,7 @@ pub struct Config {
 }
 
 impl Config {
-	pub fn new(output_opt: OutputOpt, sr: BcfSrs) -> Self { Self {threads: 1, output: output_opt, synced_reader: sr, selected_hash: None, dbsnp_file: None }}
+	pub fn new(output_opt: OutputOpt, sr: BcfSrs) -> Self { Self {threads: 1, output: output_opt, synced_reader: Some(sr), selected_hash: None, dbsnp_file: None }}
 	pub fn set_threads(&mut self, threads: usize) -> &mut Self { self.threads = threads; self }
 	pub fn threads(&self) -> usize { self.threads }
 	pub fn output(&self) -> &OutputOpt { &self.output } 
@@ -66,5 +66,5 @@ impl Config {
 	pub fn dbsnp_file(&mut self) -> Option<dbsnp::DBSnpFile> { self.dbsnp_file.take() }
 	pub fn set_selected_hash(&mut self, selected_hash: HashSet<String>) -> &mut Self { self.selected_hash = Some(selected_hash); self}
 	pub fn selected_hash(&mut self) -> Option<HashSet<String>> { self.selected_hash.take() }
-	pub fn synced_reader(&mut self) -> &mut BcfSrs { &mut self.synced_reader }
+	pub fn synced_reader(&mut self) -> Option<BcfSrs> { self.synced_reader.take() }
 }
