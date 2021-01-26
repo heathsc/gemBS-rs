@@ -7,11 +7,128 @@ use std::collections::HashMap;
 
 use zstd::block::decompress_to_buffer;
 
-pub fn new_err(s: String) -> io::Error {
+pub struct DBSnpFile {
+	file: BufReader<File>,
+	index: DBSnpIndex,
+}
+
+impl DBSnpFile {
+	pub fn open(index: DBSnpIndex) -> io::Result<Self> {
+		let file = BufReader::new(fs::File::open(&index.filename)?);
+		Ok(Self{file, index})
+	}
+	pub fn unload_ctg<S: AsRef<str>>(&mut self, name: S) {
+		let name = name.as_ref();
+		if let Some(ctg) = self.index.dbsnp.get_mut(name) {
+			if ctg.ctg.bins.is_some() { 
+				info!("Unloading dbSNP data for {}", name);
+				let _ = ctg.ctg.bins.take();
+			} else { warn!("Couldn't unload dbSNP data for {}: no data present", name) }
+		}
+	}
+	
+	pub fn load_ctg<S: AsRef<str>>(&mut self, name: S) -> io::Result<()> {
+		let name = name.as_ref();
+		match self.index.dbsnp.get_mut(name) {
+			Some(ctg) => {
+				info!("Loading dbSNP data for {}", name);	
+				ctg.load_data(&mut self.file, self.index.bufsize)?;			
+				info!("dbSNP data loaded");			
+			},
+			None => {
+				warn!("No dbSNP information found for {}", name);				
+			},
+		}
+		Ok(())
+	}
+	pub fn get_dbsnp_contig<S: AsRef<str>>(&self, name: S) -> Option<DBSnpContig> {
+		if let Some(ctg) = self.index.dbsnp.get(name.as_ref()) { Some(ctg.ctg.clone()) } else { None }
+	}
+}
+
+#[derive(Clone)]
+pub struct DBSnpContig {
+	min_bin: usize,
+	max_bin: usize,
+	bins: Option<Arc<Vec<Option<DBSnpBin>>>>,	
+}
+
+impl DBSnpContig {
+	pub fn lookup_rs(&self, x: usize) -> Option<(String, bool)> {
+		if let Some(bins) = &self.bins {
+			let bn = (x + 1) >> 8;
+			if bn >= self.min_bin && bn <= self.max_bin {
+				if let Some(bin) = &bins[bn - self.min_bin] { return bin.lookup_rs((x + 1) & 255) }
+			}
+		}
+		None
+	}
+}
+
+pub struct DBSnpIndex {
+	filename: String,
+	dbsnp: HashMap<String, DBSnpCtg>,
+	bufsize: usize,
+	header: String,	
+}
+
+impl DBSnpIndex {
+	pub fn new<S: AsRef<str>>(name: S) -> io::Result<Self> {
+		let filename = name.as_ref();
+		let mut file = BufReader::new(fs::File::open(filename)?);
+		debug!("Reading dbSNP header from {}", filename);
+		let mut td = [0u32; 1];
+		read_u32(&mut file, &mut td)?;
+		if td[0] != 0xd7278434 { return Err(new_err(format!("Invalid format: bad magic number {:x}",td[0]))) }
+		trace!("Magic number OK");
+		let vs = read_n(&mut file, 4)?;
+		if vs[0] != 2 { return Err(new_err("Invalid version number".to_string())) }
+		let mut td1 = [0u64; 3];
+		read_u64(&mut file, &mut td1)?;
+		file.seek(SeekFrom::Start(td1[0]))?;
+		let cbuf = read_n(&mut file, td1[2] as usize)?;
+		read_u32(&mut file, &mut td)?;
+		if td[0] != 0xd7278434 { return Err(new_err("Invalid format: bad second magic number".to_string())) }
+		trace!("Header data read in OK");
+		let mut ubuf: Vec<u8> = vec!(0; td1[1] as usize);
+		let sz = decompress_to_buffer(&cbuf, &mut ubuf)?;
+		trace!("Header data uncompressed OK ({} bytes)", sz);
+		if sz < 4 { return Err(new_err("Invalid format: short header".to_string())) }
+		let n_ctgs = u32::from_le_bytes((&ubuf[0..4]).try_into().unwrap());
+		let mut p = &ubuf[4..sz];
+		let mut dbsnp = HashMap::new();
+		let mut ctgs = Vec::with_capacity(n_ctgs as usize);
+		for _ in 0..n_ctgs {
+			ctgs.push(get_ctg_header(p)?);
+			p = &p[16..];
+		}
+		let (header, mut p) = get_string(p)?;
+		for ctg in ctgs.drain(..) {
+			let (s, p1) = get_string(p)?;
+			p = p1;
+			trace!("Inserting ctg {} {}-{}", s, ctg.min_bin(), ctg.max_bin());
+			dbsnp.insert(s, ctg);			
+		}
+		if !p.is_empty() { Err(new_err("Error with dbSNP index header - excess data".to_string())) } 
+		else {
+			trace!("Contigs read in OK");
+			info!("Read dbSNP header from {} with data on {} contigs", filename, n_ctgs);
+			info!("Header line: {}", header);
+			Ok(Self{filename: filename.to_owned(), dbsnp, bufsize: td1[1] as usize, header})
+		}
+	}
+	pub fn header(&self) -> &str { &self.header }
+}
+
+/// 
+/// Everything below is private to the module
+/// 
+
+fn new_err(s: String) -> io::Error {
 	Error::new(ErrorKind::Other, s)	
 }
 
-pub struct DBSnpBin {
+struct DBSnpBin {
 	mask: [u128; 2],
 	name_len: Box<[u8]>,
 	name_buf: Box<[u8]>,
@@ -67,17 +184,17 @@ impl DBSnpBin {
 	} 
 }
 
-pub struct DBSnpCtg {
-	min_bin: usize,
-	max_bin: usize,
+struct DBSnpCtg {
+	ctg: DBSnpContig,
 	file_offset: u64,
-	bins: Option<Arc<Vec<Option<DBSnpBin>>>>,
 }
 
 impl DBSnpCtg {
+	fn min_bin(&self) -> usize { self.ctg.min_bin }
+	fn max_bin(&self) -> usize { self.ctg.max_bin }
 	fn load_data(&mut self, mut file: &mut BufReader<File>, bufsize: usize) -> io::Result<()> {
 		file.seek(SeekFrom::Start(self.file_offset))?;
-		let mut bins = Vec::with_capacity(self.max_bin + 1 - self.min_bin);
+		let mut bins = Vec::with_capacity(self.max_bin() + 1 - self.min_bin());
 		let mut ubuf: Vec<u8> = vec!(0; bufsize);
 		loop {
 			let mut size = [0u64; 1];
@@ -86,20 +203,19 @@ impl DBSnpCtg {
 			let mut tt = [0u32; 1];
 			read_u32(&mut file, &mut tt)?;
 			let first_bin = tt[0] as usize;	
-			if first_bin < self.min_bin + bins.len() { return Err(new_err("Error: index data corrupt".to_string())) }	
-			let gap = first_bin - self.min_bin - bins.len();
+			if first_bin < self.min_bin() + bins.len() { return Err(new_err("Error: index data corrupt".to_string())) }	
+			let gap = first_bin - self.min_bin() - bins.len();
 			let cbuf = read_n(&mut file, size[0] as usize)?;
 			trace!("Read in compressed data for bin");
 			let sz = decompress_to_buffer(&cbuf, &mut ubuf)?;
 			trace!("bin data uncompressed OK");	
-			trace!("loading bins (min_bin: {}, max_bin: {}, curr_bin: {}, first_bin: {}, gap: {})", self.min_bin, self.max_bin, self.min_bin + bins.len(), first_bin, gap);			
 			bins.append(&mut load_bins(&ubuf[..sz], gap)?);				
 		}
-		if bins.len() != self.max_bin + 1 - self.min_bin { Err(new_err(format!("Wrong number of bins read in.  Expected {}, Found {}", self.max_bin + 1 - self.min_bin, bins.len()))) }
+		if bins.len() != self.max_bin() + 1 - self.min_bin() { Err(new_err(format!("Wrong number of bins read in.  Expected {}, Found {}", self.max_bin() + 1 - self.min_bin(), bins.len()))) }
 		else {
 			let n_snps = bins.iter().fold(0, |s, b| if let Some(bin) = b {s + bin.name_len.len()} else { s } );
 			info!("Contig dbSNP data read: number of snps = {}", n_snps);
-			self.bins = Some(Arc::new(bins));
+			self.ctg.bins = Some(Arc::new(bins));
 			Ok(())
 		}
 	}
@@ -168,132 +284,14 @@ fn load_bins(mut buf: &[u8], gap: usize) -> io::Result<Vec<Option<DBSnpBin>>> {
 	Ok(bins)
 }	
 
-pub struct DBSnpContig {
-	min_bin: usize,
-	max_bin: usize,
-	bins: Option<Arc<Vec<Option<DBSnpBin>>>>,	
-}
-
-impl DBSnpContig {
-	pub fn lookup_rs(&self, x: usize) -> Option<(String, bool)> {
-		if let Some(bins) = &self.bins {
-			let bn = (x + 1) >> 8;
-			if bn >= self.min_bin && bn <= self.max_bin {
-				if let Some(bin) = &bins[bn - self.min_bin] { return bin.lookup_rs((x + 1) & 255) }
-			}
-		}
-		None
-	}
-}
-pub struct DBSnpIndex {
-	filename: String,
-	dbsnp: HashMap<String, DBSnpCtg>,
-	bufsize: usize,
-	header: String,	
-}
-
-impl DBSnpIndex {
-	pub fn new<S: AsRef<str>>(name: S) -> io::Result<Self> {
-		let filename = name.as_ref();
-		let mut file = BufReader::new(fs::File::open(filename)?);
-		debug!("Reading dbSNP header from {}", filename);
-		let mut td = [0u32; 1];
-		read_u32(&mut file, &mut td)?;
-		if td[0] != 0xd7278434 { return Err(new_err(format!("Invalid format: bad magic number {:x}",td[0]))) }
-		trace!("Magic number OK");
-		let vs = read_n(&mut file, 4)?;
-		if vs[0] != 2 { return Err(new_err("Invalid version number".to_string())) }
-		let mut td1 = [0u64; 3];
-		read_u64(&mut file, &mut td1)?;
-		file.seek(SeekFrom::Start(td1[0]))?;
-		let cbuf = read_n(&mut file, td1[2] as usize)?;
-		read_u32(&mut file, &mut td)?;
-		if td[0] != 0xd7278434 { return Err(new_err("Invalid format: bad second magic number".to_string())) }
-		trace!("Header data read in OK");
-		let mut ubuf: Vec<u8> = vec!(0; td1[1] as usize);
-		let sz = decompress_to_buffer(&cbuf, &mut ubuf)?;
-		trace!("Header data uncompressed OK ({} bytes)", sz);
-		if sz < 4 { return Err(new_err("Invalid format: short header".to_string())) }
-		let n_ctgs = u32::from_le_bytes((&ubuf[0..4]).try_into().unwrap());
-		let mut p = &ubuf[4..sz];
-		let mut dbsnp = HashMap::new();
-		let mut ctgs = Vec::with_capacity(n_ctgs as usize);
-		for _ in 0..n_ctgs {
-			ctgs.push(get_ctg_header(p)?);
-			p = &p[16..];
-		}
-		let (header, mut p) = get_string(p)?;
-		for ctg in ctgs.drain(..) {
-			let (s, p1) = get_string(p)?;
-			p = p1;
-			trace!("Inserting ctg {} {}-{}", s, ctg.min_bin, ctg.max_bin);
-			dbsnp.insert(s, ctg);			
-		}
-		if !p.is_empty() { Err(new_err("Error with dbSNP index header - excess data".to_string())) } 
-		else {
-			trace!("Contigs read in OK");
-			info!("Read dbSNP header from {} with data on {} contigs", filename, n_ctgs);
-			info!("Header line: {}", header);
-			Ok(Self{filename: filename.to_owned(), dbsnp, bufsize: td1[1] as usize, header})
-		}
-	}
-	pub fn header(&self) -> &str { &self.header }
-}
-
-pub struct DBSnpFile {
-	file: BufReader<File>,
-	index: DBSnpIndex,
-}
-
-impl DBSnpFile {
-	pub fn open(index: DBSnpIndex) -> io::Result<Self> {
-		let file = BufReader::new(fs::File::open(&index.filename)?);
-		Ok(Self{file, index})
-	}
-	pub fn unload_ctg<S: AsRef<str>>(&mut self, name: S) {
-		let name = name.as_ref();
-		if let Some(ctg) = self.index.dbsnp.get_mut(name) {
-			if ctg.bins.is_some() { 
-				info!("Unloading dbSNP data for {}", name);
-				let _ = ctg.bins.take();
-			} else { warn!("Couldn't unload dbSNP data for {}: no data present", name) }
-		}
-	}
-	
-	pub fn load_ctg<S: AsRef<str>>(&mut self, name: S) -> io::Result<Option<&DBSnpCtg>> {
-		let name = name.as_ref();
-		Ok(match self.index.dbsnp.get_mut(name) {
-			Some(ctg) => {
-				info!("Loading dbSNP data for {}", name);	
-				ctg.load_data(&mut self.file, self.index.bufsize)?;			
-				info!("dbSNP data loaded");
-				Some(ctg)				
-			},
-			None => {
-				warn!("No dbSNP information found for {}", name);
-				None
-			},
-		})
-	}
-	pub fn get_ctg<S: AsRef<str>>(&self, name: S) -> Option<&DBSnpCtg> { self.index.dbsnp.get(name.as_ref()) }
-	pub fn get_dbsnp_contig<S: AsRef<str>>(&self, name: S) -> Option<DBSnpContig> {
-		if let Some(ctg) = self.get_ctg(name) {
-			let bins = if let Some(b) = &ctg.bins { Some(Arc::clone(&b)) } else { None };
-			Some(DBSnpContig {
-				min_bin: ctg.min_bin,
-				max_bin: ctg.max_bin,
-				bins
-			})
-		} else { None }
-	}
-}
 
 fn get_ctg_header(buf: &[u8]) -> io::Result<DBSnpCtg> {
 	if buf.len() >= 16 {
 		let min_bin = u32::from_le_bytes((&buf[0..4]).try_into().unwrap()) as usize;
 		let max_bin = u32::from_le_bytes((&buf[4..8]).try_into().unwrap()) as usize;
 		let file_offset = u64::from_le_bytes((&buf[8..16]).try_into().unwrap());
-		Ok(DBSnpCtg{min_bin, max_bin, file_offset, bins: None})
+		let ctg = DBSnpContig{min_bin, max_bin, bins: None};
+		Ok(DBSnpCtg{ctg, file_offset})
 	} else {
 		Err(new_err("Bad format: Failed to read in contig header".to_string()))
 	}

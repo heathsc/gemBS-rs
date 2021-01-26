@@ -5,6 +5,7 @@ use std::io::{Error, ErrorKind};
 
 use crate::htslib;
 use crate::defs::{CtgRegion, CtgInfo};
+
 use crate::dbsnp;
 
 pub fn new_err(s: String) -> io::Error {
