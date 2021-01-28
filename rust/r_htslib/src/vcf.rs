@@ -4,8 +4,7 @@ use std::ffi::CString;
 
 use c2rust_bitfields::BitfieldStruct;
 use libc::{c_char, c_int, c_void};
-use super::{hts_err, get_cstr, from_cstr, htsFile, htsThreadPool, tbx_t, hts_idx_t, hts_itr_t, HtsFile, HtsPos, kstring_t, MallocDataBlock
-};
+use super::{hts_err, get_cstr, from_cstr, htsFile, htsThreadPool, tbx_t, hts_idx_t, hts_itr_t, HtsFile, HtsPos, kstring_t, MallocDataBlock};
 
 pub const BCF_DT_ID: u32 = 0;
 pub const BCF_DT_CTG: u32 = 1;
@@ -187,7 +186,7 @@ impl BcfSrs {
 			Some(sr) => Ok(Self{inner: sr}),
 		}		
 	}
-	fn inner(&self) -> &bcf_srs_t { unsafe{self.inner.as_ref()} }
+//	fn inner(&self) -> &bcf_srs_t { unsafe{self.inner.as_ref()} }
 	fn inner_mut(&mut self) -> &mut bcf_srs_t { unsafe{ self.inner.as_mut() }} 	
 	pub fn set_regions<S: AsRef<str>>(&mut self, regions: S, is_file: bool) -> io::Result<()> {
 		match unsafe{bcf_sr_set_regions(self.inner_mut(), get_cstr(regions.as_ref()).as_ptr(), if is_file {1} else {0})} {

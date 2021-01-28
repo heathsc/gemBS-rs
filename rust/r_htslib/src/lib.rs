@@ -15,7 +15,7 @@ pub use kstring::*;
 pub mod malloc_data_block;
 pub use malloc_data_block::*;
 
-fn get_cstr<S: AsRef<str>>(s: S) -> CString { CString::new(s.as_ref().as_bytes()).unwrap() }
+pub fn get_cstr<S: AsRef<str>>(s: S) -> CString { CString::new(s.as_ref().as_bytes()).unwrap() }
 
 fn from_cstr<'a>(cstr: *const i8) -> &'a str {
 	if cstr.is_null() { panic!("from_cstr() called with a NULL"); }

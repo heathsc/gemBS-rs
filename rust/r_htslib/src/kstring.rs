@@ -40,6 +40,10 @@ impl kstring_t {
 			}
 		}
 	}
+	pub fn to_u8(&self) -> Option<&[u8]> {
+		if self.s.is_null() { None }
+		else {Some(unsafe {std::slice::from_raw_parts(self.s as *const u8, self.l as usize )})}
+	}
 	pub fn clear(&mut self) { self.l = 0 }
 	pub fn resize(&mut self, size: size_t) -> bool {
 		if self.m < size {
