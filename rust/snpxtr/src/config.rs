@@ -37,6 +37,7 @@ impl OutputOpt {
 	// fix_opts() should be (obviously) run last
 	pub fn fix_opts(&mut self) {
 		if let Some(fname) = &mut self.filename {
+			if self.compute_tbx { self.compress = true }
 			if self.compress && !fname.ends_with(".gz") { fname.push_str(".gz") }
 		} else {
 			self.compute_md5 = false;

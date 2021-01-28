@@ -1,9 +1,17 @@
-use std::io;
-use std::io::Write;
+use std::io::{self, Write};
+use std::sync::mpsc::{channel, Sender};
+use std::thread;
 
 use r_htslib::*;
 use crate::config::*;
 use crate::dbsnp::DBSnpContig;
+use crate::md5::md5_thread;
+use crate::tabix::tabix_thread;
+
+struct Md5TabixProc<T> {
+	s: Sender<bool>,
+	th: thread::JoinHandle<T>,
+}
 
 pub fn process(mut conf: Config) -> io::Result<()> {
 	let mut dbsnp_file = conf.dbsnp_file(); 
@@ -17,13 +25,25 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 	let output_name = conf.output().filename().unwrap_or("-");
 	// Open output file
 	let output_mode = if conf.output().compress() { "wz" } else { "w" };
-	let mut out = HtsFile::new(output_name, output_mode)?;
+	let mut out= HtsFile::new(output_name, output_mode)?;
 	if conf.threads() > 0 { out.set_threads(conf.threads())? }
-
 	let mut brec = BcfRec::new()?;
 	let mut curr_ctg: Option<(usize, String, Option<DBSnpContig>)> = None;
 	let mut buffer: Vec<u8> = Vec::with_capacity(80);
 	let mut mdb = MallocDataBlock::<i32>::new();
+	let mut procs = Vec::new();
+	if conf.output().compute_md5() {
+		let (s, r) = channel();
+		let name = output_name.to_owned();
+		let th = thread::spawn(move || md5_thread(name, r));
+		procs.push(Md5TabixProc{ s, th});
+	} 
+	if conf.output().compute_tbx() {
+		let (s, r) = channel();
+		let name = output_name.to_owned();
+		let th = thread::spawn(move || tabix_thread(name, r));
+		procs.push(Md5TabixProc{ s, th});
+	}
 	while sr.next_line() > 0 {
 		brec = sr.swap_line(0, brec)?;
 		let changed = if let Some((rid, cname, dbsnp_ctg)) = &curr_ctg {
@@ -89,6 +109,17 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 			buffer.push(b'\n');
 			out.write_all(&buffer)?;
 		}
-	}	
+	}
+	drop(out);	
+	for x in procs.iter() { x.s.send(true).expect("Couldn't send closing message") }
+	for x in procs.drain(..) { x.th.join().unwrap() }
+
+	/*
+	if conf.output().compute_tbx() {
+		info!("Computing tabix index");
+		if unsafe { tbx_index_build(get_cstr(output_name).as_ptr(), 0, &tbx_conf_vcf)} != 0 {
+			return Err(hts_err("Couldn't build tabix index".to_string()));
+		}
+	}*/
 	Ok(())
 }
