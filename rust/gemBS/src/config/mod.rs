@@ -544,7 +544,7 @@ impl GetAsset<&str> for GemBS {
 }
 
 fn check_root(path: &PathBuf) -> bool {
-	let apps = ["mextr", "snpxtr", "bs_call", "dbSNP_idx", "read_filter", 
+	let apps = ["mextr", "snpxtr", "bs_call", "dbsnp_idx", "read_filter", 
 		"gem-indexer", "gem-mapper", "samtools", "bcftools", "bgzip"];
 	
 	trace!("Checking for gemBS root in {:?}", path);
