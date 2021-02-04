@@ -39,7 +39,7 @@ pub fn tabix_thread(name: String, r: Receiver<bool>) {
 	unsafe{hts_set_log_level(htsLogLevel::HTS_LOG_ERROR)}
 	
 	let mut f = HtsFile::new(&name, "rz").expect("tabix_thread: file not found");
-	let mut bgzf = f.bgzf().expect("tabix_thread: file not bgzip compressed");
+	let bgzf = f.bgzf().expect("tabix_thread: file not bgzip compressed");
 	info!("Starting tabix index generation");
 	
 	let mut line = Vec::new();

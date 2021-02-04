@@ -6,7 +6,7 @@ use std::ops::{Deref, DerefMut};
 
 use c2rust_bitfields::BitfieldStruct;
 use libc::{c_char, c_int, c_void};
-use super::{hts_err, get_cstr, from_cstr, htsFile, htsThreadPool, tbx_t, hts_idx_t, hts_itr_t, HtsFile, HtsPos, kstring_t, MallocDataBlock};
+use super::{hts_err, get_cstr, from_cstr, htsFile, htsThreadPool, tbx_t, hts_idx_t, hts_itr_t, HtsPos, kstring_t, MallocDataBlock};
 
 pub const BCF_DT_ID: u32 = 0;
 pub const BCF_DT_CTG: u32 = 1;
@@ -104,8 +104,8 @@ impl bcf_hdr_t {
 		}
 		ctg_names.into_boxed_slice()
 	}
-	pub fn write(&mut self, hout: &mut HtsFile) -> io::Result<()> {
-		match unsafe { bcf_hdr_write(hout.inner_mut(), self) } {
+	pub fn write<H: AsMut<htsFile>>(&mut self, mut hout: H) -> io::Result<()> {
+		match unsafe { bcf_hdr_write(hout.as_mut(), self) } {
 			0 => Ok(()),
 			_ => Err(hts_err("Error writing VCF/BCF header".to_string()))			
 		}
@@ -189,7 +189,7 @@ struct bcf_sr_regions_t {
 }
 
 #[repr(C)]
-struct bcf_srs_t {
+pub struct bcf_srs_t {
 	collapse: c_int,
 	apply_filters: *mut c_char,
 	require_index: c_int,
@@ -212,6 +212,51 @@ struct bcf_srs_t {
 	aux: *mut c_void,	
 }
 
+impl bcf_srs_t {
+	pub fn set_regions<S: AsRef<str>>(&mut self, regions: S, is_file: bool) -> io::Result<()> {
+		match unsafe{bcf_sr_set_regions(self, get_cstr(regions.as_ref()).as_ptr(), if is_file {1} else {0})} {
+			0 => Ok(()),
+			_ => Err(hts_err("Couldn't set BCF regions".to_string())),
+		}
+	}
+	pub fn set_threads(&mut self, n_threads: usize) -> io::Result<()> {
+		match unsafe{bcf_sr_set_threads(self, n_threads as c_int)} {
+			0 => Ok(()),
+			_ => Err(hts_err("Couldn't set BCF threads".to_string())),			
+		}
+	}
+	pub fn add_reader<S: AsRef<str>>(&mut self, fname: S) -> io::Result<()> {
+		match unsafe{bcf_sr_add_reader(self, get_cstr(fname.as_ref()).as_ptr())} {
+			1 => Ok(()),
+			_ => Err(hts_err(format!("Couldn't open BCF file {}", fname.as_ref()))),
+		}
+	}
+	fn get_reader(&mut self, idx: usize) -> io::Result<*mut bcf_sr_t> {
+		unsafe {
+			if (idx as c_int) >= self.nreaders || self.readers.is_null() { Err(hts_err("Invalid access to synced BCF reader".to_string()))}
+			else { 
+				let rdr = self.readers.add(idx);
+				if rdr.is_null() { Err(hts_err("Synced reader is null".to_string()))}
+				else { Ok(rdr) }
+			}
+		}		
+	}
+	pub fn get_reader_hdr(&mut self, idx: usize) -> io::Result<&bcf_hdr_t> {
+		unsafe {
+			let rdr = self.get_reader(idx)?;
+			let hdr = rdr.as_ref().unwrap().header;
+			if hdr.is_null() { Err(hts_err("Null BCF header in synced BCF reader".to_string())) }
+			else { Ok(hdr.as_ref().unwrap()) }
+		}
+	}
+	pub fn next_line(&mut self) -> c_int { unsafe {bcf_sr_next_line(self)}}
+
+	pub fn swap_line(&mut self, idx: usize, brec: &mut BcfRec) -> io::Result<()> {
+		let rdr = self.get_reader(idx)?;
+		unsafe { std::ptr::swap(brec.inner.as_ptr(), *rdr.as_ref().unwrap().buffer) }
+		Ok(())
+	} 	
+}
 
 #[link(name = "hts")]
 extern "C" {
@@ -241,65 +286,41 @@ extern "C" {
 
 pub struct BcfSrs {
 	inner: NonNull<bcf_srs_t>,	
+	phantom: PhantomData<bcf_srs_t>,
+}
+
+impl Deref for BcfSrs {
+	type Target = bcf_srs_t;
+	#[inline]
+	fn deref(&self) -> &bcf_srs_t { unsafe{self.inner.as_ref()} }	
+}
+
+impl DerefMut for BcfSrs {
+	#[inline]
+	fn deref_mut(&mut self) -> &mut bcf_srs_t {unsafe{ self.inner.as_mut() }}
+}
+
+impl AsRef<bcf_srs_t> for BcfSrs {
+	#[inline]
+	fn as_ref(&self) -> &bcf_srs_t { self}	
+}
+
+impl AsMut<bcf_srs_t> for BcfSrs {
+	#[inline]
+	fn as_mut(&mut self) -> &mut bcf_srs_t { self}	
 }
 
 impl BcfSrs {
 	pub fn new() -> io::Result<Self> { 
 		match NonNull::new(unsafe{ bcf_sr_init()}) {
 			None => Err(hts_err("Couldn't create BCF synced reader".to_string())),
-			Some(sr) => Ok(Self{inner: sr}),
+			Some(sr) => Ok(Self{inner: sr, phantom: PhantomData}),
 		}		
 	}
-//	fn inner(&self) -> &bcf_srs_t { unsafe{self.inner.as_ref()} }
-	fn inner_mut(&mut self) -> &mut bcf_srs_t { unsafe{ self.inner.as_mut() }} 	
-	pub fn set_regions<S: AsRef<str>>(&mut self, regions: S, is_file: bool) -> io::Result<()> {
-		match unsafe{bcf_sr_set_regions(self.inner_mut(), get_cstr(regions.as_ref()).as_ptr(), if is_file {1} else {0})} {
-			0 => Ok(()),
-			_ => Err(hts_err("Couldn't set BCF regions".to_string())),
-		}
-	}
-	pub fn set_threads(&mut self, n_threads: usize) -> io::Result<()> {
-		match unsafe{bcf_sr_set_threads(self.inner_mut(), n_threads as c_int)} {
-			0 => Ok(()),
-			_ => Err(hts_err("Couldn't set BCF threads".to_string())),			
-		}
-	}
-	pub fn add_reader<S: AsRef<str>>(&mut self, fname: S) -> io::Result<()> {
-		match unsafe{bcf_sr_add_reader(self.inner_mut(), get_cstr(fname.as_ref()).as_ptr())} {
-			1 => Ok(()),
-			_ => Err(hts_err(format!("Couldn't open BCF file {}", fname.as_ref()))),
-		}
-	}
-	fn get_reader(&mut self, idx: usize) -> io::Result<*mut bcf_sr_t> {
-		unsafe {
-			let sr = self.inner_mut();
-			if (idx as c_int) >= sr.nreaders || sr.readers.is_null() { Err(hts_err("Invalid access to synced BCF reader".to_string()))}
-			else { 
-				let rdr = sr.readers.add(idx);
-				if rdr.is_null() { Err(hts_err("Synced reader is null".to_string()))}
-				else { Ok(rdr) }
-			}
-		}		
-	}
-	pub fn get_reader_hdr(&mut self, idx: usize) -> io::Result<&bcf_hdr_t> {
-		unsafe {
-			let rdr = self.get_reader(idx)?;
-			let hdr = rdr.as_ref().unwrap().header;
-			if hdr.is_null() { Err(hts_err("Null BCF header in synced BCF reader".to_string())) }
-			else { Ok(hdr.as_ref().unwrap()) }
-		}
-	}
-	pub fn next_line(&mut self) -> c_int { unsafe {bcf_sr_next_line(self.inner_mut())}}
-
-	pub fn swap_line(&mut self, idx: usize, brec: &mut BcfRec) -> io::Result<()> {
-		let rdr = self.get_reader(idx)?;
-		unsafe { std::ptr::swap(brec.inner.as_ptr(), *rdr.as_ref().unwrap().buffer) }
-		Ok(())
-	} 
 }
 
 impl Drop for BcfSrs {
-	fn drop(&mut self) { unsafe {bcf_sr_destroy(self.inner_mut())};}
+	fn drop(&mut self) { unsafe {bcf_sr_destroy(self.as_mut())};}
 }
 
 pub struct VcfHeader {
@@ -338,15 +359,11 @@ impl VcfHeader {
 			Some(hdr) => Ok(VcfHeader{inner: hdr, phantom: PhantomData}),
 		}
 	}
-	pub fn as_bcf_hdr_t(&self) -> &bcf_hdr_t { self}
-	pub fn as_mut_bcf_hdr_t(&mut self) -> &mut bcf_hdr_t { self}
 }
-
-
 
 impl Drop for VcfHeader {
 	fn drop(&mut self) {
-		unsafe { bcf_hdr_destroy(self.as_mut_bcf_hdr_t())};
+		unsafe { bcf_hdr_destroy(self.as_mut())};
 	}
 }
 
@@ -444,7 +461,7 @@ struct bcf_dec_t {
 
 #[repr(C)] 
 #[derive(BitfieldStruct)]
-struct bcf1_t {
+pub struct bcf1_t {
 	pos: HtsPos,
 	rlen: HtsPos,
 	rid: i32,
@@ -464,8 +481,82 @@ struct bcf1_t {
 	errcode: c_int,
 }
 
+impl bcf1_t {
+	pub fn clear(&mut self) { unsafe{ bcf_clear(self)} }
+	pub fn shared(&mut self) -> &mut kstring_t { &mut self.shared }
+	pub fn indiv(&mut self) -> &mut kstring_t { &mut self.indiv }
+	pub fn set_rid(&mut self, rid: usize) { self.rid = rid as i32 }
+	pub fn rid(&self) -> usize { self.rid as usize}
+	pub fn set_pos(&mut self, pos: usize) { self.pos = pos as HtsPos }
+	pub fn pos(&self) -> usize { self.pos as usize }
+	pub fn set_rlen(&mut self, rlen: usize) { self.rlen = rlen as HtsPos }
+	pub fn set_qual(&mut self, qual: f32) { self.qual = qual }
+	pub fn write<H: AsMut<bcf_hdr_t>, F: AsMut<htsFile>>(&mut self, mut file: F, mut hdr: H) -> io::Result<()> {
+		if unsafe { bcf_write(file.as_mut(), hdr.as_mut(), self) } < 0 { Err(hts_err("Error writing out VCF record".to_string())) } else { Ok(()) }
+	}
+	pub fn unpack(&mut self, which: usize) { unsafe{bcf_unpack(self, which as c_int)} }
+	pub fn id(&mut self) -> &str {
+		self.unpack(BCF_UN_STR);
+		from_cstr(self.d.id)	
+	}
+	pub fn check_pass(&mut self) -> bool {
+		self.unpack(BCF_UN_FLT);
+		let d = &self.d;
+		let flt = d.flt;
+		if flt.is_null() { panic!("BCF record filter is null") }
+		for i in 0..(d.n_flt as usize) { if unsafe{*d.flt.add(i)} == 0 { return true }}
+		false
+	}
+	pub fn alleles(&mut self) -> Vec<&str> {
+		self.unpack(BCF_UN_STR);
+		let n_all = self.n_allele() as usize;
+		let mut v = Vec::with_capacity(n_all);
+		let all = &self.d.alleles;
+		if all.is_null() { panic!("BCF allele desc is null")}
+		for i in 0..n_all {	v.push(from_cstr(unsafe{*all.add(i)}))}		
+		v		
+	}
+	pub fn get_format_values<T, H: AsRef<bcf_hdr_t>>(&mut self, hdr: H, tag: &str, buf: &mut MallocDataBlock<T>, vtype: c_int) -> Option<usize> {
+		let (tag, mut p, mut cap) = prepare_format_args(tag, buf);
+		let len = unsafe {bcf_get_format_values(hdr.as_ref(), self, tag.as_ptr(), &mut p as *mut *mut T as *mut *mut c_void, &mut cap as *mut c_int, vtype)};
+		ret_format_res(p, len, cap, buf)
+	}
+	pub fn get_format_i32(&mut self, hdr: &VcfHeader, tag: &str, buf: &mut MallocDataBlock<i32>) -> Option<usize> { self.get_format_values(hdr, tag, buf, BCF_HT_INT)}
+	pub fn get_format_f32(&mut self, hdr: &VcfHeader, tag: &str, buf: &mut MallocDataBlock<f32>) -> Option<usize> { self.get_format_values(hdr, tag, buf, BCF_HT_REAL)}
+	pub fn get_format_u8(&mut self, hdr: &VcfHeader, tag: &str, buf: &mut MallocDataBlock<u8>) -> Option<usize> { self.get_format_values(hdr, tag, buf, BCF_HT_STR)}
+	pub fn get_genotypes(&mut self, hdr: &VcfHeader, buf: &mut MallocDataBlock<i32>) -> Option<usize> { self.get_format_i32(hdr, "GT", buf) }
+	pub fn get_info_values<T, H: AsRef<bcf_hdr_t>>(&mut self, hdr: H, tag: &str, buf: &mut MallocDataBlock<T>, vtype: c_int) -> Option<usize> {
+		let (tag, mut p, mut cap) = prepare_format_args(tag, buf);
+		let len = unsafe {bcf_get_info_values(hdr.as_ref(), self, tag.as_ptr(), &mut p as *mut *mut T as *mut *mut c_void, &mut cap as *mut c_int, vtype)};
+		ret_format_res(p, len, cap, buf)
+	}
+	pub fn get_info_u8(&mut self, hdr: &VcfHeader, tag: &str, buf: &mut MallocDataBlock<u8>) -> Option<usize> { self.get_info_values(hdr, tag, buf, BCF_HT_STR)}	
+}
+
 pub struct BcfRec {
 	inner: NonNull<bcf1_t>,
+	phantom: PhantomData<bcf1_t>,
+}
+
+impl Deref for BcfRec {
+	type Target = bcf1_t;
+	#[inline]
+	fn deref(&self) -> &bcf1_t { unsafe{self.inner.as_ref()} }	
+}
+
+impl DerefMut for BcfRec {
+	#[inline]
+	fn deref_mut(&mut self) -> &mut bcf1_t {unsafe{ self.inner.as_mut() }}
+}
+
+impl AsRef<bcf1_t> for BcfRec {
+	#[inline]
+	fn as_ref(&self) -> &bcf1_t { self}	
+}
+
+impl AsMut<bcf1_t> for BcfRec {
+	#[inline]
+	fn as_mut(&mut self) -> &mut bcf1_t { self}	
 }
 
 unsafe impl Sync for BcfRec {}
@@ -487,68 +578,13 @@ fn ret_format_res<T>(p: *mut T, len: c_int, cap: c_int, buf: &mut MallocDataBloc
 impl BcfRec {
 	pub fn new() -> io::Result<Self> { 
 		match NonNull::new(unsafe{bcf_init()}) {
-			Some(b) => Ok(Self{inner: b}),
+			Some(b) => Ok(Self{inner: b, phantom: PhantomData}),
 			None => Err(hts_err("Failed to allocate new BcfRec".to_string())),
 		}
 	}
-	fn inner(&self) -> &bcf1_t { unsafe {self.inner.as_ref() }}	
-	fn inner_mut(&mut self) -> &mut bcf1_t { unsafe {self.inner.as_mut() }}	
-	pub fn clear(&mut self) { unsafe{ bcf_clear(self.inner.as_ptr())} }
-	pub fn shared(&mut self) -> &mut kstring_t { &mut self.inner_mut().shared }
-	pub fn indiv(&mut self) -> &mut kstring_t { &mut self.inner_mut().indiv }
-	pub fn set_rid(&mut self, rid: usize) { self.inner_mut().rid = rid as i32 }
-	pub fn rid(&self) -> usize { self.inner().rid as usize}
-	pub fn set_pos(&mut self, pos: usize) { self.inner_mut().pos = pos as HtsPos }
-	pub fn pos(&self) -> usize { self.inner().pos as usize }
-	pub fn set_rlen(&mut self, rlen: usize) { self.inner_mut().rlen = rlen as HtsPos }
-	pub fn set_n_allele(&mut self, n_all: usize) { self.inner_mut().set_n_allele(n_all as u16) }
-	pub fn set_n_info(&mut self, n_info: usize) { self.inner_mut().set_n_info(n_info as u16) }
-	pub fn set_n_sample(&mut self, n_sample: usize) { self.inner_mut().set_n_sample(n_sample as u32) }
-	pub fn set_n_fmt(&mut self, n_fmt: usize) { self.inner_mut().set_n_fmt(n_fmt as u8) }
-	pub fn set_qual(&mut self, qual: f32) { self.inner_mut().qual = qual }
-	pub fn write<H: AsMut<bcf_hdr_t>>(&mut self, file: &mut HtsFile, mut hdr: H) -> io::Result<()> {
-		if unsafe { bcf_write(file.inner_mut(), hdr.as_mut(), self.inner_mut()) } < 0 { Err(hts_err("Error writing out VCF record".to_string())) } else { Ok(()) }
-	}
-	pub fn unpack(&mut self, which: usize) { unsafe{bcf_unpack(self.inner_mut(), which as c_int)} }
-	pub fn id(&mut self) -> &str {
-		self.unpack(BCF_UN_STR);
-		from_cstr(self.inner_mut().d.id)	
-	}
-	pub fn check_pass(&mut self) -> bool {
-		self.unpack(BCF_UN_FLT);
-		let d = &self.inner().d;
-		let flt = d.flt;
-		if flt.is_null() { panic!("BCF record filter is null") }
-		for i in 0..(d.n_flt as usize) { if unsafe{*d.flt.add(i)} == 0 { return true }}
-		false
-	}
-	pub fn alleles(&mut self) -> Vec<&str> {
-		self.unpack(BCF_UN_STR);
-		let n_all = self.inner().n_allele() as usize;
-		let mut v = Vec::with_capacity(n_all);
-		let all = &self.inner().d.alleles;
-		if all.is_null() { panic!("BCF allele desc is null")}
-		for i in 0..n_all {	v.push(from_cstr(unsafe{*all.add(i)}))}		
-		v		
-	}
-	pub fn get_format_values<T, H: AsRef<bcf_hdr_t>>(&mut self, hdr: H, tag: &str, buf: &mut MallocDataBlock<T>, vtype: c_int) -> Option<usize> {
-		let (tag, mut p, mut cap) = prepare_format_args(tag, buf);
-		let len = unsafe {bcf_get_format_values(hdr.as_ref(), self.inner_mut(), tag.as_ptr(), &mut p as *mut *mut T as *mut *mut c_void, &mut cap as *mut c_int, vtype)};
-		ret_format_res(p, len, cap, buf)
-	}
-	pub fn get_format_i32(&mut self, hdr: &VcfHeader, tag: &str, buf: &mut MallocDataBlock<i32>) -> Option<usize> { self.get_format_values(hdr, tag, buf, BCF_HT_INT)}
-	pub fn get_format_f32(&mut self, hdr: &VcfHeader, tag: &str, buf: &mut MallocDataBlock<f32>) -> Option<usize> { self.get_format_values(hdr, tag, buf, BCF_HT_REAL)}
-	pub fn get_format_u8(&mut self, hdr: &VcfHeader, tag: &str, buf: &mut MallocDataBlock<u8>) -> Option<usize> { self.get_format_values(hdr, tag, buf, BCF_HT_STR)}
-	pub fn get_genotypes(&mut self, hdr: &VcfHeader, buf: &mut MallocDataBlock<i32>) -> Option<usize> { self.get_format_i32(hdr, "GT", buf) }
-	pub fn get_info_values<T, H: AsRef<bcf_hdr_t>>(&mut self, hdr: H, tag: &str, buf: &mut MallocDataBlock<T>, vtype: c_int) -> Option<usize> {
-		let (tag, mut p, mut cap) = prepare_format_args(tag, buf);
-		let len = unsafe {bcf_get_info_values(hdr.as_ref(), self.inner_mut(), tag.as_ptr(), &mut p as *mut *mut T as *mut *mut c_void, &mut cap as *mut c_int, vtype)};
-		ret_format_res(p, len, cap, buf)
-	}
-	pub fn get_info_u8(&mut self, hdr: &VcfHeader, tag: &str, buf: &mut MallocDataBlock<u8>) -> Option<usize> { self.get_info_values(hdr, tag, buf, BCF_HT_STR)}
 }
 
 impl Drop for BcfRec { 
-	fn drop(&mut self) { unsafe{ bcf_destroy(self.inner.as_ptr())} }
+	fn drop(&mut self) { unsafe{ bcf_destroy(self.as_mut()) } }
 }
 

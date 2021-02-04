@@ -2,11 +2,11 @@ use std::{io, fmt, ptr};
 use std::ptr::NonNull;
 use std::str::FromStr;
 use std::convert::TryInto;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::marker::PhantomData;
 
 use libc::{c_char, c_int, size_t};
-use super::{hts_err, get_cstr, from_cstr, htsFile, HtsFile, HtsPos};
+use super::{hts_err, get_cstr, from_cstr, htsFile, HtsPos};
 
 pub const BAM_FPAIRED: u16 = 1;
 pub const BAM_FPROPER_PAIR: u16 = 2;
@@ -23,7 +23,63 @@ pub const BAM_FSUPPLEMENTARY: u16 = 2048;
 
 
 #[repr(C)]
-pub (crate) struct sam_hdr_t { _unused: [u8; 0], }
+pub struct sam_hdr_t { _unused: [u8; 0], }
+
+impl sam_hdr_t {
+	pub fn write<H: AsMut<htsFile>>(&self, mut hts_file: H) -> io::Result<()> {
+		match unsafe { sam_hdr_write(hts_file.as_mut(), self) } {
+			0 => Ok(()),
+			_ => Err(hts_err("Failed to write SAM header".to_string())),
+		}
+	}
+	pub fn nref(&self) -> usize { 
+		let l = unsafe { sam_hdr_nref(self) };
+		l as usize
+	}
+	fn check_idx(&self, i: usize) { if i >= self.nref() { panic!("Reference ID {} out of range", i); }}
+	pub fn tid2name(&self, i: usize) -> &str {
+		self.check_idx(i);
+		from_cstr(unsafe { sam_hdr_tid2name(self, i as c_int) })
+	}
+	pub fn tid2len(&self, i: usize) -> usize {
+		self.check_idx(i);
+		let len = unsafe { sam_hdr_tid2len(self, i as c_int) };
+		len as usize
+	}
+	pub fn name2tid<S: AsRef<str>>(&self, cname: S) -> Option<usize> {
+		let tid = unsafe{ sam_hdr_name2tid(self, get_cstr(cname).as_ptr())};
+		if tid < 0 { None } else { Some(tid as usize) }
+	}
+	pub fn text(&self) -> &str {
+		from_cstr(unsafe { sam_hdr_str(self)})
+	}
+	pub fn dup(&self) -> io::Result<SamHeader> { 
+		match NonNull::new(unsafe { sam_hdr_dup(self)}) {
+			None => Err(hts_err("Failed to duplicate SAM/BAM header".to_string())),
+			Some(p) => Ok(SamHeader{inner: p, phantom: PhantomData})
+		}
+	}
+	pub fn add_lines<S: AsRef<str>>(&mut self, lines: S) -> io::Result<()> {
+		let lines = lines.as_ref();
+		match unsafe { sam_hdr_add_lines(self, get_cstr(lines).as_ptr(), lines.len() as size_t)} {
+			0 => Ok(()),
+			_ => Err(hts_err("Failed to add line to SAM/BAM header".to_string())),
+		}
+	}
+	pub fn remove_except(&mut self, ln_type: &str, id_key: Option<&str>, id_value: Option<&str>) -> io::Result<()> {
+		match if let (Some(key), Some(value)) = (id_key, id_value) {
+			unsafe { sam_hdr_remove_except(self, get_cstr(ln_type).as_ptr(), get_cstr(key).as_ptr(), get_cstr(value).as_ptr()) }
+		} else {
+			unsafe { sam_hdr_remove_except(self, get_cstr(ln_type).as_ptr(), ptr::null(), ptr::null()) }
+		} {
+			0 => Ok(()),
+			_ => Err(hts_err(format!("Failed to remove {} lines from SAM/BAM header", ln_type))),			
+		}
+	}
+	pub fn remove(&mut self, ln_type: &str) -> io::Result<()> { self.remove_except(ln_type, None, None) }
+}
+
+
 #[repr(C)]
 struct bam1_core_t {
 	pos: HtsPos,
@@ -41,13 +97,136 @@ struct bam1_core_t {
 }
 
 #[repr(C)] 
-pub(crate) struct bam1_t {
+pub struct bam1_t {
 	core: bam1_core_t,
 	id: u64,
 	data: *mut c_char,
 	l_data: c_int,
 	m_data: u32,
 	mempolicy: u32,
+}
+
+impl bam1_t {
+	pub fn qname(&self) -> &str { from_cstr(self.data) }
+	pub fn endpos(&self) -> usize { unsafe{ bam_endpos(self) as usize} }
+	pub fn tid(&self) -> Option<usize> { check_tid(self.core.tid) }
+	pub fn mtid(&self) -> Option<usize> { check_tid(self.core.mtid) }
+	pub fn qual(&self) -> u8 { self.core.qual }
+	pub fn flag(&self) -> u16 { self.core.flag }
+	pub fn pos(&self) -> Option<usize> { 
+		if self.core.pos >=0 { Some(self.core.pos as usize) } else { None} 
+	}
+	pub fn mpos(&self) -> Option<usize> { 
+		if self.core.mpos >=0 { Some(self.core.mpos as usize) } else { None} 
+	}
+	pub fn template_len(&self) -> isize { self.core.isze as isize }
+	pub fn l_qseq(&self) -> i32 { self.core.l_qseq }
+	pub fn qnames_eq(&self, b: &BamRec) -> bool {
+		let i = unsafe { libc::strcmp(self.data, b.data) };
+		i == 0
+	}
+	pub fn get_seq(&self) -> Option<&[u8]> {
+		unsafe {
+			let core = &self.core;
+			let off = ((core.n_cigar as isize) << 2) + (core.l_qname as isize) as isize;
+			let p = self.data.offset(off) as *const u8;
+			if p.is_null() { None }
+			else {
+				let size = (core.l_qseq + 1) >> 1;
+				Some(std::slice::from_raw_parts(p, size as usize))
+			} 		
+		}
+	}
+	pub fn get_qual(&self) -> Option<&[u8]> {
+		unsafe {
+			let core = &self.core;
+			let off = ((core.n_cigar as isize) << 2) + (core.l_qname as isize) + ((core.l_qseq + 1) >> 1) as isize;
+			let p = self.data.offset(off) as *const u8;
+			if p.is_null() { None }
+			else {
+				let size = core.l_qseq;
+				Some(std::slice::from_raw_parts(p, size as usize))
+			} 		
+		}
+	}
+	pub fn cigar(&self) -> Option<Cigar> {
+		let len = self.core.n_cigar as usize;
+		if len > 0 {
+			let data = self.data;
+			let slice = unsafe{ 
+				let ptr: *const CigarElem = data.offset(self.core.l_qname as isize).cast();
+				std::slice::from_raw_parts(ptr, len) 
+			};
+			Some(Cigar(slice))
+		} else { None }
+	}
+	pub fn qlen(&self) -> Option<u32> { self.cigar().map(|c| c.qlen() )}
+	pub fn rlen(&self) -> Option<u32> { self.cigar().map(|c| c.rlen() )}
+	pub fn cigar_buf(&self) -> Option<CigarBuf> { self.cigar().map(|c| c.to_cigar_buf()) }
+	pub fn write<H: AsMut<htsFile>, S: AsMut<sam_hdr_t>>(&mut self, mut hfile: H, mut hdr: S) -> io::Result<usize> {
+		match unsafe { sam_write1(hfile.as_mut(), hdr.as_mut(), self) } {
+			x if x >= 0 => Ok(x as usize),
+			_ => Err(hts_err("Failed to write BamRec".to_string())),
+		}	
+	}
+	pub fn aux_update_str<S: AsRef<str>>(&mut self, tag: &str, data: S) -> io::Result<()> {
+		if tag.len() != 2 { return Err(hts_err("Failed to update string tag: tag length is not 2".to_string())) }
+		let data = data.as_ref();
+		match unsafe { bam_aux_update_str(self, get_cstr(tag).as_ptr(), data.len() as c_int, get_cstr(data).as_ptr())} {
+			0 => Ok(()),
+			_ => Err(hts_err("Failed to update string tag".to_string())),
+		}
+	}
+	pub fn get_aux(&self) -> Option<&[u8]> {
+		unsafe {
+			let core = &self.core;
+			let off = ((core.n_cigar as isize) << 2) + (core.l_qname as isize) + (core.l_qseq + ((core.l_qseq + 1) >> 1)) as isize;
+			let p = self.data.offset(off) as *mut u8;
+			if p.is_null() { None }
+			else {
+				let size = self.l_data as isize - off;
+				if size < 0 { panic!("Invalid BAM aux size") }
+				Some(std::slice::from_raw_parts(p, size as usize))
+			} 
+		}
+	}
+	pub fn get_aux_iter(&self) -> Option<BamAuxIter> { 
+		if let Some(aux) = self.get_aux() {	Some(BamAuxIter{data: aux}) } else { None }
+	}
+	pub fn get_tag(&self, tag_id: &str, tag_type: char) -> Option<&[u8]> {
+		if tag_id.len() != 2 { return None } 
+		let tag_id = tag_id.as_bytes();
+		if let Some(itr) = self.get_aux_iter() {
+			for tag in itr {
+				if tag[0] == tag_id[0] && tag[1] == tag_id[1] && tag[2] == (tag_type as u8) { return Some(&tag[3..]) }
+			}
+		}
+		None
+	}
+	pub fn get_seq_qual(&self) -> io::Result<SeqQual> {
+		let seq = self.get_seq().ok_or_else(|| hts_err("No Sequence data in BAM record".to_string()))?;
+		let qual = self.get_qual().ok_or_else(|| hts_err("No Quality data in BAM record".to_string()))?;
+		let mut sq = Vec::with_capacity(qual.len());
+		let mut qitr = qual.iter();
+		for s in seq.iter() {
+			let (b, a) = SEQ_DECODE[*s as usize];
+			let q = (*qitr.next().unwrap()).min(62);
+			sq.push(if a > 0 { (a - 1) | (q << 2) } else { 0 });
+			if let Some(x) = qitr.next() {
+				let q = (*x).min(62);
+				sq.push(if b > 0 { (b - 1) | (q << 2) } else { 0 });
+			}
+		}
+		Ok(SeqQual(sq.into_boxed_slice()))
+	}
+	
+	pub fn read<H: AsMut<htsFile>, S: AsMut<sam_hdr_t>>(&mut self, mut hfile: H, mut hdr: S) -> SamReadResult {
+		match unsafe { sam_read1(hfile.as_mut(), hdr.as_mut(), self) } {
+			0..=c_int::MAX => SamReadResult::Ok,
+			-1 => SamReadResult::EOF,
+			_ => SamReadResult::Error,
+		}
+	}
 }
 
 #[link(name = "hts")]
@@ -81,70 +260,38 @@ unsafe impl Send for SamHeader{}
 
 impl <'a>Drop for SamHeader {
 	fn drop(&mut self) {
-		unsafe { sam_hdr_destroy(self.inner.as_ptr()) };
+		unsafe { sam_hdr_destroy(self.as_mut()) };
 	}
 }
 
+impl Deref for SamHeader {
+	type Target = sam_hdr_t;
+	#[inline]
+	fn deref(&self) -> &sam_hdr_t { unsafe{self.inner.as_ref()} }	
+}
+
+impl DerefMut for SamHeader {
+	#[inline]
+	fn deref_mut(&mut self) -> &mut sam_hdr_t {unsafe{ self.inner.as_mut() }}
+}
+
+impl AsRef<sam_hdr_t> for SamHeader {
+	#[inline]
+	fn as_ref(&self) -> &sam_hdr_t { self}	
+}
+
+impl AsMut<sam_hdr_t> for SamHeader {
+	#[inline]
+	fn as_mut(&mut self) -> &mut sam_hdr_t { self}	
+}
+
 impl SamHeader {
-	pub fn read(hts_file: &mut HtsFile) -> io::Result<Self> {
-		match NonNull::new(unsafe { sam_hdr_read(hts_file.inner_mut()) }) {
-			None => Err(hts_err(format!("Failed to load header from {}", hts_file.name()))),
+	pub fn read<H: AsMut<htsFile>>(mut hts_file: H) -> io::Result<Self> {
+		match NonNull::new(unsafe { sam_hdr_read(hts_file.as_mut()) }) {
+			None => Err(hts_err("Failed to load SAM header".to_string())),
 			Some(p) => Ok(Self{inner: p, phantom: PhantomData})
 		}
 	}
-	pub fn write(&self, hts_file: &mut HtsFile) -> io::Result<()> {
-		match unsafe { sam_hdr_write(hts_file.inner_mut(), self.inner.as_ptr()) } {
-			0 => Ok(()),
-			_ => Err(hts_err(format!("Failed to write header to {}", hts_file.name()))),
-		}
-	}
-	pub(crate) fn inner(&self) -> &sam_hdr_t { unsafe{ self.inner.as_ref() }}
-	pub(crate) fn inner_mut(&mut self) -> &mut sam_hdr_t { unsafe {self.inner.as_mut()} }
-	pub fn nref(&self) -> usize { 
-		let l = unsafe { sam_hdr_nref(self.inner() as *const sam_hdr_t) };
-		l as usize
-	}
-	fn check_idx(&self, i: usize) { if i >= self.nref() { panic!("Reference ID {} out of range", i); }}
-	pub fn tid2name(&self, i: usize) -> &str {
-		self.check_idx(i);
-		from_cstr(unsafe { sam_hdr_tid2name(self.inner() as *const sam_hdr_t, i as c_int) })
-	}
-	pub fn tid2len(&self, i: usize) -> usize {
-		self.check_idx(i);
-		let len = unsafe { sam_hdr_tid2len(self.inner() as *const sam_hdr_t, i as c_int) };
-		len as usize
-	}
-	pub fn name2tid<S: AsRef<str>>(&self, cname: S) -> Option<usize> {
-		let tid = unsafe{ sam_hdr_name2tid(self.inner() as *const sam_hdr_t, get_cstr(cname).as_ptr())};
-		if tid < 0 { None } else { Some(tid as usize) }
-	}
-	pub fn text(&self) -> &str {
-		from_cstr(unsafe { sam_hdr_str(self.inner() as *const sam_hdr_t)})
-	}
-	pub fn dup(&self) -> io::Result<Self> { 
-		match NonNull::new(unsafe { sam_hdr_dup(self.inner() as *const sam_hdr_t)}) {
-			None => Err(hts_err("Failed to duplicate SAM/BAM header".to_string())),
-			Some(p) => Ok(SamHeader{inner: p, phantom: PhantomData})
-		}
-	}
-	pub fn add_lines<S: AsRef<str>>(&mut self, lines: S) -> io::Result<()> {
-		let lines = lines.as_ref();
-		match unsafe { sam_hdr_add_lines(self.inner.as_ptr(), get_cstr(lines).as_ptr(), lines.len() as size_t)} {
-			0 => Ok(()),
-			_ => Err(hts_err("Failed to add line to SAM/BAM header".to_string())),
-		}
-	}
-	pub fn remove_except(&mut self, ln_type: &str, id_key: Option<&str>, id_value: Option<&str>) -> io::Result<()> {
-		match if let (Some(key), Some(value)) = (id_key, id_value) {
-			unsafe { sam_hdr_remove_except(self.inner.as_ptr(), get_cstr(ln_type).as_ptr(), get_cstr(key).as_ptr(), get_cstr(value).as_ptr()) }
-		} else {
-			unsafe { sam_hdr_remove_except(self.inner.as_ptr(), get_cstr(ln_type).as_ptr(), ptr::null(), ptr::null()) }
-		} {
-			0 => Ok(()),
-			_ => Err(hts_err(format!("Failed to remove {} lines from SAM/BAM header", ln_type))),			
-		}
-	}
-	pub fn remove(&mut self, ln_type: &str) -> io::Result<()> { self.remove_except(ln_type, None, None) }
 }
 
 // Note that Trim is non-standard - we use it internally
@@ -313,11 +460,33 @@ impl FromStr for CigarBuf {
 
 pub struct BamRec {	
 	inner: NonNull<bam1_t>,
+	phantom: PhantomData<bam1_t>,
+}
+
+impl Deref for BamRec {
+	type Target = bam1_t;
+	#[inline]
+	fn deref(&self) -> &bam1_t { unsafe{self.inner.as_ref()} }	
+}
+
+impl DerefMut for BamRec {
+	#[inline]
+	fn deref_mut(&mut self) -> &mut bam1_t {unsafe{ self.inner.as_mut() }}
+}
+
+impl AsRef<bam1_t> for BamRec {
+	#[inline]
+	fn as_ref(&self) -> &bam1_t { self}	
+}
+
+impl AsMut<bam1_t> for BamRec {
+	#[inline]
+	fn as_mut(&mut self) -> &mut bam1_t { self}	
 }
 
 impl Drop for BamRec {
 	fn drop(&mut self) {
-		unsafe { bam_destroy1(self.inner_mut())}
+		unsafe { bam_destroy1(self.as_mut())}
 	}
 }
 
@@ -356,135 +525,10 @@ impl BamRec {
 				if data.is_null() { Err(hts_err("Failed to allocate new BamRec".to_string())) }
 				else {
 					unsafe { b.as_mut().data = data }
-					Ok(BamRec{inner: b})
+					Ok(BamRec{inner: b, phantom: PhantomData})
 				}
 			},
 			None => Err(hts_err("Failed to allocate new BamRec".to_string())),
-		}
-	}
-	pub fn copy_from(b: Self) -> Self { BamRec{inner: b.inner} }
-	pub(crate) fn inner(&self) -> &bam1_t { unsafe{self.inner.as_ref()} }
-	pub(crate) fn inner_mut(&mut self) -> &mut bam1_t { unsafe{ self.inner.as_mut() }} 
-	fn data(&self) -> *const c_char { self.inner().data }  
-	fn core(&self) -> &bam1_core_t { &self.inner().core }
-	pub fn qname(&self) -> &str { from_cstr(self.data()) }
-	pub fn endpos(&self) -> usize { unsafe{ bam_endpos(self.inner()) as usize} }
-	pub fn tid(&self) -> Option<usize> { check_tid(self.core().tid) }
-	pub fn mtid(&self) -> Option<usize> { check_tid(self.core().mtid) }
-	pub fn qual(&self) -> u8 { self.core().qual }
-	pub fn flag(&self) -> u16 { self.core().flag }
-	pub fn pos(&self) -> Option<usize> { 
-		if self.core().pos >=0 { Some(self.core().pos as usize) } else { None} 
-	}
-	pub fn mpos(&self) -> Option<usize> { 
-		if self.core().mpos >=0 { Some(self.core().mpos as usize) } else { None} 
-	}
-	pub fn template_len(&self) -> isize { self.core().isze as isize }
-	pub fn l_qseq(&self) -> i32 { self.core().l_qseq }
-	pub fn qnames_eq(&self, b: &BamRec) -> bool {
-		let i = unsafe { libc::strcmp(self.data(), b.data()) };
-		i == 0
-	}
-	pub fn get_seq(&self) -> Option<&[u8]> {
-		unsafe {
-			let core = self.core();
-			let off = ((core.n_cigar as isize) << 2) + (core.l_qname as isize) as isize;
-			let p = self.data().offset(off) as *const u8;
-			if p.is_null() { None }
-			else {
-				let size = (core.l_qseq + 1) >> 1;
-				Some(std::slice::from_raw_parts(p, size as usize))
-			} 		
-		}
-	}
-	pub fn get_qual(&self) -> Option<&[u8]> {
-		unsafe {
-			let core = self.core();
-			let off = ((core.n_cigar as isize) << 2) + (core.l_qname as isize) + ((core.l_qseq + 1) >> 1) as isize;
-			let p = self.data().offset(off) as *const u8;
-			if p.is_null() { None }
-			else {
-				let size = core.l_qseq;
-				Some(std::slice::from_raw_parts(p, size as usize))
-			} 		
-		}
-	}
-	pub fn cigar(&self) -> Option<Cigar> {
-		let len = self.core().n_cigar as usize;
-		if len > 0 {
-			let data = self.data();
-			let slice = unsafe{ 
-				let ptr: *const CigarElem = data.offset(self.core().l_qname as isize).cast();
-				std::slice::from_raw_parts(ptr, len) 
-			};
-			Some(Cigar(slice))
-		} else { None }
-	}
-	pub fn qlen(&self) -> Option<u32> { self.cigar().map(|c| c.qlen() )}
-	pub fn rlen(&self) -> Option<u32> { self.cigar().map(|c| c.rlen() )}
-	pub fn cigar_buf(&self) -> Option<CigarBuf> { self.cigar().map(|c| c.to_cigar_buf()) }
-	pub fn write(&mut self, hfile: &mut HtsFile, hdr: &mut SamHeader) -> io::Result<usize> {
-		match unsafe { sam_write1(hfile.inner_mut(), hdr.inner_mut(), self.inner()) } {
-			x if x >= 0 => Ok(x as usize),
-			_ => Err(hts_err(format!("Failed to write BamRec to {}", hfile.name()))),
-		}	
-	}
-	pub fn aux_update_str<S: AsRef<str>>(&mut self, tag: &str, data: S) -> io::Result<()> {
-		if tag.len() != 2 { return Err(hts_err("Failed to update string tag: tag length is not 2".to_string())) }
-		let data = data.as_ref();
-		match unsafe { bam_aux_update_str(self.inner_mut(), get_cstr(tag).as_ptr(), data.len() as c_int, get_cstr(data).as_ptr())} {
-			0 => Ok(()),
-			_ => Err(hts_err("Failed to update string tag".to_string())),
-		}
-	}
-	pub fn get_aux(&self) -> Option<&[u8]> {
-		unsafe {
-			let core = self.core();
-			let off = ((core.n_cigar as isize) << 2) + (core.l_qname as isize) + (core.l_qseq + ((core.l_qseq + 1) >> 1)) as isize;
-			let p = self.data().offset(off) as *mut u8;
-			if p.is_null() { None }
-			else {
-				let size = self.inner().l_data as isize - off;
-				if size < 0 { panic!("Invalid BAM aux size") }
-				Some(std::slice::from_raw_parts(p, size as usize))
-			} 
-		}
-	}
-	pub fn get_aux_iter(&self) -> Option<BamAuxIter> { 
-		if let Some(aux) = self.get_aux() {	Some(BamAuxIter{data: aux}) } else { None }
-	}
-	pub fn get_tag(&self, tag_id: &str, tag_type: char) -> Option<&[u8]> {
-		if tag_id.len() != 2 { return None } 
-		let tag_id = tag_id.as_bytes();
-		if let Some(itr) = self.get_aux_iter() {
-			for tag in itr {
-				if tag[0] == tag_id[0] && tag[1] == tag_id[1] && tag[2] == (tag_type as u8) { return Some(&tag[3..]) }
-			}
-		}
-		None
-	}
-	pub fn get_seq_qual(&self) -> io::Result<SeqQual> {
-		let seq = self.get_seq().ok_or_else(|| hts_err("No Sequence data in BAM record".to_string()))?;
-		let qual = self.get_qual().ok_or_else(|| hts_err("No Quality data in BAM record".to_string()))?;
-		let mut sq = Vec::with_capacity(qual.len());
-		let mut qitr = qual.iter();
-		for s in seq.iter() {
-			let (b, a) = SEQ_DECODE[*s as usize];
-			let q = (*qitr.next().unwrap()).min(62);
-			sq.push(if a > 0 { (a - 1) | (q << 2) } else { 0 });
-			if let Some(x) = qitr.next() {
-				let q = (*x).min(62);
-				sq.push(if b > 0 { (b - 1) | (q << 2) } else { 0 });
-			}
-		}
-		Ok(SeqQual(sq.into_boxed_slice()))
-	}
-	
-	pub fn read(mut self, hfile: &mut HtsFile, hdr: &mut SamHeader) -> SamReadResult {
-		match unsafe { sam_read1(hfile.inner_mut(), hdr.inner_mut(), self.inner_mut()) } {
-			0..=c_int::MAX => SamReadResult::Ok(self),
-			-1 => SamReadResult::EOF,
-			_ => SamReadResult::Error,
 		}
 	}
 	pub fn swap(&mut self, other: &mut Self) {
@@ -541,7 +585,7 @@ impl <'a>Iterator for BamAuxIter<'a> {
 }
 
 pub enum SamReadResult {
-	Ok(BamRec),
+	Ok,
 	EOF,
 	Error,
 }

@@ -9,7 +9,7 @@ pub struct SamInner {
 }
 
 impl SamInner {
-	pub fn get_next(&mut self, brec: BamRec) -> SamReadResult {
+	pub fn get_next<B: AsMut<bam1_t>>(&mut self, brec: B) -> SamReadResult {
 		if let Some(itr) = &mut self.itr {
 			itr.sam_itr_next(&mut self.file, brec)
 		} else { SamReadResult::Error }
@@ -35,7 +35,7 @@ impl SamFile {
 	pub fn tid2len(&self, i: usize) -> usize { self.hdr.tid2len(i) }
 	pub fn name2tid<S: AsRef<str>>(&self, cname: S) -> Option<usize> { self.hdr.name2tid(cname) }
 	pub fn text(&self) -> &str { self.hdr.text() }
-	pub fn format(&self) -> HtsFormat {	self.inner.file.format() }
+	pub fn format(&self) -> &htsFormat {	self.inner.file.format() }
 	pub fn set_threads(&mut self, t: usize) -> io::Result<()> { self.inner.file.set_threads(t) }
 	pub fn set_fai_filename<S: AsRef<str>>(&mut self, name: S) -> io::Result<()> { self.inner.file.set_fai_filename(name) }
 	pub fn set_itr(&mut self) -> io::Result<()> {

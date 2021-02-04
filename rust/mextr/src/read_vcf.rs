@@ -1,7 +1,6 @@
 use std::io;
 use std::sync::Arc;
 use std::thread;
-use std::cell::RefCell;
 use crossbeam_channel::{unbounded, Sender};
 
 use r_htslib::*;

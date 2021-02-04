@@ -327,7 +327,7 @@ fn write_fixed_columns(call: &GenotypeCall, filter_ids: &[u8], v: &mut Vec<u8>, 
 
 	bcf_rec.set_n_sample(1);
 	bcf_rec.set_rlen(1);	
-	bcf_rec.set_n_allele(1 + alt_alleles.len());
+	bcf_rec.set_n_allele(1 + alt_alleles.len() as u16);
 	bcf_rec.set_qual(call_stats.phred as f32);	
 	bcf_rec.set_n_info(1);
 	call_stats.filter = filter as u8;

@@ -9,7 +9,7 @@ pub fn handle_reference(rf: &str, in_file: &mut htslib::SamFile) -> io::Result<h
 	let fai = format!("{}.fai", rf);
 	if !Path::new(&fai).exists() { return Err(new_err(format!("Couldn't access reference file index {}", fai))); }
 	debug!("Trying to open index for reference {}", rf);
-	let idx = htslib::faidx_load(rf)?;
+	let idx = htslib::Faidx::load(rf)?;
 	in_file.set_fai_filename(&fai)?;
 	debug!("Index loaded");
 	Ok(idx) 

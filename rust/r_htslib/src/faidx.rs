@@ -1,5 +1,7 @@
 use std::ptr::NonNull;
 use std::io;
+use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 use libc::{c_char, c_int, c_void, free};
 use super::{hts_err, get_cstr, from_cstr, HtsPos};
@@ -9,35 +11,19 @@ pub struct faidx_t {
     _unused: [u8; 0],
 }
 
-extern "C" {
-    fn fai_load(fn_: *const c_char) -> *mut faidx_t;
-    fn faidx_nseq(fai : *const faidx_t) -> c_int;
-	fn faidx_iseq(fai : *const faidx_t, n : c_int) -> *const c_char;
-    fn faidx_seq_len(fai : *const faidx_t, seq: *const c_char) -> c_int;
-	fn faidx_fetch_seq64(fai: *const faidx_t, cname: *const c_char, x: HtsPos, y: HtsPos, len: *mut HtsPos) -> *mut c_char;
-}
-
-pub struct Faidx {
-	inner: NonNull<faidx_t>,
-}
-
-unsafe impl Sync for Faidx {}
-unsafe impl Send for Faidx {}
-
-impl Faidx {
-	fn inner(&self) -> &faidx_t { unsafe{self.inner.as_ref()} }
+impl faidx_t {
 	pub fn nseq(&self) -> usize {
-		let l = unsafe{ faidx_nseq(self.inner())};
+		let l = unsafe{ faidx_nseq(self)};
 		l as usize
 	}
 	pub fn iseq(&self, i: usize) -> &str {
 		if i > self.nseq() { panic!("Sequence ID {} out of range", i); }
-		from_cstr(unsafe { faidx_iseq(self.inner(), i as libc::c_int) })
+		from_cstr(unsafe { faidx_iseq(self, i as libc::c_int) })
 	}	
 	
 	pub fn seq_len<S: AsRef<str>>(&self, cname: S) -> Option<usize> {
 		let cname = cname.as_ref();
-		let len = unsafe{ faidx_seq_len(self.inner(), get_cstr(cname).as_ptr())};
+		let len = unsafe{ faidx_seq_len(self, get_cstr(cname).as_ptr())};
 		if len < 0 { None } else { Some(len as usize) }
 	}
 	
@@ -47,7 +33,7 @@ impl Faidx {
 			if slen == 0 { Err(hts_err(format!("Sequence {} has zero length", cname))) }
 			else {
 				let mut len: HtsPos = 0;
-				let seq = unsafe{ faidx_fetch_seq64(self.inner(), get_cstr(cname).as_ptr(), 0, (slen - 1) as HtsPos, &mut len) };
+				let seq = unsafe{ faidx_fetch_seq64(self, get_cstr(cname).as_ptr(), 0, (slen - 1) as HtsPos, &mut len) };
 				if len == -2 { Err(hts_err(format!("Sequence {} not found", cname))) }
 				else if len < 0 || seq.is_null() { Err(hts_err(format!("Loading of sequence data for {} failed", cname))) }
 				else { Ok(Sequence{inner: NonNull::new(seq as *mut u8).unwrap(), len: len as usize, cname: cname.to_owned()}) }
@@ -56,12 +42,58 @@ impl Faidx {
 	}
 }
 
-pub fn faidx_load<S: AsRef<str>>(name: S) -> io::Result<Faidx> {
-	let name = name.as_ref();
-	match NonNull::new(unsafe{ fai_load(get_cstr(name).as_ptr())}) {	
-		None => Err(hts_err(format!("Failed to load reference file index {}", name))),
-		Some(idx) => Ok(Faidx{inner: idx}),
-	 }
+extern "C" {
+    fn fai_load(fn_: *const c_char) -> *mut faidx_t;
+    fn fai_destroy(fai : *mut faidx_t);
+    fn faidx_nseq(fai : *const faidx_t) -> c_int;
+	fn faidx_iseq(fai : *const faidx_t, n : c_int) -> *const c_char;
+    fn faidx_seq_len(fai : *const faidx_t, seq: *const c_char) -> c_int;
+	fn faidx_fetch_seq64(fai: *const faidx_t, cname: *const c_char, x: HtsPos, y: HtsPos, len: *mut HtsPos) -> *mut c_char;
+}
+
+pub struct Faidx {
+	inner: NonNull<faidx_t>,
+	phantom: PhantomData<faidx_t>,
+}
+
+impl Deref for Faidx {
+	type Target = faidx_t;
+	#[inline]
+	fn deref(&self) -> &faidx_t { unsafe{self.inner.as_ref()} }	
+}
+
+impl DerefMut for Faidx {
+	#[inline]
+	fn deref_mut(&mut self) -> &mut faidx_t {unsafe{ self.inner.as_mut() }}
+}
+
+impl AsRef<faidx_t> for Faidx {
+	#[inline]
+	fn as_ref(&self) -> &faidx_t { self}	
+}
+
+impl AsMut<faidx_t> for Faidx {
+	#[inline]
+	fn as_mut(&mut self) -> &mut faidx_t { self}	
+}
+
+impl Drop for Faidx {
+	fn drop(&mut self) {
+		unsafe { fai_destroy(self.as_mut())}
+	}
+}
+
+unsafe impl Sync for Faidx {}
+unsafe impl Send for Faidx {}
+
+impl Faidx {
+	pub fn load<S: AsRef<str>>(name: S) -> io::Result<Faidx> {
+		let name = name.as_ref();
+		match NonNull::new(unsafe{ fai_load(get_cstr(name).as_ptr())}) {	
+			None => Err(hts_err(format!("Failed to load reference file index {}", name))),
+			Some(idx) => Ok(Faidx{inner: idx, phantom: PhantomData}),
+		 }
+	}
 }
 
 pub struct Sequence {

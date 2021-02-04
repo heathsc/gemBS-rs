@@ -109,8 +109,8 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 	let mut state_hash: HashMap<String, ReadState> = HashMap::new();
 	let mut curr_state = State(None);
 	loop {
-		brec = match sam_input.inner.get_next(brec) {
-			SamReadResult::Ok(b) => b,
+		match sam_input.inner.get_next(&mut brec) {
+			SamReadResult::Ok => (),
 			SamReadResult::EOF => {
 				if let Some(cstate) = curr_state.0.as_ref() {
 					let cname = hdr.tid2name(cstate.tid as usize);
@@ -122,7 +122,7 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 				break;
 			},
 			_ => panic!("Error reading record"),
-		};
+		}
 		let (read_end, read_flag) = ReadEnd::from_bam_rec(&cfg.conf_hash, hdr, &brec);
 		if let Some(mut read) = read_end {
 			let map = &read.maps[0];

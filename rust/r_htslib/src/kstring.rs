@@ -1,5 +1,6 @@
 use std::ptr::null_mut;
 use std::convert::TryInto;
+use std::marker::PhantomData;
 
 use libc::{c_char, c_int, c_float, c_void, size_t};
 use super::*;
@@ -9,6 +10,7 @@ pub struct kstring_t {
 	l: size_t,
 	m: size_t,
 	s: *mut c_char,
+	phantom: PhantomData<c_char>,
 }
 
 #[link(name = "hts")]
@@ -19,16 +21,20 @@ extern "C" {
 }
 
 impl Default for kstring_t { fn default() -> Self { Self::new() }}
+impl Drop for kstring_t {
+	fn drop(&mut self) { self.dealloc() }	
+}
 
 impl kstring_t {
-	pub fn new() -> Self {Self{l:0, m:0, s: null_mut::<c_char>()}}
+	pub fn new() -> Self {Self{l:0, m:0, s: null_mut::<c_char>(), phantom: PhantomData}}
 	pub fn initialize(&mut self) {
 		self.l = 0;
 		self.m = 0;
 		self.s = null_mut::<c_char>();
 	}
+	fn dealloc(&mut self) { if !self.s.is_null() { unsafe{libc::free(self.s as *mut c_void)} } }
 	pub fn free(&mut self) { 
-		if !self.s.is_null() { unsafe{libc::free(self.s as *mut c_void)} }	
+		self.dealloc();	
 		self.initialize();	
 	}
 	pub fn to_str(&self) -> Option<&str> {
