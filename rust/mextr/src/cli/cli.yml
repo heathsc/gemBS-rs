@@ -1,0 +1,40 @@
+name: mextr
+author: Simon Heath <simon.heath@gmail.com>
+about: snpxtr is an application for extracting Methylation information from VCF/BCF file
+setting: GlobalVersion
+setting: DeriveDisplayOrder
+args:
+    - quiet: {short: q, long: quiet, help: Silence all output}
+    - timestamp: {short: X, long: time, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
+    - loglevel: {short: v, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
+    - threads: {short: "@", long: threads, takes_value: true, value_name: "THREADS", help: "Set number of threads per file (default: number of cores)"} 
+    - cpgfile: {short: o, long: cpgfile, takes_value: true, value_name: NAME, help: "Set file name for CpG file (default: not output)" }
+    - noncpgfile: {short: n, long: noncpgfile, takes_value: true, value_name: NAME, help: "Set file name for nonCpG file (default: not output)" }
+    - bed_methyl: {short: b, long: bed-methyl, takes_value: true, value_name: NAME, help: "Set file base for bedMethyl files. Not compatible with multi-sample files (default: not output)" }
+    - bed_track_line: {short: t, long: bed-track-line, takes_value: true, value_name: STRING, help: "Track line for bedMethyl files (default: info taken from input VCF file)" }
+    - no_header: {short: H, long: no-header, help: "Do not print header line(s) in output file(s) (default: false)" }
+    - common_gt: {short: g, long: common-gt, help: "Recall genotypes assuming a common genotype across all samples (default: false)" }
+    - mode: {short: m, long: mode, help: "Ouput mode for CpG sites (default combined)", case_insensitive: true, takes_value: true, value_name: MODE, possible_values: [combined, strand-specific]}
+    - bw_mode: {short: w, long: bw-mode, help: "Ouput mode for bigWig files (default combined)", case_insensitive: true, takes_value: true, value_name: MODE, possible_values: [combined, strand-specific]}
+    - select: {short: s, long: select, help: "Selection mode for sites/CpGs (default hom)", takes_value: true, case_insensitive: true, value_name: MODE, possible_values: [hom, het]}
+    - reference_bias: {short: B, long: reference-bias, takes_value: true, value_name: FLOAT, help: "Reference bias on genotype calling (default 2.0)" }
+    - min_nc: {short: M, long: min-nc, takes_value: true, value_name: INT, help: "Mininum number of non-converted bases for non CpG site (default 1)" }
+    - prop: {short: p, long: prop, takes_value: true, value_name: FLOAT, help: "Mininum proportion of sites/CpGs that must pass (default 0.0)" }
+    - number: {short: N, long: number, takes_value: true, value_name: INT, help: "Mininum number of sites/CpGs that must pass (default 1)" }
+    - inform: {short: I, long: inform, takes_value: true, value_name: INT, help: "Mininum number of informative reads for a CpG site to pass (default 1)" }
+    - threshold: {short: T, long: threshold, takes_value: true, value_name: PHRED, help: "Mininum PHRED score for sites/CpGs (default 20)" }
+    - bq_threshold: {short: Q, long: bq-threshold, takes_value: true, value_name: PHRED, help: "Base quality score for genotype calling (default 20)" }
+    - conversion: {short: c, long: conversion, takes_value: true, value_name: "FLOAT,FLOAT", min_values: 2, max_values: 2, use_delimiter: true, help: "Set under and over conversion rates (default 0.01, 0.05)" }
+    - haploid: {short: h, long: haploid, help: "Force genotype calls to be haploid" }
+    - report_file: {short: S, long: report-file, takes_value: true, value_name: NAME, help: "File with list of SNPs to be selected (default, select all sites with PASS)" }
+    - region_list: {short: r, long: regions, takes_value: true, multiple: false, conflicts_with: region_file, use_delimiter: true, value_name: REGION, help: "restrict to comma separated list of regions" }
+    - region_file: {short: R, long: region-file, multiple: false, conflicts_with: region_desc, takes_value: true, value_name: REGION_FILE, help: "restrict to regions listed in file" }
+    - compress: {short: z, long: compress, help: "compress output file with bgzip" }
+    - md5: {short: D, long: md5, help: "generate md5 digest for output file (if not stdout)" }
+    - tabix: {short: x, long: tabix, requires: compress, help: "generate tabix (tbx) index for compressed output file" }
+    - input: {value_name: FILE, required: true, multiple: false, help: "Input BCF/VCF files" }
+    - regions: {value_name: REGIONS, multiple: true, use_delimiter: true, conflicts_with: region_file, help: "Chromosome regions"}
+groups:
+    - region_desc:
+         args: [regions, region_list]
+
