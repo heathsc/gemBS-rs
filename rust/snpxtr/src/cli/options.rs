@@ -53,8 +53,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<Config> {
 		Err(e) => return Err(new_err(format!("Error parsing option: {}", e))),		
 	};
 	sr.add_reader(infile)?;
-	let hdr = sr.get_reader_hdr(0)?;
-	let ns = hdr.nsamples();
+	let ns = sr.get_reader_hdr(0)?.nsamples();
 	if ns == 0 { return Err(new_err(format!("No samples in input file {}", infile)))}
 	
 	let mut conf = Config::new(output_opt, sr);

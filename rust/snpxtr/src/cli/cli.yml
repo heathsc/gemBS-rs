@@ -7,8 +7,8 @@ args:
     - quiet: {short: q, long: quiet, help: Silence all output}
     - timestamp: {short: T, long: time, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
     - loglevel: {short: v, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
-    - threads: {short: t, long: threads, takes_value: true, value_name: "THREADS", help: "Set number of threads per file (default: number of cores)"} 
-    - output: {short: o, long: output, takes_value: true, value_name: INDEX, help: "Set file name for output file (default: stdout)" }
+    - threads: {short: "@", long: threads, takes_value: true, value_name: "THREADS", help: "Set number of threads per file (default: number of cores)"} 
+    - output: {short: o, long: output, takes_value: true, value_name: NAME, help: "Set file name for output file (default: stdout)" }
     - selected: {short: s, long: selected, takes_value: true, value_name: FILE, help: "File with list of SNPs to be selected (default, select all sites with PASS)" }
     - dbsnp: {short: D, long: dbsnp, takes_value: true, value_name: INDEX FILE, help: "dbSNP index file (used to add external ids if not present in input file" }
     - region_list: {short: r, long: regions, takes_value: true, multiple: false, conflicts_with: region_file, use_delimiter: true, value_name: REGION, help: "restrict to comma separated list of regions" }

@@ -17,7 +17,7 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 	let mut dbsnp_file = conf.dbsnp_file(); 
 	let sel_hash = conf.selected_hash();
 	let mut sr = conf.synced_reader().expect("Synced reader is not set");
-	let hdr = sr.get_reader_hdr(0)?;
+	let hdr = sr.get_reader_hdr(0)?.dup();
 	let ns = hdr.nsamples();
 	assert!(ns > 0);	
 	assert_eq!(Some(0), hdr.id2int(BCF_DT_ID as usize, "PASS"));
@@ -45,7 +45,7 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 		procs.push(Md5TabixProc{ s, th});
 	}
 	while sr.next_line() > 0 {
-		brec = sr.swap_line(0, brec)?;
+		sr.swap_line(0, &mut brec)?;
 		let changed = if let Some((rid, cname, dbsnp_ctg)) = &curr_ctg {
 			if brec.rid() != *rid { 
 				if dbsnp_ctg.is_some() {
@@ -82,6 +82,7 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 		} else { false };
 		if pass { pass = brec.check_pass()};
 		if !pass { continue; }
+		if brec.get_genotypes(&hdr, &mut mdb).is_none() { continue }
 		let alls = {
 			let v = brec.alleles();
 			if v.len() > 4 || v.iter().any(|x| x.len() != 1) { continue; }
@@ -95,7 +96,6 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 			if i >= alls.len() { b'.' }
 			else { alls[i] }
 		};
-		mdb = brec.get_genotypes(&hdr, mdb)?;
 		if mdb.iter().any(|x| *x > 0) {
 			let ploidy = mdb.len() / ns;
 			if ploidy == 0 { continue }
@@ -113,13 +113,5 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 	drop(out);	
 	for x in procs.iter() { x.s.send(true).expect("Couldn't send closing message") }
 	for x in procs.drain(..) { x.th.join().unwrap() }
-
-	/*
-	if conf.output().compute_tbx() {
-		info!("Computing tabix index");
-		if unsafe { tbx_index_build(get_cstr(output_name).as_ptr(), 0, &tbx_conf_vcf)} != 0 {
-			return Err(hts_err("Couldn't build tabix index".to_string()));
-		}
-	}*/
 	Ok(())
 }

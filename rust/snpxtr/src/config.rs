@@ -23,7 +23,7 @@ impl OutputOpt {
 		self.filename = Some(fname.as_ref().to_owned());
 		self
 	}
-	pub fn filename(&self) -> Option<&str> { self.filename.as_ref().map(|s| s.as_str()) }
+	pub fn filename(&self) -> Option<&str> { self.filename.as_deref() }
 	pub fn set_compress(&mut self, b: bool) -> &mut Self { self.compress = b; self }
 	pub fn set_compute_md5(&mut self, b: bool) -> &mut Self { self.compute_md5 = b; self }
 	pub fn set_compute_tbx(&mut self, b: bool) -> &mut Self { self.compute_tbx = b; self }

@@ -1,6 +1,6 @@
 [package]
 name = "snpxtr"
-version = "0.1.0"
+version = "2.0.0"
 authors = ["Simon Heath <simon.heath@gmail.com>"]
 edition = "2018"
 
@@ -11,8 +11,8 @@ log = "~0.4"
 stderrlog = "~0.5"
 clap = {version = "2.3.3", features = ["yaml"]}
 num_cpus = "1.13.0"
-crossbeam-channel = "0.5"
 zstd = "0.5"
 libc = "0.2"
+md-5 = "0.9.1"
 r_htslib = { path = "../r_htslib" }
 utils = { path = "../utils" }

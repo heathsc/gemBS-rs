@@ -15,7 +15,7 @@ fn main()  -> Result<(), String> {
 	match process::process(conf) {
 		Ok(_) => Ok(()),
 		Err(e) => {
-			error!("dbsnp failed with error: {}", e);
+			error!("snpxtr failed with error: {}", e);
 			Err("Failed".to_string())
 		}
 	}
