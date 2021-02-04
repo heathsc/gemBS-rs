@@ -1,6 +1,8 @@
 use std::io;
 use std::ptr::NonNull;
 use std::ffi::CString;
+use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 use c2rust_bitfields::BitfieldStruct;
 use libc::{c_char, c_int, c_void};
@@ -45,7 +47,7 @@ struct vdict_t {
 }
 
 #[repr(C)]
-struct bcf_hdr_t { 
+pub struct bcf_hdr_t { 
 	n: [i32; 3],
 	id: [*mut bcf_idpair_t; 3],
 	dict: [*mut vdict_t; 3],
@@ -59,6 +61,66 @@ struct bcf_hdr_t {
 	keep_samples: *mut u8,
 	mem: kstring_t,
 	m: [i32; 3],
+}
+
+impl bcf_hdr_t {
+	pub fn nsamples(&self) -> usize {self.n[BCF_DT_SAMPLE as usize] as usize}
+	pub fn dup(&self) -> VcfHeader {
+		match NonNull::new(unsafe{ bcf_hdr_dup(self) })	{
+			None => panic!("Couldn't duplicate VCF/BCF header"),
+			Some(hdr) => VcfHeader{inner: hdr, phantom: PhantomData},
+		}	
+	}
+	pub fn get_version(&self) -> &str {
+		from_cstr(unsafe { bcf_hdr_get_version(self) })
+	}
+	pub fn append<S: AsRef<str>>(&mut self, line: S) -> io::Result<()> {
+		match unsafe{ bcf_hdr_append(self, get_cstr(line).as_ptr())} {
+			0 => Ok(()),
+			_ => Err(hts_err("Error appending line to VCF/BCF header".to_string()))
+		}
+	}
+	
+	pub fn add_sample<S: AsRef<str>>(&mut self, name: S) -> io::Result<()> {
+		match unsafe{ bcf_hdr_add_sample(self, get_cstr(name).as_ptr())} {
+			0 => Ok(()),
+			_ => Err(hts_err("Error adding sample to VCF/BCF header".to_string()))
+		}
+	}	
+	pub fn nctgs(&self) -> usize {self.n[BCF_DT_CTG as usize] as usize}
+	pub fn ctg_name(&self, rid: usize) -> io::Result<&str> {
+		if rid >= self.nctgs() { Err(hts_err("Invalid contig id".to_string()))}
+		else {
+			let p = unsafe {self.id[BCF_DT_CTG as usize].add(rid).as_ref()}.ok_or_else(|| hts_err("Invalid contig id".to_string()))?.key;
+			Ok(from_cstr(p))
+		}
+	}
+	pub fn copy_ctgs(&self) -> Box<[Box<str>]> {
+		let nctgs = self.nctgs();
+		let mut ctg_names = Vec::with_capacity(nctgs);
+		for rid in 0..nctgs {
+			let s = from_cstr(unsafe {self.id[BCF_DT_CTG as usize].add(rid).as_ref()}.expect("Invalid contig id").key).to_owned();
+			ctg_names.push(s.into_boxed_str());
+		}
+		ctg_names.into_boxed_slice()
+	}
+	pub fn write(&mut self, hout: &mut HtsFile) -> io::Result<()> {
+		match unsafe { bcf_hdr_write(hout.inner_mut(), self) } {
+			0 => Ok(()),
+			_ => Err(hts_err("Error writing VCF/BCF header".to_string()))			
+		}
+	}
+	pub fn id2int<S: AsRef<str>>(&self, category: usize, name: S) -> Option<usize> {
+		let ix = unsafe { bcf_hdr_id2int(self, category as libc::c_int, get_cstr(name.as_ref()).as_ptr()) };
+		if ix < 0 { None } else { Some(ix as usize) }
+	}
+	pub fn sync(&mut self) -> io::Result<()> {
+		match unsafe{ bcf_hdr_sync(self)} {
+			0 => Ok(()),
+			_ => Err(hts_err("Error adding sample to VCF/BCF header".to_string()))
+		}		
+	}
+	
 }
 
 #[repr(C)]
@@ -154,6 +216,7 @@ struct bcf_srs_t {
 #[link(name = "hts")]
 extern "C" {
 	fn bcf_hdr_init(mode: *const c_char) -> *mut bcf_hdr_t;
+	fn bcf_hdr_dup(hdr: *const bcf_hdr_t) -> *mut bcf_hdr_t;
 	fn bcf_hdr_destroy(hdr: *mut bcf_hdr_t);
 	fn bcf_hdr_append(hdr: *mut bcf_hdr_t, line: *const c_char) -> c_int;
 	fn bcf_hdr_get_version(hdr: *const bcf_hdr_t) -> *const c_char;
@@ -173,6 +236,7 @@ extern "C" {
 	fn bcf_sr_next_line(readers: *mut bcf_srs_t) -> c_int;
 	fn bcf_unpack(b: *mut bcf1_t, which: c_int);
 	fn bcf_get_format_values(hdr: *const bcf_hdr_t, line: *mut bcf1_t, tag: *const c_char, dst: *mut *mut c_void, ndst: *mut c_int, _type: c_int) -> c_int;
+	fn bcf_get_info_values(hdr: *const bcf_hdr_t, line: *mut bcf1_t, tag: *const c_char, dst: *mut *mut c_void, ndst: *mut c_int, _type: c_int) -> c_int;
 }
 
 pub struct BcfSrs {
@@ -217,20 +281,20 @@ impl BcfSrs {
 			}
 		}		
 	}
-	pub fn get_reader_hdr(&mut self, idx: usize) -> io::Result<VcfHeader> {
+	pub fn get_reader_hdr(&mut self, idx: usize) -> io::Result<&bcf_hdr_t> {
 		unsafe {
 			let rdr = self.get_reader(idx)?;
-			match NonNull::new(rdr.as_ref().unwrap().header) {
-				None => Err(hts_err("Null BCF header in synced BCF reader".to_string())),
-				Some(hdr) => Ok(VcfHeader{inner: hdr, owned: false}),
-			}
+			let hdr = rdr.as_ref().unwrap().header;
+			if hdr.is_null() { Err(hts_err("Null BCF header in synced BCF reader".to_string())) }
+			else { Ok(hdr.as_ref().unwrap()) }
 		}
 	}
 	pub fn next_line(&mut self) -> c_int { unsafe {bcf_sr_next_line(self.inner_mut())}}
-	pub fn swap_line(&mut self, idx: usize, brec: BcfRec) -> io::Result<BcfRec> {
+
+	pub fn swap_line(&mut self, idx: usize, brec: &mut BcfRec) -> io::Result<()> {
 		let rdr = self.get_reader(idx)?;
 		unsafe { std::ptr::swap(brec.inner.as_ptr(), *rdr.as_ref().unwrap().buffer) }
-		Ok(brec)
+		Ok(())
 	} 
 }
 
@@ -240,7 +304,28 @@ impl Drop for BcfSrs {
 
 pub struct VcfHeader {
 	inner: NonNull<bcf_hdr_t>,
-	owned: bool,
+	phantom: PhantomData<bcf_hdr_t>,
+}
+
+impl Deref for VcfHeader {
+	type Target = bcf_hdr_t;
+	#[inline]
+	fn deref(&self) -> &bcf_hdr_t { unsafe{self.inner.as_ref()} }	
+}
+
+impl DerefMut for VcfHeader {
+	#[inline]
+	fn deref_mut(&mut self) -> &mut bcf_hdr_t {unsafe{ self.inner.as_mut() }}
+}
+
+impl AsRef<bcf_hdr_t> for VcfHeader {
+	#[inline]
+	fn as_ref(&self) -> &bcf_hdr_t { self}	
+}
+
+impl AsMut<bcf_hdr_t> for VcfHeader {
+	#[inline]
+	fn as_mut(&mut self) -> &mut bcf_hdr_t { self}	
 }
 
 unsafe impl Sync for VcfHeader {}
@@ -250,59 +335,18 @@ impl VcfHeader {
 	pub fn new(mode: &str) -> io::Result<VcfHeader> {
 		match NonNull::new(unsafe{ bcf_hdr_init(get_cstr(mode).as_ptr())}) {
 			None => Err(hts_err("Couldn't create VCF/BCF header".to_string())),
-			Some(hdr) => Ok(VcfHeader{inner: hdr, owned: true}),
+			Some(hdr) => Ok(VcfHeader{inner: hdr, phantom: PhantomData}),
 		}
 	}
-	fn inner(&self) -> &bcf_hdr_t { unsafe{self.inner.as_ref()} }
-	fn inner_mut(&mut self) -> &mut bcf_hdr_t { unsafe{ self.inner.as_mut() }} 
-	
-	pub fn append<S: AsRef<str>>(&mut self, line: S) -> io::Result<()> {
-		match unsafe{ bcf_hdr_append(self.inner_mut(), get_cstr(line).as_ptr())} {
-			0 => Ok(()),
-			_ => Err(hts_err("Error appending line to VCF/BCF header".to_string()))
-		}
-	}
-	
-	pub fn get_version(&self) -> &str {
-		from_cstr(unsafe { bcf_hdr_get_version(self.inner()) })
-	}
-	
-	pub fn add_sample<S: AsRef<str>>(&mut self, name: S) -> io::Result<()> {
-		match unsafe{ bcf_hdr_add_sample(self.inner_mut(), get_cstr(name).as_ptr())} {
-			0 => Ok(()),
-			_ => Err(hts_err("Error adding sample to VCF/BCF header".to_string()))
-		}
-	}	
-	pub fn nsamples(&self) -> usize {self.inner().n[BCF_DT_SAMPLE as usize] as usize}
-	pub fn nctgs(&self) -> usize {self.inner().n[BCF_DT_CTG as usize] as usize}
-	pub fn ctg_name(&self, rid: usize) -> io::Result<&str> {
-		if rid >= self.nctgs() { Err(hts_err("Invalid contig id".to_string()))}
-		else {
-			let p = unsafe {self.inner().id[BCF_DT_CTG as usize].add(rid).as_ref()}.ok_or_else(|| hts_err("Invalid contig id".to_string()))?.key;
-			Ok(from_cstr(p))
-		}
-	}
-	pub fn write(&mut self, hout: &mut HtsFile) -> io::Result<()> {
-		match unsafe { bcf_hdr_write(hout.inner_mut(), self.inner_mut()) } {
-			0 => Ok(()),
-			_ => Err(hts_err("Error writing VCF/BCF header".to_string()))			
-		}
-	}
-	pub fn id2int<S: AsRef<str>>(&self, category: usize, name: S) -> Option<usize> {
-		let ix = unsafe { bcf_hdr_id2int(self.inner(), category as libc::c_int, get_cstr(name.as_ref()).as_ptr()) };
-		if ix < 0 { None } else { Some(ix as usize) }
-	}
-	pub fn sync(&mut self) -> io::Result<()> {
-		match unsafe{ bcf_hdr_sync(self.inner_mut())} {
-			0 => Ok(()),
-			_ => Err(hts_err("Error adding sample to VCF/BCF header".to_string()))
-		}		
-	}
+	pub fn as_bcf_hdr_t(&self) -> &bcf_hdr_t { self}
+	pub fn as_mut_bcf_hdr_t(&mut self) -> &mut bcf_hdr_t { self}
 }
+
+
 
 impl Drop for VcfHeader {
 	fn drop(&mut self) {
-		if self.owned {unsafe { bcf_hdr_destroy(self.inner_mut())} };
+		unsafe { bcf_hdr_destroy(self.as_mut_bcf_hdr_t())};
 	}
 }
 
@@ -427,6 +471,19 @@ pub struct BcfRec {
 unsafe impl Sync for BcfRec {}
 unsafe impl Send for BcfRec {}
 
+fn prepare_format_args<T>(tag: &str, buf: &mut MallocDataBlock<T>) -> (CString, *mut T, c_int) {
+	let (p, _, cap) = unsafe {buf.raw_parts()};
+	let cap = cap as c_int;
+	let tag = CString::new(tag).unwrap();
+	(tag, p, cap)		
+}
+
+fn ret_format_res<T>(p: *mut T, len: c_int, cap: c_int, buf: &mut MallocDataBlock<T>) -> Option<usize> {
+	unsafe{buf.update_raw_parts(p, len as usize, cap as usize)};
+	if len < 0 { None }
+	else { Some(buf.len()) }
+}
+
 impl BcfRec {
 	pub fn new() -> io::Result<Self> { 
 		match NonNull::new(unsafe{bcf_init()}) {
@@ -449,8 +506,8 @@ impl BcfRec {
 	pub fn set_n_sample(&mut self, n_sample: usize) { self.inner_mut().set_n_sample(n_sample as u32) }
 	pub fn set_n_fmt(&mut self, n_fmt: usize) { self.inner_mut().set_n_fmt(n_fmt as u8) }
 	pub fn set_qual(&mut self, qual: f32) { self.inner_mut().qual = qual }
-	pub fn write(&mut self, file: &mut HtsFile, hdr: &mut VcfHeader) -> io::Result<()> {
-		if unsafe { bcf_write(file.inner_mut(), hdr.inner_mut(), self.inner_mut()) } < 0 { Err(hts_err("Error writing out VCF record".to_string())) } else { Ok(()) }
+	pub fn write<H: AsMut<bcf_hdr_t>>(&mut self, file: &mut HtsFile, mut hdr: H) -> io::Result<()> {
+		if unsafe { bcf_write(file.inner_mut(), hdr.as_mut(), self.inner_mut()) } < 0 { Err(hts_err("Error writing out VCF record".to_string())) } else { Ok(()) }
 	}
 	pub fn unpack(&mut self, which: usize) { unsafe{bcf_unpack(self.inner_mut(), which as c_int)} }
 	pub fn id(&mut self) -> &str {
@@ -474,14 +531,21 @@ impl BcfRec {
 		for i in 0..n_all {	v.push(from_cstr(unsafe{*all.add(i)}))}		
 		v		
 	}
-	pub fn get_genotypes(&mut self, hdr: &VcfHeader, buf: MallocDataBlock<i32>) -> io::Result<MallocDataBlock<i32>> {
-		let (mut p, _, cap) = buf.into_raw_parts();
-		let mut cap = cap as c_int;
-		let tag = CString::new("GT").unwrap();
-		let len = unsafe {bcf_get_format_values(hdr.inner(), self.inner_mut(), tag.as_ptr(), &mut p as *mut *mut i32 as *mut *mut c_void, &mut cap as *mut c_int, BCF_HT_INT)};
-		if len < 0 { Err(hts_err(format!("Error getting genotype data: {}", len))) }
-		else { Ok(unsafe{MallocDataBlock::from_raw_parts(p, len as usize, cap as usize)})}
+	pub fn get_format_values<T, H: AsRef<bcf_hdr_t>>(&mut self, hdr: H, tag: &str, buf: &mut MallocDataBlock<T>, vtype: c_int) -> Option<usize> {
+		let (tag, mut p, mut cap) = prepare_format_args(tag, buf);
+		let len = unsafe {bcf_get_format_values(hdr.as_ref(), self.inner_mut(), tag.as_ptr(), &mut p as *mut *mut T as *mut *mut c_void, &mut cap as *mut c_int, vtype)};
+		ret_format_res(p, len, cap, buf)
 	}
+	pub fn get_format_i32(&mut self, hdr: &VcfHeader, tag: &str, buf: &mut MallocDataBlock<i32>) -> Option<usize> { self.get_format_values(hdr, tag, buf, BCF_HT_INT)}
+	pub fn get_format_f32(&mut self, hdr: &VcfHeader, tag: &str, buf: &mut MallocDataBlock<f32>) -> Option<usize> { self.get_format_values(hdr, tag, buf, BCF_HT_REAL)}
+	pub fn get_format_u8(&mut self, hdr: &VcfHeader, tag: &str, buf: &mut MallocDataBlock<u8>) -> Option<usize> { self.get_format_values(hdr, tag, buf, BCF_HT_STR)}
+	pub fn get_genotypes(&mut self, hdr: &VcfHeader, buf: &mut MallocDataBlock<i32>) -> Option<usize> { self.get_format_i32(hdr, "GT", buf) }
+	pub fn get_info_values<T, H: AsRef<bcf_hdr_t>>(&mut self, hdr: H, tag: &str, buf: &mut MallocDataBlock<T>, vtype: c_int) -> Option<usize> {
+		let (tag, mut p, mut cap) = prepare_format_args(tag, buf);
+		let len = unsafe {bcf_get_info_values(hdr.as_ref(), self.inner_mut(), tag.as_ptr(), &mut p as *mut *mut T as *mut *mut c_void, &mut cap as *mut c_int, vtype)};
+		ret_format_res(p, len, cap, buf)
+	}
+	pub fn get_info_u8(&mut self, hdr: &VcfHeader, tag: &str, buf: &mut MallocDataBlock<u8>) -> Option<usize> { self.get_info_values(hdr, tag, buf, BCF_HT_STR)}
 }
 
 impl Drop for BcfRec { 

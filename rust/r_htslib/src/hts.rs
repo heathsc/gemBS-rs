@@ -372,7 +372,7 @@ impl HtsFile {
 			Some(fptr) => Ok(HtsFile{inner: fptr, name: name.to_owned()}), 
 		}
 	}
-	pub(crate) fn name(&self) -> &str { &self.name }
+	pub fn name(&self) -> &str { &self.name }
 	pub(crate) fn inner(&self) -> &htsFile { unsafe{self.inner.as_ref()} }
 	pub(crate) fn inner_mut(&mut self) -> &mut htsFile { unsafe{ self.inner.as_mut() }} 
 

@@ -76,6 +76,18 @@ impl <T> MallocDataBlock<T> {
 			Self::new() 
 		} else { Self {data: NonNull::new(p).unwrap(), _marker: PhantomData, cap, len }}
 	}
+	pub unsafe fn update_raw_parts(&mut self, p: *mut T, len: usize, cap: usize) {
+		assert!(len <= cap);
+		if cap == 0 {
+			assert!(p.is_null());
+			self.data = NonNull::dangling();
+		} else { self.data = NonNull::new(p).unwrap() }
+		self.cap = cap;
+		self.len = len;
+	}
+	pub unsafe fn raw_parts(&mut self) -> (*mut T, usize, usize) {
+		(if self.cap == 0 {std::ptr::null_mut()} else {self.data.as_mut()}, self.len, self.cap)
+	}
 }
 
 impl <T>Drop for MallocDataBlock<T> {
