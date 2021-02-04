@@ -65,12 +65,11 @@ fn call_from_pileup(mut pileup: Pileup, model: &Model, fisher: &FisherTest, writ
 			});
 			let aq = cmp::min((total_qual / (total_flt as f32)).round() as usize, 255) as u8;
 			let mq = cmp::min((pp.mapq2 / (total_flt as f32)).sqrt().round() as usize, 255) as u8;
-			let (mx, gt_ll) = model.calc_gt_prob(&counts, &qual, *ref_base);
+			let (mx, gt_ll) = model.calc_gt_prob(&counts, &qual, *ref_base, None);
 			let fisher_strand = fisher.calc_fs_stat(mx, &pp.counts);
 			let gc = pileup.gc_bins[(ix + pileup.start) / (GC_BIN_SIZE as usize) - gc_bin_start];
 			CallEntry::Call(GenotypeCall{counts, gt_ll, fisher_strand, qual, mq, aq, max_gt: mx as u8, gc, ref_base: *ref_base})
-		} else { CallEntry::Skip(*
-		ref_base) };
+		} else { CallEntry::Skip(*ref_base) };
 		call_vec.push(call);
 		if call_vec.len() == BLOCK_SIZE {
 			send_write_job(WriteVcfJob::GenotypeCall(call_vec), write_tx)?;	
@@ -98,7 +97,7 @@ pub fn call_genotypes(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<Pileu
 	let conversion = (bs_cfg.conf_hash.get_float("under_conversion"), bs_cfg.conf_hash.get_float("over_conversion"));
 	let (write_tx, write_rx) = mpsc::sync_channel(32);
 	let write_handle = thread::spawn(move || { write_vcf_entry(Arc::clone(&bs_cfg), write_rx, bs_files, stat_tx) });
-	let model = Model::new(63, conversion, ref_bias, haploid);
+	let model = Model::new(conversion, ref_bias, haploid);
 	let fisher = FisherTest::new();
 	loop {
 		match rx.recv() {

@@ -1,6 +1,8 @@
 use std::f64::consts::LN_10;
 use libc::c_int;
 
+pub const MAX_QUAL: usize = 64;
+
 #[derive(Debug)]
 pub struct QualProb {
 	k: f64,
@@ -20,10 +22,10 @@ pub struct Model {
 
 
 impl Model {
-	pub fn new(max_qual: usize, conv: (f64, f64), ref_bias: f64, haploid: bool) -> Self {
+	pub fn new(conv: (f64, f64), ref_bias: f64, haploid: bool) -> Self {
 		assert!(conv.0 > 0.0 && conv.0 < 1.0 && conv.1 > 0.0 && conv.1 < 1.0 && ref_bias > 0.0);
-		let mut v = Vec::with_capacity(max_qual + 1);
-		for q in 0..=max_qual {
+		let mut v = Vec::with_capacity(MAX_QUAL + 1);
+		for q in 0..=MAX_QUAL {
 			let e = {
 				let t = ((q as f64) * LN_10 * -0.1).exp();
 				if t > 0.5 { 0.5 } else { t }
@@ -69,7 +71,7 @@ impl Model {
    * only the 10 possible diploid genotypes)
    *
    **********************************************************************************************/	
-	pub fn calc_gt_prob(&self, counts: &[c_int; 8], qual: &[c_int; 8], ref_base: u8) -> (usize, [f64; 10]) {
+	pub fn calc_gt_prob(&self, counts: &[c_int; 8], qual: &[c_int; 8], ref_base: u8, meth: Option<&mut [f64; 6]>) -> (usize, [f64; 10]) {
 		let qp: Vec<_> = qual.iter().map(|x| &self.qtab[*x as usize]).collect();
 		let n: Vec<_> = counts.iter().map(|x| *x as f64).collect();
 		let mut ll = self.add_ref_prior(ref_base);
@@ -91,8 +93,12 @@ impl Model {
 			let (x, tz, tz1) = get_par(3);
 			add_contrib(&[tz1, tz1, tz1, tz, tz1, tz1, tz, tz1, tz, x]);
 		}
-		let z0 = self.get_z( counts[5], counts[7], qp[5].k, qp[7].k);
-		let z1 = self.get_z( counts[6], counts[4], qp[6].k, qp[4].k);
+		let (m1, m2) = if let Some(v) = meth { 
+				let (m1, m2) = v.split_at_mut(3);
+				(Some(m1), Some(m2))			
+		} else { (None, None) };
+		let z0 = self.get_z( counts[5], counts[7], qp[5].k, qp[7].k, m1);
+		let z1 = self.get_z( counts[6], counts[4], qp[6].k, qp[4].k, m2);
 		if counts[4] != 0 {
 			let (x, tz, tz1) = get_par(4);
 			let tz2 = n[4] * (0.5 * (1.0 - z1.2) + qp[4].k).ln();
@@ -125,8 +131,8 @@ impl Model {
 		}
 	}
 
-	fn get_z(&self, c1: i32, c2: i32, k1: f64, k2: f64) -> (f64, f64, f64) {
-		match (c1, c2) {
+	fn get_z(&self, c1: i32, c2: i32, k1: f64, k2: f64, meth: Option<&mut[f64]>) -> (f64, f64, f64) {
+		 let z = match (c1, c2) {
 			(0, 0) => (0.0, 0.0, 0.0), // Never used so it doesn't matter
 			(_, 0) =>  (1.0 - self.theta, 1.0 - self.theta, 1.0 - self.theta),
 			(0, _) =>  (1.0 - self.lambda, 1.0 - self.lambda, 1.0 - self.lambda),
@@ -143,7 +149,18 @@ impl Model {
 					f((x1 * (lpt + 4.0 * k2) - x2 * (2.0 - lpt + 4.0 * k1)) / d) // w = 1.2, p = 1
 				)
 			},
+		};
+		if let Some(mv) = meth {
+			if c1 == 0 && c2 == 0 { for m in mv.iter_mut() { *m = -1.0 }}
+			else {
+				let fchk = |x| if x < 0.0 { -1.0 } else if x > 1.0 { 1.0} else { x };			
+				let d = self.lambda - self.theta;
+				mv[0] = fchk((z.0 - 1.0 + self.lambda) / d);
+				mv[1] = fchk((z.1 - 1.0 + self.lambda) / d);
+				mv[2] = fchk((z.2 - 1.0 + self.lambda) / d);
+			}			
 		}
+		z
 	}
 
 	fn add_ref_prior(&self, ref_base: u8) -> [f64; 10] {
