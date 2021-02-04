@@ -1,12 +1,12 @@
-use std::io::{self, ErrorKind, Error};
-use std::ptr::{null_mut, NonNull, null};
-use std::ffi::{CString, c_void, CStr};
+use std::io;
+use std::ptr::{null_mut, NonNull};
+use std::ffi::{CString, c_void};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 use libc::{c_char, c_int, c_short, c_uint, c_uchar, size_t, ssize_t, off_t};
 use c2rust_bitfields::BitfieldStruct;
-use super::{hts_err, get_cstr, SamReadResult, sam_hdr_t, bam1_t, kstring_t};
+use super::{hts_err, get_cstr, SamReadResult, sam_hdr_t, bam1_t, kstring_t, tbx_t, TbxReadResult, BGZF};
 
 pub type HtsPos = i64;
 
@@ -34,12 +34,12 @@ pub const FT_STDIN: u32 = 8;
 #[repr(C)]
 #[derive(BitfieldStruct)]
 pub struct hFILE { 
-	buffer: *mut c_char,
-	begin: *mut c_char,
-	end: *mut c_char,
+	pub(crate) buffer: *mut c_char,
+	pub(crate) begin: *mut c_char,
+	pub(crate) end: *mut c_char,
 	limit: *mut c_char,
 	backend: *const c_void,
-	offset: off_t,
+	pub(crate) offset: off_t,
 	#[bitfield(name = "at_eof", ty = "c_uchar", bits = "0..=0")]
 	#[bitfield(name = "mobile", ty = "c_uchar", bits = "1..=1")]
 	#[bitfield(name = "readonly", ty = "c_uchar", bits = "2..=2")]
@@ -189,43 +189,13 @@ impl hts_itr_t {
 			hts_itr_next(if fp.as_mut().is_bgzf() != 0 { fp.as_mut().fp.bgzf } else { null_mut::<BGZF>() },
 				self, &mut kstr as *mut _ as *mut c_void, tbx.as_mut() as *mut tbx_t as *mut c_void)
 			} {
-			0..=c_int::MAX => TbxReadResult::Ok(kstr),
+			0..=c_int::MAX => TbxReadResult::Ok,
 			-1 => TbxReadResult::EOF,
 			_ => TbxReadResult::Error,
 		}
 	}
 }
-#[repr(C)]
-pub struct bgzidx_t { _unused: [u8; 0], }
-#[repr(C)]
-#[derive(BitfieldStruct)]
-pub struct BGZF {
-	#[bitfield(name = "errcode", ty = "u16", bits = "0..=15")]
-	#[bitfield(name = "reserved", ty = "c_uchar", bits = "16..=16")]
-	#[bitfield(name = "is_write", ty = "c_uchar", bits = "17..=17")]
-	#[bitfield(name = "no_eof_block", ty = "c_uchar", bits = "18..=18")]
-	#[bitfield(name = "is_be", ty = "c_uchar", bits = "19..=19")]
-	#[bitfield(name = "compress_level", ty = "u16", bits = "20..=28")]
-	#[bitfield(name = "last_block_eof", ty = "c_uchar", bits = "29..=29")]
-	#[bitfield(name = "is_compressed", ty = "c_uchar", bits = "30..=30")]
-	#[bitfield(name = "is_gzip", ty = "c_uchar", bits = "31..=31")]
-	bfield: [u8; 4],
-	cache_size: c_int,
-	block_length: c_int,
-	block_clength: c_int,
-	block_offset: c_int,
-	block_address: i64,
-	uncompressed_address: i64,
-	uncompressed_block: *mut c_void,
-	compressed_block: *mut c_void,
-	cache: *mut c_void,
-	fp: *mut hFILE,
-	mt: *mut c_void,
-	idx: *mut bgzidx_t,
-	idx_build_otf: c_int,
-	z_stream_s: *mut c_void,
-	seeked: i64,
-}
+
 #[repr(C)]
 pub enum htsFormatCategory { UnknownCategory, SequenceData, VariantData, IndexFile, RegionList }
 #[repr(C)]
@@ -260,53 +230,6 @@ pub struct htsFormat {
 #[repr(C)]
 pub struct htsThreadPool { _unused: [u8; 0], }
 
-pub const TBX_GENERIC: i32 = 0;
-pub const TBX_SAM: i32 = 1;
-pub const TBX_VCF: i32 = 2;
-pub const TBX_UCSC: i32 = 0x10000;
-
-#[repr(C)]
-pub struct tbx_conf_t {
-	preset: i32,
-	sc: i32,
-	bc: i32,
-	ec: i32,
-	meta_char: i32,
-	line_skip: i32,
-}
-
-#[allow(non_upper_case_globals)]
-pub const tbx_conf_vcf: tbx_conf_t = tbx_conf_t{ preset: TBX_VCF, sc: 1, bc: 2, ec: 0, meta_char: b'#' as i32, line_skip: 0};
-
-#[repr(C)]
-pub struct tbx_t {
-	conf: tbx_conf_t,
-	index: *const hts_idx_t,
-	dict: *mut c_void,
-}
-
-impl tbx_t {
-	pub fn seq_names(&self) -> Option<Vec<&str>> {
-		let mut n_seq: c_int = 0;
-		let p = unsafe{tbx_seqnames(self, &mut n_seq as *mut c_int)};
-		if p.is_null() {
-			None	
-		} else {
-			let mut v = Vec::with_capacity(n_seq as usize);
-			for i in 0..n_seq {
-				let c_str: &CStr = unsafe { CStr::from_ptr(*p.offset(i as isize)) };
-    			let str_slice: &str = c_str.to_str().unwrap();
-				v.push(str_slice);
-			}
-			unsafe {libc::free(p as *mut c_void)};
-			Some(v)
-		}
-		
-	}
-	pub fn tbx_itr_queryi(&self, tid: c_int, beg: HtsPos, end: HtsPos) -> io::Result<HtsItr> {
-		HtsItr::new(unsafe {hts_itr_query(self.index, tid, beg, end, tbx_readrec)}).ok_or_else(|| hts_err("Failed to obtain tbx iterator".to_string()))
-	}
-}
 
 #[link(name = "hts")]
 extern "C" {
@@ -317,19 +240,11 @@ extern "C" {
 	fn sam_index_load(fp_ : *mut htsFile, name: *const c_char) -> *mut hts_idx_t;
 	fn hts_set_fai_filename(fp_ : *mut htsFile, fn_aux: *const c_char) -> c_int;
 	fn hts_itr_destroy(iter: *mut hts_itr_t);
-	fn hts_itr_query(idx: *const hts_idx_t, tid: c_int, beg: HtsPos, end: HtsPos,
-		readrec: unsafe extern "C" fn (*mut BGZF, *mut c_void, *mut c_void, *mut c_int, *mut HtsPos, *mut HtsPos) -> c_int) -> *mut hts_itr_t;
 	fn sam_itr_queryi(idx: *const hts_idx_t, tid: c_int, start: HtsPos, end: HtsPos) -> *mut hts_itr_t; 
 	fn sam_itr_regarray(idx: *const hts_idx_t, hdr: *mut sam_hdr_t, regarray: *const *const c_char, count: c_uint) -> *mut hts_itr_t; 
 	fn hts_itr_multi_next(fp: *mut htsFile, itr: *mut hts_itr_t, r: *mut c_void) -> c_int;
 	fn hts_itr_next(fp: *mut BGZF, itr: *mut hts_itr_t, r: *mut c_void, data: *mut c_void) -> c_int;
-	fn tbx_index_load3(fname: *const c_char, fnidx: *const c_char, flags: c_int) -> *mut tbx_t;
-	fn tbx_seqnames(tbx: *const tbx_t, n: *mut c_int) -> *mut *const c_char;
-	fn tbx_readrec(fp: *mut BGZF, tbxv: *mut c_void, sv: *mut c_void, tid: *mut c_int, beg: *mut HtsPos, end: *mut HtsPos) -> c_int;
-	fn tbx_destroy(tbx: *mut tbx_t);
 	fn bgzf_write(fp: *mut BGZF, data: *const c_void, length: size_t) -> ssize_t;
-	fn bgzf_seek(fp: *mut BGZF, pos: i64, whence: c_int) -> i64;
-	fn bgzf_read_block(fp: *mut BGZF) -> c_int;
 	fn hwrite2(fp: *mut hFILE, srcv: *const c_void, total_bytes: size_t, ncopied: size_t) -> ssize_t; 	
 	fn hfile_set_blksize(fp: *mut hFILE, bufsize: size_t) -> c_int;	
 	fn hts_idx_init(n: c_int, fmt: c_int, offset0: u64, min_shift: c_int, n_lvls: c_int) -> *mut hts_idx_t;
@@ -338,129 +253,7 @@ extern "C" {
 	fn hts_idx_finish(idx: *mut hts_idx_t, final_offset: u64) -> c_int;
 	fn hts_idx_set_meta(idx: *mut hts_idx_t, l_meta: u32, meta: *const u8, is_copy: c_int) -> c_int;
 	fn hts_idx_save_as(idx: *mut hts_idx_t, fname: *const c_char, fnidx: *const c_char, fmt: c_int) -> c_int;
-	pub fn tbx_index_build(fname: *const c_char, min_shift: c_int, conf: *const tbx_conf_t) -> c_int;
 	pub fn hts_set_log_level(level: htsLogLevel);
-}
-
-impl BGZF {
-	pub fn tell(&self) -> i64 { (self.block_address << 16) | ((self.block_offset & 0xffff) as i64)}
-	pub fn htell(&self) -> off_t {
-		if self.mt.is_null() {
-			let fp = unsafe{&*self.fp};
-			fp.offset + (unsafe{fp.begin.offset_from(fp.buffer)} as off_t)
-		} else { panic!("Multithreaded htell() not supported")}	
-	}
-	pub fn seek(&mut self, pos: i64) -> i64 {unsafe{bgzf_seek(self, pos, libc::SEEK_SET as c_int)}}
-	pub fn getline(&mut self, delim: u8, s: &mut Vec<u8>) -> io::Result<usize> {
-		s.clear();
-		let mut state = 0;
-		loop {
-			if self.block_offset >= self.block_length {
-				if unsafe{bgzf_read_block(self)} != 0 {
-					state = -2;
-					break;
-				}
-				if self.block_length == 0 {
-					state = -1;
-					break;
-				}
-			}
-			let buf = unsafe{std::slice::from_raw_parts(self.uncompressed_block as *const u8, self.block_length as usize)};
-			let mut l = 0;
-			for c in &buf[self.block_offset as usize..] {
-				l += 1;
-				if *c == delim { 
-					state = 1;
-					break;
-				}
-				s.push(*c);
-			}
-			self.block_offset += l;
-			if self.block_offset >= self.block_length {
-				let fp = unsafe{&*self.fp};
-				self.block_address = fp.offset + (unsafe{fp.begin.offset_from(fp.buffer)} as off_t);
-				self.block_offset = 0;
-				self.block_length = 0;
-			}
-			if state != 0 { break }
-		}
-		if state < 0 {
-			if s.is_empty() {
-				if state == -1 { Err(Error::new(ErrorKind::UnexpectedEof, "EOF")) }
-				else { Err(hts_err("Error uncompressing data".to_string()))	} 
-			} else {
-				s.clear();
-				Err(Error::new(ErrorKind::UnexpectedEof, "Incomplete line"))				
-			}
-		} else {
-			self.uncompressed_address += 1 + s.len() as i64;	
-			if s.is_empty() { Ok (0) } // Empty line
-			else {
-				if delim == b'\n' && s[s.len() - 1] == b'\r' { s.pop(); }			
-				Ok(s.len())
-			}
-		}
-	}
-	pub fn clear_eof(&mut self) {
-		self.set_last_block_eof(0);
-		self.set_no_eof_block(0);
-		let fp = unsafe{&mut *self.fp};
-		fp.set_at_eof(0);
-		fp.begin = fp.buffer;
-		fp.end = fp.buffer;
-	}
-}
-
-pub struct Tbx {
-	inner: NonNull<tbx_t>,
-	phantom: PhantomData<tbx_t>,
-} 
-
-impl Deref for Tbx {
-	type Target = tbx_t;
-	#[inline]
-	fn deref(&self) -> &tbx_t { unsafe{self.inner.as_ref()} }	
-}
-
-impl DerefMut for Tbx {
-	#[inline]
-	fn deref_mut(&mut self) -> &mut tbx_t {unsafe{ self.inner.as_mut() }}
-}
-
-impl AsRef<tbx_t> for Tbx {
-	#[inline]
-	fn as_ref(&self) -> &tbx_t { self}	
-}
-
-impl AsMut<tbx_t> for Tbx {
-	#[inline]
-	fn as_mut(&mut self) -> &mut tbx_t { self}	
-}
-
-unsafe impl Sync for Tbx {}
-unsafe impl Send for Tbx {}
-
-impl Drop for Tbx {
-	fn drop(&mut self) {
-		unsafe { tbx_destroy(self.as_mut()) };
-	}
-}
-
-
-impl Tbx {
-	pub fn new<S: AsRef<str>>(name: S) -> io::Result<Self> {
-		let name = name.as_ref();
-		match NonNull::new(unsafe{ tbx_index_load3(get_cstr(name).as_ptr(), null::<c_char>(), 0)}) {
-			None =>	Err(hts_err(format!("Couldn't open tabix index for file {}", name))),
-			Some(p) => Ok(Tbx{inner: p, phantom: PhantomData}), 
-		}
-	}
-}
-
-pub enum TbxReadResult { 
-	Ok(kstring_t),
-	EOF,	
-	Error,
 }
 
 pub struct HtsFile {
@@ -659,5 +452,5 @@ impl Drop for HtsItr {
 }
 
 impl HtsItr {
-	fn new(itr: *mut hts_itr_t) -> Option<Self> { NonNull::new(itr).map(|p| HtsItr{ inner: p, phantom: PhantomData}) }
+	pub fn new(itr: *mut hts_itr_t) -> Option<Self> { NonNull::new(itr).map(|p| HtsItr{ inner: p, phantom: PhantomData}) }
 }

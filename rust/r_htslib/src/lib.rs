@@ -8,10 +8,17 @@ pub mod sam;
 pub use sam::*;
 pub mod vcf;
 pub use vcf::*;
+pub mod tbx;
+pub use tbx::*;
+pub mod bgzf;
+pub use bgzf::*;
 pub mod faidx;
 pub use faidx::*;
 pub mod kstring;
 pub use kstring::*;
+pub mod synced_bcf_reader;
+pub use synced_bcf_reader::*;
+
 pub mod malloc_data_block;
 pub use malloc_data_block::*;
 
