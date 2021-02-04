@@ -13,7 +13,7 @@ CC=@CC@
 
 ROOT_PATH=..
 
-TOOLS= mextr snpxtr
+TOOLS= mextr
 FOLDER_BIN=../bin
 TOOLS_BIN=$(addprefix $(FOLDER_BIN)/, $(TOOLS))
 LIBS:= $(LDFLAGS) -lm
@@ -30,18 +30,6 @@ MEXTR_COMMON_DEPS=utils.h
 
 MEXTR_SRC=$(addprefix mextr/, $(MEXTR)) $(addprefix common/, $(MEXTR_COMMON))
 MEXTR_DEP=$(addprefix mextr/, $(MEXTR_DEPS)) $(addprefix common/, $(MEXTR_COMMON_DEPS))
-
-SNPXTR_INC = @HTSINC@ -Isnpxtr
-SNPXTR_LIBS = @HTSLIBS@ -lz -lbz2 -lpthread $(LIBS)
-
-SNPXTR=snpxtr.c init_params.c command_line.c snplist.c process.c files.c
-SNPXTR_COMMON=utils.c dbSNP.c
-
-SNPXTR_DEPS=snpxtr.h 
-SNPXTR_COMMON_DEPS=utils.h dbSNP.h
-
-SNPXTR_SRC=$(addprefix snpxtr/, $(SNPXTR)) $(addprefix common/, $(SNPXTR_COMMON))
-SNPXTR_DEP=$(addprefix snpxtr/, $(SNPXTR_DEPS)) $(addprefix common/, $(SNPXTR_COMMON_DEPS))
 
 all: TOOLS_FLAGS=-O3 -g $(GENERAL_FLAGS) $(ARCH_FLAGS) $(SUPPRESS_CHECKS) $(OPTIMIZTION_FLAGS) $(ARCH_FLAGS_OPTIMIZTION_FLAGS)
 all: $(TOOLS_BIN)
@@ -60,7 +48,4 @@ distclean: clean
 
 $(FOLDER_BIN)/mextr: $(MEXTR_SRC) $(MEXTR_DEP)
 	$(CC) $(TOOLS_FLAGS) -o $@ $(MEXTR_SRC) $(MEXTR_INC) $(MEXTR_LIBS)
-
-$(FOLDER_BIN)/snpxtr: $(SNPXTR_SRC) $(SNPXTR_DEP)
-	$(CC) $(TOOLS_FLAGS) -o $@ $(SNPXTR_SRC) $(SNPXTR_INC) $(SNPXTR_LIBS)
 
