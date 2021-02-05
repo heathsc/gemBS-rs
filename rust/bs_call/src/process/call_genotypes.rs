@@ -97,7 +97,7 @@ pub fn call_genotypes(bs_cfg: Arc<BsCallConfig>, rx: mpsc::Receiver<Option<Pileu
 	let conversion = (bs_cfg.conf_hash.get_float("under_conversion"), bs_cfg.conf_hash.get_float("over_conversion"));
 	let (write_tx, write_rx) = mpsc::sync_channel(32);
 	let write_handle = thread::spawn(move || { write_vcf_entry(Arc::clone(&bs_cfg), write_rx, bs_files, stat_tx) });
-	let model = Model::new(conversion, ref_bias, haploid);
+	let model = Model::new(conversion, ref_bias, haploid, true);
 	let fisher = FisherTest::new();
 	loop {
 		match rx.recv() {

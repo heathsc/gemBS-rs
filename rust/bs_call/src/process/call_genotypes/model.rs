@@ -18,11 +18,12 @@ pub struct Model {
 	lambda: f64, // 1 - under_conversion rate
 	theta: f64, // over_conversion rate
 	haploid: bool, // Haploid genome - don't call heterozygotes
+	log10: bool, // Give log probs as log10 (rather than ln)
 }
 
 
 impl Model {
-	pub fn new(conv: (f64, f64), ref_bias: f64, haploid: bool) -> Self {
+	pub fn new(conv: (f64, f64), ref_bias: f64, haploid: bool, log10: bool) -> Self {
 		assert!(conv.0 > 0.0 && conv.0 < 1.0 && conv.1 > 0.0 && conv.1 < 1.0 && ref_bias > 0.0);
 		let mut v = Vec::with_capacity(MAX_QUAL + 1);
 		for q in 0..=MAX_QUAL {
@@ -38,7 +39,7 @@ impl Model {
 				ln_k_one: k.ln_1p(),
 			})
 		}
-		Self{qtab: v, lambda: 1.0 - conv.0, theta: conv.1, haploid, ln_ref_bias: ref_bias.ln(), ln_ref_bias_1:(0.5 * (1.0 + ref_bias)).ln() }
+		Self{qtab: v, lambda: 1.0 - conv.0, theta: conv.1, haploid, log10, ln_ref_bias: ref_bias.ln(), ln_ref_bias_1:(0.5 * (1.0 + ref_bias)).ln() }
 	}
 
   /*********************************************************************************************
@@ -117,16 +118,17 @@ impl Model {
 			let tz2 = n[7] * (0.5 * (1.0 - z0.2) + qp[7].k).ln();
 			add_contrib(&[tz1, tz2, tz1, tz, n[7] * (1.0 - z0.0 + qp[7].k).ln(), tz2, n[7] * (1.0 - 0.5 * z0.1 + qp[7].k).ln(), tz1, tz, x]);
 		}
+		let q = if self.log10 { LN_10 } else { 1.0 };
 		if self.haploid {
 			let (mx, max) = [4, 7, 9].iter().copied().fold((0, ll[0]), |(i, m), j| if ll[j] > m { (j, ll[j]) } else { (i, m) });
 			let sum = ([0, 4, 7, 9].iter().copied().fold(0.0, |s, x| s + (ll[x] - max).exp())).ln();
-			[0, 4, 7, 9].iter().copied().for_each(|i| ll[i] = (ll[i] - max - sum) / LN_10);
+			[0, 4, 7, 9].iter().copied().for_each(|i| ll[i] = (ll[i] - max - sum) / q);
 			[1, 2, 3, 5, 6, 8].iter().copied().for_each(|i| ll[i] = f64::MIN);
 			(mx, ll)
 		} else {
 			let (mx, max) = ll[1..].iter().cloned().enumerate().fold((0, ll[0]), |(i, m), (j, l)| if l > m { (j + 1, l) } else { (i, m) });
 			let sum = (ll.iter().cloned().fold(0.0, |s, x| s + (x - max).exp())).ln();
-			ll.iter_mut().for_each(|x| *x = (*x - max - sum) / LN_10);
+			ll.iter_mut().for_each(|x| *x = (*x - max - sum) / q);
 			(mx, ll)
 		}
 	}
