@@ -63,8 +63,8 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
 		else { None }
 	};
 	if let Some((reg, flag)) = regions { sr.set_regions(&reg, flag)? }
-	let nt = chash.get_int("threads");
-	if nt > 0 { sr.set_threads(nt)? }
+//	let nt = chash.get_int("threads");
+//	if nt > 0 { sr.set_threads(nt)? }
 	sr.add_reader(infile)?;
 	
 	// Check sample numbers

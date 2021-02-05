@@ -26,9 +26,14 @@ pub fn process(chash: ConfHash, mut sr: BcfSrs) -> io::Result<()> {
 	let chash = Arc::new(chash);
 	let mut out_threads = Vec::new();
 	let mut out_channels = Vec::new();
+	
+	// Set up thread pool for htsFiles (both reading and writing)
 	let nt = chash.get_int("threads");
-	let compress = chash.get_bool("compress");
-	let thread_pool = Arc::new(if nt > 0 && compress { htsThreadPool::init(nt) } else { None });
+	let mut thread_pool = if nt > 0 { htsThreadPool::init(nt) } else { None };
+	if let Some(tp) = thread_pool.as_mut() { sr.get_reader(0)?.file().set_thread_pool(tp); }
+	
+	// We'll be sharing the pool with the output threads, so wrap it in an Arc.
+	let thread_pool = Arc::new(thread_pool);
 	// Set up output threads
 	for (_, f) in OUTPUTS.iter().filter(|(s, _)| chash.get_str(s).is_some()) {
 		let ch = chash.clone();
