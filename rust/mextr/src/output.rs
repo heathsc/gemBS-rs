@@ -2,19 +2,25 @@ use std::str::FromStr;
 use std::io::{self, Write};
 use std::sync::Arc;
 use std::collections::HashMap;
+use std::ops::Deref;
 
 use crossbeam_channel::Receiver;
 
-use r_htslib::{HtsFile, VcfHeader};
+use r_htslib::{HtsFile, VcfHeader, htsThreadPool};
 use libc::c_int;
 
 use super::config::*;
-use super::read_vcf::unpack::{Strand, RecordBlock};
+use super::read_vcf::unpack::{Strand, RecordBlock, RecordBlockElem};
 use super::read_vcf::BREC_BLOCK_SIZE;
+use super::process::{Recv, TPool};
 
-mod output_noncpg;
-use output_noncpg::*;
+mod output_cpg;
+use output_cpg::*;
+pub mod output_noncpg;
+pub use output_noncpg::*;
 
+pub const GT_IUPAC: &[u8] = "AMRWCSYGKT".as_bytes();
+pub const GT_MASK: [u8; 10] = [0x11, 0xb3, 0x55, 0x99, 0xa2, 0xf6, 0xaa, 0x54, 0xdc, 0x88];
 
 // REC_BLOCK_SIZE can not be smaller than BREC_BLOCK_SIZE
 pub const REC_BLOCK_SIZE: usize = BREC_BLOCK_SIZE;
@@ -79,8 +85,6 @@ impl Record {
 	}
 }
 
-
-
 pub fn calc_phred(z: f64) -> u8 {
 	if z <= 0.0 { 255 } else { ((-10.0 * z.log10()) as usize).min(255) as u8 }	
 }
@@ -116,49 +120,92 @@ impl OutputOpts {
 	pub fn threshold(&self) -> u8 { self.threshold }
 }
 
-// Open output file
-fn open_output_file(name: &str, compress: bool) -> HtsFile {
+fn open_output_file(name: &str, chash: &ConfHash, tp: TPool) -> HtsFile {
 	let mut fname = String::from_str(name).unwrap();
+	let compress = chash.get_bool("compress");
 	let output_mode = if compress { 
 		if !fname.ends_with(".gz") { fname.push_str(".gz")}
 		"wz" 
 	} else { "w" };
 	match HtsFile::new(&fname, output_mode) {
-		Ok(f) => f,
+		Ok(mut f) => {
+			if let Some(tpool) = tp.deref() { f.set_thread_pool(tpool); }
+			f
+		},
 		Err(e) => panic!("Couldn't open nonCpG file {} for output: {}", fname, e),
 	}
 }
 
-pub fn output_cpg_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Receiver<(usize, Arc<RecordBlock>)>) {
-	info!("output_cpg_thread starting up");
-	for msg in r.iter() {
-		// Do nothing
-	}
-	info!("output_cpg_thread closing down")
+pub fn get_prob_dist(prb: &mut [f64]) {
+	assert!(!prb.is_empty());
+	let ns = prb.len();
+	let mut x = 1.0;
+	for ix in 0..ns {
+		let z = prb[ix];
+		prb[ix] = x;
+		let t = prb[0];
+		prb[0] *=  1.0 - z;
+		let mut y = t;
+		for p in &mut prb[1..=ix] {
+			let t = *p; 
+			*p = y * z + t * (1.0 - z);
+			y = t;
+		}
+		x *= z;
+	} 
+} 
+
+type PrintHeader = fn(&mut HtsFile, &VcfHeader) -> io::Result<()>;
+type OutputBlock = fn(&mut HtsFile, &RecordBlock, Option<RecordBlockElem>, &ConfHash, &VcfHeader) -> io::Result<()>;
+
+// Print header for CpG and NonCpG tab separated variable files
+fn print_tsv_header(f: &mut HtsFile, hdr: &VcfHeader) -> io::Result<()> {
+	write!(f, "Contig\tPos0\tPos1\tRef")?;
+	for i in 0..hdr.nsamples() {
+		let name = hdr.sample_name(i)?;
+		write!(f, "\t{}:Call\t{}:Flags\t{}:Meth\t{}:non_conv\t{}:conv\t{}:support_call\t{}:total", name, name, name, name, name, name, name)?;
+	}	
+	writeln!(f)
 }
 
-pub fn output_noncpg_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Receiver<(usize, Arc<RecordBlock>)>) {
-	let output = chash.get_str("noncpgfile").expect("Non CpG output filename is missing");
-	let mut outfile = open_output_file(output, chash.get_bool("compress"));
-	info!("output_noncpg_thread starting up writing to {}", outfile.name());
-	let mut curr_ix = 0;
+pub fn output_handler(chash: &ConfHash, hdr: &VcfHeader, r: Recv, oname: &str, ph: PrintHeader, ob: OutputBlock, tp: TPool) {
+	let mut outfile = open_output_file(oname, chash, tp);
+	if !chash.get_bool("no_header") { ph(&mut outfile, hdr).expect("Error writing header") }
 	let mut blk_store: HashMap<usize, Arc<RecordBlock>> = HashMap::new();
+	let mut curr_ix = 0;	
+	let mut pblk: Option<Arc<RecordBlock>> = None;
 	for (ix, rblk) in r.iter() {
 		if ix == curr_ix {
-			if output_noncpg(&mut outfile, &rblk, &chash, &hdr).is_err() { panic!("Error writing nonCpG file") }
+			let prev = if let Some(b) = pblk.as_ref() { b.last() } else { None };
+			ob(&mut outfile, &rblk, prev, chash, hdr).expect("Error writing file");
+			pblk = Some(rblk.clone());
 			curr_ix += 1;
 			while let Some(blk) = blk_store.remove(&curr_ix) {
-				if output_noncpg(&mut outfile, &blk, &chash, &hdr).is_err() { panic!("Error writing nonCpG file") }
+				let prev = if let Some(b) = pblk.as_ref() { b.last() } else { None };
+				ob(&mut outfile, &blk, prev, chash, hdr).expect("Error writing file");
+				pblk = Some(rblk.clone());
 				curr_ix += 1;
 			}
 		} else { blk_store.insert(ix, rblk); }
 	}
 	if !blk_store.is_empty() { warn!("Blocks left over in output_noncpg_thread") }
-	info!("output_noncpg_thread closing down")
 }
 
-pub fn output_bed_methyl_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Receiver<(usize, Arc<RecordBlock>)>) {
-	info!("output_bed_methyl_thread starting up");
+pub fn output_cpg_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Recv, tp: TPool) {
+	let output = chash.get_str("cpgfile").expect("CpG output filename is missing");
+	debug!("output_cpg_thread starting up");
+	output_handler(&chash, &hdr, r, output, print_tsv_header, output_cpg, tp);
+	debug!("output_cpg_thread closing down")
+}
+
+pub fn output_noncpg_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Recv, tp: TPool) {
+	let output = chash.get_str("noncpgfile").expect("Non CpG output filename is missing");
+	debug!("output_noncpg_thread starting up");
+	output_handler(&chash, &hdr, r, output, print_tsv_header, output_noncpg, tp);
+	debug!("output_noncpg_thread closing down")
+}
+
+pub fn output_bed_methyl_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Recv, tp: TPool) {
 	for msg in r.iter() {
 		// Do nothing
 	}

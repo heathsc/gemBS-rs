@@ -11,6 +11,11 @@ use super::model::{Model, MAX_QUAL};
 use super::BrecBlock;
 use crate::output::{Record, MethRec, REC_BLOCK_SIZE};
 
+pub enum RecordBlockElem<'a> {
+	Single((&'a Record, &'a MethRec)),
+	Multi((&'a Record, &'a Box<[MethRec]>)),
+}
+
 pub enum RecordBlock {
 	Single(Vec<(Record, MethRec)>),
 	Multi(Vec<(Record, Box<[MethRec]>)>),
@@ -22,6 +27,12 @@ impl RecordBlock {
 			RecordBlock::Single(v) => v.len(),
 			RecordBlock::Multi(v) => v.len(),
 		}
+	}
+	pub fn last(&self) -> Option<RecordBlockElem> {
+		match self {
+			RecordBlock::Single(v) => v.last().map(|(r, m)| RecordBlockElem::Single((r, m))),
+			RecordBlock::Multi(v) => v.last().map(|(r, mv)| RecordBlockElem::Multi((r, mv))),
+		}		
 	}
 }
 const BASE_MAP: [u8; 256] = [
@@ -62,7 +73,8 @@ fn setup_model(cf: &ConfHash) -> Model {
 	Model::new(
 		(cf.get_float("under_conversion"), cf.get_float("over_conversion")),
 		cf.get_float("reference_bias"),
-		cf.get_bool("haploid")
+		cf.get_bool("haploid"), 
+		false // Get natural logs
 	)
 }
 
