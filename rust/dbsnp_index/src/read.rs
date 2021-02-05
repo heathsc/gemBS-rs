@@ -104,14 +104,13 @@ fn read_vcf_contig(file: &str, ctg: &str, tid: libc::c_int, send: &Sender<(Vec<S
 	let mut buf_vec = Vec::with_capacity(size);
 	let mut kstr = kstring_t::new();
 	loop {
-		match hitr.tbx_itr_next(&mut hfile, &mut tbx, kstr) {
-			TbxReadResult::Ok(s) => {
-				buf_vec.push(s.to_str().expect("File not Utf8").to_owned());
+		match hitr.tbx_itr_next(&mut hfile, &mut tbx, &mut kstr) {
+			TbxReadResult::Ok => {
+				buf_vec.push(kstr.to_str().expect("File not Utf8").to_owned());
 				if buf_vec.len() == size {
 					send.send((buf_vec, IType::Vcf)).expect("Error sending message to read processing thread");
 					buf_vec = Vec::with_capacity(size);
 				}
-				kstr = s;
 			},
 			TbxReadResult::EOF => break,
 			TbxReadResult::Error => {

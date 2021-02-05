@@ -77,7 +77,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[DbInput]>)> {
 						let indexed_vcf = match input_type {
 							IType::Auto | IType::Vcf => {
 								let hfile = HtsFile::new(file, "r")?;
-								if hfile.format().format() == htsExactFormat::Vcf && hfile.is_bgzf() {
+								if hfile.format().format() == htsExactFormat::Vcf && hfile.test_bgzf() {
 									if let Ok(tbx) = Tbx::new(file) {
 										if let Some(v) = tbx.seq_names() {
 											if let Some(alias) = &chrom_alias {
