@@ -101,6 +101,9 @@ impl htsFile {
 	pub fn bgzf(&mut self) -> Option<&mut BGZF> {
 		if self.test_bgzf() { unsafe {self.fp.bgzf.as_mut()} } else { None }
 	}	
+	pub fn set_thread_pool(&mut self, tp: &htsThreadPool) -> c_int {
+		unsafe {hts_set_opt(self, hts_fmt_option::HtsOptThreadPool, tp)}
+	}
 }
 
 impl io::Write for htsFile {
@@ -117,7 +120,18 @@ impl io::Write for htsFile {
 		if wlen < l as libc::ssize_t { Err(hts_err("htsFile::write Error writing to file".to_string())) }
 		else { Ok(l) }
 	}
-	fn flush(&mut self) -> io::Result<()> { Ok(())}
+	fn flush(&mut self) -> io::Result<()> { 
+		let fp = &self.fp;
+		let ret = if self.format.compression != htsCompression::NoCompression { 
+			let bgzf = unsafe { fp.bgzf };
+			unsafe { bgzf_flush(bgzf) }
+		} else {
+			let hfile = unsafe { fp.hfile.as_mut().unwrap() };
+			unsafe{ hflush(hfile) }
+		};
+		if ret < 1  { Err(hts_err("htsFile::flush Error flushing buffers".to_string())) }
+		else { Ok(()) }
+	}
 }
 
 #[repr(C)]
@@ -184,10 +198,10 @@ impl hts_itr_t {
 			_ => SamReadResult::Error,
 		}
 	}
-	pub fn tbx_itr_next<H: AsMut<htsFile>, T: AsMut<tbx_t>>(&mut self, mut fp: H, mut tbx: T, mut kstr: kstring_t) -> TbxReadResult {
+	pub fn tbx_itr_next<H: AsMut<htsFile>, T: AsMut<tbx_t>>(&mut self, mut fp: H, mut tbx: T, kstr: &mut kstring_t) -> TbxReadResult {
 		match unsafe {
 			hts_itr_next(if fp.as_mut().is_bgzf() != 0 { fp.as_mut().fp.bgzf } else { null_mut::<BGZF>() },
-				self, &mut kstr as *mut _ as *mut c_void, tbx.as_mut() as *mut tbx_t as *mut c_void)
+				self, kstr as *mut _ as *mut c_void, tbx.as_mut() as *mut tbx_t as *mut c_void)
 			} {
 			0..=c_int::MAX => TbxReadResult::Ok,
 			-1 => TbxReadResult::EOF,
@@ -228,8 +242,33 @@ pub struct htsFormat {
 }
 
 #[repr(C)]
-pub struct htsThreadPool { _unused: [u8; 0], }
+struct hts_tpool { _unused: [u8; 0], }
 
+#[repr(C)]
+pub struct htsThreadPool {
+	pool: NonNull<hts_tpool>,
+	qsize: c_int,	
+}
+
+impl htsThreadPool {
+	pub fn init(n: usize) -> Option<Self> { NonNull::new(unsafe{hts_tpool_init(n as c_int)}).map(|pool| Self{pool, qsize: 0 }) }
+}
+
+impl Drop for htsThreadPool {
+	fn drop(&mut self) { unsafe{hts_tpool_destroy(self.pool.as_mut())} }
+}
+
+unsafe impl Sync for htsThreadPool {}
+unsafe impl Send for htsThreadPool {}
+
+#[repr(C)]
+pub enum hts_fmt_option {
+	HtsOptCompressionLevel = 100,
+	HtsOptNThreads,
+	HtsOptThreadPool,
+	HtsOptCacheSize,
+	HtsOptBlockSize,
+}
 
 #[link(name = "hts")]
 extern "C" {
@@ -245,7 +284,9 @@ extern "C" {
 	fn hts_itr_multi_next(fp: *mut htsFile, itr: *mut hts_itr_t, r: *mut c_void) -> c_int;
 	fn hts_itr_next(fp: *mut BGZF, itr: *mut hts_itr_t, r: *mut c_void, data: *mut c_void) -> c_int;
 	fn bgzf_write(fp: *mut BGZF, data: *const c_void, length: size_t) -> ssize_t;
-	fn hwrite2(fp: *mut hFILE, srcv: *const c_void, total_bytes: size_t, ncopied: size_t) -> ssize_t; 	
+	fn bgzf_flush(fp: *mut BGZF) -> c_int;
+	fn hwrite2(fp: *mut hFILE, srcv: *const c_void, total_bytes: size_t, ncopied: size_t) -> ssize_t; 
+	fn hflush(fp: *mut hFILE) -> c_int;	
 	fn hfile_set_blksize(fp: *mut hFILE, bufsize: size_t) -> c_int;	
 	fn hts_idx_init(n: c_int, fmt: c_int, offset0: u64, min_shift: c_int, n_lvls: c_int) -> *mut hts_idx_t;
 	fn hts_idx_destroy(idx: *mut hts_idx_t);
@@ -253,6 +294,9 @@ extern "C" {
 	fn hts_idx_finish(idx: *mut hts_idx_t, final_offset: u64) -> c_int;
 	fn hts_idx_set_meta(idx: *mut hts_idx_t, l_meta: u32, meta: *const u8, is_copy: c_int) -> c_int;
 	fn hts_idx_save_as(idx: *mut hts_idx_t, fname: *const c_char, fnidx: *const c_char, fmt: c_int) -> c_int;
+	fn hts_set_opt(fp: *mut htsFile, opt: hts_fmt_option, ...) -> c_int;
+	fn hts_tpool_init(n: c_int) -> *mut hts_tpool;
+	fn hts_tpool_destroy(p: *mut hts_tpool);
 	pub fn hts_set_log_level(level: htsLogLevel);
 }
 
@@ -332,7 +376,7 @@ fn hwrite(fp: &mut hFILE, buffer: *const c_void, nbytes: size_t) -> ssize_t {
 
 impl io::Write for HtsFile {
 	fn write(&mut self, buf: &[u8]) -> io::Result<usize> { self.as_mut().write(buf) }
-	fn flush(&mut self) -> io::Result<()> { Ok(())}
+	fn flush(&mut self) -> io::Result<()> { self.as_mut().flush() }
 }
 
 pub struct HtsIndex {

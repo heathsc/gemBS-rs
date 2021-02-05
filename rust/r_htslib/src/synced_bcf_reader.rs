@@ -138,7 +138,8 @@ impl bcf_srs_t {
 		let rdr = self.get_reader(idx)?;
 		unsafe { std::ptr::swap(brec.as_mut(), *rdr.as_ref().unwrap().buffer) }
 		Ok(())
-	} 	
+	} 
+	pub fn thread_pool(&self) -> Option<&htsThreadPool> { unsafe { self.p.as_ref() }}
 }
 
 #[link(name = "hts")]
