@@ -95,6 +95,13 @@ impl bcf_hdr_t {
 			Ok(from_cstr(p))
 		}
 	}
+	pub fn sample_name(&self, ix: usize) -> io::Result<&str> {
+		if ix >= self.nsamples() { Err(hts_err("Invalid sample id".to_string()))}
+		else {
+			let p = unsafe {*self.samples.add(ix)};
+			Ok(from_cstr(p))
+		}
+	}
 	pub fn copy_ctgs(&self) -> Box<[Box<str>]> {
 		let nctgs = self.nctgs();
 		let mut ctg_names = Vec::with_capacity(nctgs);
