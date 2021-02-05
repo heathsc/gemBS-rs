@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::convert::TryInto;
 use std::ops::{Deref, DerefMut};
 use std::marker::PhantomData;
-
+use std::mem::MaybeUninit;
 use libc::{c_char, c_int, size_t};
 use super::{hts_err, get_cstr, from_cstr, htsFile, HtsPos};
 
@@ -100,14 +100,18 @@ struct bam1_core_t {
 pub struct bam1_t {
 	core: bam1_core_t,
 	id: u64,
-	data: *mut c_char,
+	data: MaybeUninit<*mut c_char>,
 	l_data: c_int,
 	m_data: u32,
 	mempolicy: u32,
 }
 
 impl bam1_t {
-	pub fn qname(&self) -> &str { from_cstr(self.data) }
+	fn data(&self) -> *const c_char {
+		if self.data.as_ptr().is_null() { panic!("Attempt to read empty bam1_t structure") }
+		else { unsafe {self.data.assume_init() }}
+	}
+	pub fn qname(&self) -> &str { from_cstr(self.data()) }
 	pub fn endpos(&self) -> usize { unsafe{ bam_endpos(self) as usize} }
 	pub fn tid(&self) -> Option<usize> { check_tid(self.core.tid) }
 	pub fn mtid(&self) -> Option<usize> { check_tid(self.core.mtid) }
@@ -122,14 +126,14 @@ impl bam1_t {
 	pub fn template_len(&self) -> isize { self.core.isze as isize }
 	pub fn l_qseq(&self) -> i32 { self.core.l_qseq }
 	pub fn qnames_eq(&self, b: &BamRec) -> bool {
-		let i = unsafe { libc::strcmp(self.data, b.data) };
+		let i = unsafe { libc::strcmp(self.data(), b.data()) };
 		i == 0
 	}
 	pub fn get_seq(&self) -> Option<&[u8]> {
 		unsafe {
 			let core = &self.core;
 			let off = ((core.n_cigar as isize) << 2) + (core.l_qname as isize) as isize;
-			let p = self.data.offset(off) as *const u8;
+			let p = self.data().offset(off) as *const u8;
 			if p.is_null() { None }
 			else {
 				let size = (core.l_qseq + 1) >> 1;
@@ -141,7 +145,7 @@ impl bam1_t {
 		unsafe {
 			let core = &self.core;
 			let off = ((core.n_cigar as isize) << 2) + (core.l_qname as isize) + ((core.l_qseq + 1) >> 1) as isize;
-			let p = self.data.offset(off) as *const u8;
+			let p = self.data().offset(off) as *const u8;
 			if p.is_null() { None }
 			else {
 				let size = core.l_qseq;
@@ -152,7 +156,7 @@ impl bam1_t {
 	pub fn cigar(&self) -> Option<Cigar> {
 		let len = self.core.n_cigar as usize;
 		if len > 0 {
-			let data = self.data;
+			let data = self.data();
 			let slice = unsafe{ 
 				let ptr: *const CigarElem = data.offset(self.core.l_qname as isize).cast();
 				std::slice::from_raw_parts(ptr, len) 
@@ -181,7 +185,7 @@ impl bam1_t {
 		unsafe {
 			let core = &self.core;
 			let off = ((core.n_cigar as isize) << 2) + (core.l_qname as isize) + (core.l_qseq + ((core.l_qseq + 1) >> 1)) as isize;
-			let p = self.data.offset(off) as *mut u8;
+			let p = self.data().offset(off) as *mut u8;
 			if p.is_null() { None }
 			else {
 				let size = self.l_data as isize - off;
@@ -515,18 +519,14 @@ fn check_tid(i: c_int) -> Option<usize> {
 }
 
 impl BamRec {
-	// Unlike the default behaviour in htslib, we initialize the new data field in 
-	// the bam1_t structure so we don't have to worry about this being zero
+	// bam_init1() simply zeroes the newly allocated structure, so the data ptr is set to zero
+	// we mark this as Maybe Uninit so we have to check that it is non-null be dereferencing
 	pub fn new() -> io::Result<Self> { 
 		match NonNull::new(unsafe{bam_init1()}) {
 			Some(mut b) => {
-				let sz = 128;
-				let data = unsafe {libc::calloc(sz, 1) as *mut c_char};
-				if data.is_null() { Err(hts_err("Failed to allocate new BamRec".to_string())) }
-				else {
-					unsafe { b.as_mut().data = data }
-					Ok(BamRec{inner: b, phantom: PhantomData})
-				}
+				let brec = unsafe{ b.as_mut() };
+				brec.data = MaybeUninit::<*mut c_char>::zeroed();
+				Ok(BamRec{inner: b, phantom: PhantomData}) 
 			},
 			None => Err(hts_err("Failed to allocate new BamRec".to_string())),
 		}
