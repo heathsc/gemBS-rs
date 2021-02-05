@@ -14,7 +14,7 @@ pub enum bcf_sr_error {
 }
 
 #[repr(C)]
-struct bcf_sr_t {
+pub struct bcf_sr_t {
 	file: *mut htsFile,
 	tbx_idx: *mut tbx_t,
 	bcf_idx: *mut hts_idx_t,
@@ -28,6 +28,10 @@ struct bcf_sr_t {
 	filter_ids: *mut c_int,
 	samples: *mut c_int,
 	n_smpl: c_int,
+}
+
+impl bcf_sr_t {
+	pub fn file(&mut self) -> &mut htsFile { unsafe {self.file.as_mut()}.unwrap() }
 }
 
 #[repr(C)]
@@ -114,20 +118,18 @@ impl bcf_srs_t {
 			_ => Err(hts_err(format!("Couldn't open BCF file {}", fname.as_ref()))),
 		}
 	}
-	fn get_reader(&mut self, idx: usize) -> io::Result<*mut bcf_sr_t> {
+	pub fn get_reader(&mut self, idx: usize) -> io::Result<&mut bcf_sr_t> {
 		unsafe {
 			if (idx as c_int) >= self.nreaders || self.readers.is_null() { Err(hts_err("Invalid access to synced BCF reader".to_string()))}
 			else { 
-				let rdr = self.readers.add(idx);
-				if rdr.is_null() { Err(hts_err("Synced reader is null".to_string()))}
-				else { Ok(rdr) }
+				self.readers.add(idx).as_mut().ok_or_else(|| hts_err("Synced reader is null".to_string()))
 			}
 		}		
 	}
 	pub fn get_reader_hdr(&mut self, idx: usize) -> io::Result<&bcf_hdr_t> {
 		unsafe {
 			let rdr = self.get_reader(idx)?;
-			let hdr = rdr.as_ref().unwrap().header;
+			let hdr = rdr.header;
 			if hdr.is_null() { Err(hts_err("Null BCF header in synced BCF reader".to_string())) }
 			else { Ok(hdr.as_ref().unwrap()) }
 		}
@@ -136,7 +138,7 @@ impl bcf_srs_t {
 
 	pub fn swap_line<B: AsMut<bcf1_t>>(&mut self, idx: usize, mut brec: B) -> io::Result<()> {
 		let rdr = self.get_reader(idx)?;
-		unsafe { std::ptr::swap(brec.as_mut(), *rdr.as_ref().unwrap().buffer) }
+		unsafe { std::ptr::swap(brec.as_mut(), *rdr.buffer) }
 		Ok(())
 	} 
 	pub fn thread_pool(&self) -> Option<&htsThreadPool> { unsafe { self.p.as_ref() }}
