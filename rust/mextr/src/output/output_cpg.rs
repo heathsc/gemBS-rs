@@ -140,7 +140,9 @@ fn output_multi_rec<'a, W: Write>(f: &mut W, hdr: &VcfHeader, opts: &OutputOpts,
 	Ok(())
 }
 
-pub fn output_cpg(outfile: &mut HtsFile, rec_blk: &RecordBlock, prev: Option<RecordBlockElem>, chash: &ConfHash, hdr: &VcfHeader) -> io::Result<()> {
+pub fn output_cpg(outfiles: &mut [HtsFile], rec_blk: &RecordBlock, prev: Option<RecordBlockElem>, chash: &ConfHash, hdr: &VcfHeader) -> io::Result<()> {
+	assert_eq!(outfiles.len(), 1);
+	let outfile = &mut outfiles[0];
 	let opts = OutputOpts::new(chash);
 	match rec_blk {
 		RecordBlock::Single(svec) => {

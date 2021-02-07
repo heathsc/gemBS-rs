@@ -90,8 +90,10 @@ fn output_multi_rec<W: Write>(f: &mut W, hdr: &VcfHeader, opts: &OutputOpts, sre
 	Ok(())
 }
 
-pub fn output_noncpg(outfile: &mut HtsFile, rec_blk: &RecordBlock, _prev: Option<RecordBlockElem>, chash: &ConfHash, hdr: &VcfHeader) -> io::Result<()> {
+pub fn output_noncpg(outfiles: &mut [HtsFile], rec_blk: &RecordBlock, _prev: Option<RecordBlockElem>, chash: &ConfHash, hdr: &VcfHeader) -> io::Result<()> {
 	
+	assert_eq!(outfiles.len(), 1);
+	let outfile = &mut outfiles[0];
 	let opts = OutputOpts::new(chash);
 	
 	match rec_blk {

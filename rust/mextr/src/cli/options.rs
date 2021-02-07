@@ -53,6 +53,16 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
 	// Check threshold
 	if chash.get_int("threshold") > 255 { chash.set("threshold", ConfVar::Int(255)) }
 	
+	// Check output names for .gz
+	// If so, strip suffix and set compress option
+	for var in &["cpgfile", "noncpgfile", "bed_methyl"] {
+		let tmp = chash.get_str(var).and_then(|s| s.strip_suffix(".gz")).map(|s| s.to_owned());
+		if let Some(s) = tmp { 
+			chash.set(var, ConfVar::String(Some(s)));
+			chash.set("compress", ConfVar::Bool(true));
+		}
+	}
+
 	let mut sr = BcfSrs::new()?;
 	let infile = m.value_of("input").expect("No input filename"); // This should not be allowed by Clap	
 	let regions = {			
@@ -63,12 +73,11 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
 		else { None }
 	};
 	if let Some((reg, flag)) = regions { sr.set_regions(&reg, flag)? }
-//	let nt = chash.get_int("threads");
-//	if nt > 0 { sr.set_threads(nt)? }
 	sr.add_reader(infile)?;
 	
 	// Check sample numbers
-	let ns = sr.get_reader_hdr(0)?.nsamples();	
+	let hdr = sr.get_reader_hdr(0)?;
+	let ns =hdr.nsamples();	
 	if ns == 0 { return Err(new_err(format!("No samples in input file {}", infile)))}
 	
 	// Check minimum sample numer
@@ -76,6 +85,24 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
 	let mn = mn.max((prop * (ns as f64) + 0.5) as usize);
 	chash.set("number", ConfVar::Int(mn));
 	
-	if m.is_present("bed_methyl") && ns > 1 { return Err(new_err(format!("Input file {} has {} samples: bedMethyl output incompatible with multisample files", infile, ns))) } 
+	if m.is_present("bed_methyl") {
+		if ns > 1 { return Err(new_err(format!("Input file {} has {} samples: bedMethyl output incompatible with multisample files", infile, ns))) } 
+		// Get sample description from VCF header if possible, otherwise use sample name
+		let quotes = ['\'', '\"'];
+		let trim = |s: &str| s.trim_start_matches(&quotes[..]).trim_end_matches(&quotes[..]).to_owned();
+		let mut sample_name = None;
+		let mut sample_desc = None;
+		for ix in 0..hdr.nhrec() {
+			let hr = hdr.hrec(ix)?;
+			if hr.get_type() == BCF_HL_STR && hr.key() == "bs_call_sample_info" && hr.find_key("ID").is_some() {
+				sample_name = hr.find_key("SM").map(|s| trim(s));
+				sample_desc = hr.find_key("DS").map(|s| trim(s));
+				break;
+			}
+		}
+		sample_name = sample_name.or_else(|| Some(hdr.sample_name(0).unwrap().to_owned()));
+		chash.set("sample_desc", ConfVar::String(sample_desc.or_else(|| Some(sample_name.as_ref().unwrap().to_owned()))));
+		chash.set("sample_name", ConfVar::String(sample_name));
+	} else { chash.set("sample_desc", ConfVar::String(None)) }
 	Ok((chash, sr))
 }

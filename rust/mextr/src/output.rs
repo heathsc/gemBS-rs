@@ -4,9 +4,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use std::ops::Deref;
 
-use crossbeam_channel::Receiver;
-
-use r_htslib::{HtsFile, VcfHeader, htsThreadPool};
+use r_htslib::{HtsFile, VcfHeader};
 use libc::c_int;
 
 use super::config::*;
@@ -18,6 +16,8 @@ mod output_cpg;
 use output_cpg::*;
 pub mod output_noncpg;
 pub use output_noncpg::*;
+mod output_bed_methyl;
+use output_bed_methyl::*;
 
 pub const GT_IUPAC: &[u8] = "AMRWCSYGKT".as_bytes();
 pub const GT_MASK: [u8; 10] = [0x11, 0xb3, 0x55, 0x99, 0xa2, 0xf6, 0xaa, 0x54, 0xdc, 0x88];
@@ -89,7 +89,8 @@ pub fn calc_phred(z: f64) -> u8 {
 	if z <= 0.0 { 255 } else { ((-10.0 * z.log10()) as usize).min(255) as u8 }	
 }
 
-pub struct OutputOpts {
+pub struct OutputOpts<'a> {
+	sample_desc: Option<&'a str>,
 	min_inform: usize,
 	min_n: usize,
 	min_nc: usize,
@@ -99,9 +100,10 @@ pub struct OutputOpts {
 	threshold: u8,
 }
 
-impl OutputOpts {
-	pub fn new(chash: &ConfHash) -> Self {
+impl <'a>OutputOpts<'a> {
+	pub fn new(chash: &'a ConfHash) -> Self {
 		Self {
+			sample_desc: chash.get_str("sample_desc"),
 			min_inform: chash.get_int("inform"),
 			min_nc: chash.get_int("min_nc"),
 			min_n: chash.get_int("number"),
@@ -118,13 +120,14 @@ impl OutputOpts {
 	pub fn bw_mode(&self) -> Mode { self.bw_mode }
 	pub fn select(&self) -> Select { self.select }
 	pub fn threshold(&self) -> u8 { self.threshold }
+	pub fn sample_desc(&self) -> Option<&str> { self.sample_desc }
 }
 
 fn open_output_file(name: &str, chash: &ConfHash, tp: TPool) -> HtsFile {
 	let mut fname = String::from_str(name).unwrap();
 	let compress = chash.get_bool("compress");
 	let output_mode = if compress { 
-		if !fname.ends_with(".gz") { fname.push_str(".gz")}
+		fname.push_str(".gz");
 		"wz" 
 	} else { "w" };
 	match HtsFile::new(&fname, output_mode) {
@@ -155,11 +158,21 @@ pub fn get_prob_dist(prb: &mut [f64]) {
 	} 
 } 
 
-type PrintHeader = fn(&mut HtsFile, &VcfHeader) -> io::Result<()>;
-type OutputBlock = fn(&mut HtsFile, &RecordBlock, Option<RecordBlockElem>, &ConfHash, &VcfHeader) -> io::Result<()>;
+type PrintHeader = fn(&mut HtsFile, &VcfHeader, &ConfHash) -> io::Result<()>;
+type OutputBlock = fn(&mut [HtsFile], &RecordBlock, Option<RecordBlockElem>, &ConfHash, &VcfHeader) -> io::Result<()>;
+
+fn print_bed_methyl_header(f: &mut HtsFile, _hdr: &VcfHeader, chash: &ConfHash) -> io::Result<()> {
+	if let Some(track_line) = chash.get_str("bed_track_line") {
+		writeln!(f, "track {}", track_line.trim_start_matches("track".trim()))
+	} else {
+		let sn = chash.get_str("sample_name").expect("No sample name set");
+		let sd = chash.get_str("sample_desc").expect("No sample desc set");
+		writeln!(f, "track name = \"{}\" description=\"{}\" visibility=2 itemRgb=\"On\"", sn, sd)
+	}
+}
 
 // Print header for CpG and NonCpG tab separated variable files
-fn print_tsv_header(f: &mut HtsFile, hdr: &VcfHeader) -> io::Result<()> {
+fn print_tsv_header(f: &mut HtsFile, hdr: &VcfHeader, _chash: &ConfHash) -> io::Result<()> {
 	write!(f, "Contig\tPos0\tPos1\tRef")?;
 	for i in 0..hdr.nsamples() {
 		let name = hdr.sample_name(i)?;
@@ -168,21 +181,20 @@ fn print_tsv_header(f: &mut HtsFile, hdr: &VcfHeader) -> io::Result<()> {
 	writeln!(f)
 }
 
-pub fn output_handler(chash: &ConfHash, hdr: &VcfHeader, r: Recv, oname: &str, ph: PrintHeader, ob: OutputBlock, tp: TPool) {
-	let mut outfile = open_output_file(oname, chash, tp);
-	if !chash.get_bool("no_header") { ph(&mut outfile, hdr).expect("Error writing header") }
+pub fn output_handler(chash: &ConfHash, hdr: &VcfHeader, r: Recv, outfiles: &mut [HtsFile], ph: PrintHeader, ob: OutputBlock) {
+	if !chash.get_bool("no_header") { for mut outfile in outfiles.iter_mut() { ph(&mut outfile, hdr, chash).expect("Error writing header") } }
 	let mut blk_store: HashMap<usize, Arc<RecordBlock>> = HashMap::new();
 	let mut curr_ix = 0;	
 	let mut pblk: Option<Arc<RecordBlock>> = None;
 	for (ix, rblk) in r.iter() {
 		if ix == curr_ix {
 			let prev = if let Some(b) = pblk.as_ref() { b.last() } else { None };
-			ob(&mut outfile, &rblk, prev, chash, hdr).expect("Error writing file");
+			ob(outfiles, &rblk, prev, chash, hdr).expect("Error writing file");
 			pblk = Some(rblk.clone());
 			curr_ix += 1;
 			while let Some(blk) = blk_store.remove(&curr_ix) {
 				let prev = if let Some(b) = pblk.as_ref() { b.last() } else { None };
-				ob(&mut outfile, &blk, prev, chash, hdr).expect("Error writing file");
+				ob(outfiles, &blk, prev, chash, hdr).expect("Error writing file");
 				pblk = Some(rblk.clone());
 				curr_ix += 1;
 			}
@@ -193,21 +205,26 @@ pub fn output_handler(chash: &ConfHash, hdr: &VcfHeader, r: Recv, oname: &str, p
 
 pub fn output_cpg_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Recv, tp: TPool) {
 	let output = chash.get_str("cpgfile").expect("CpG output filename is missing");
+	let outfile = open_output_file(output, &chash, tp);
 	debug!("output_cpg_thread starting up");
-	output_handler(&chash, &hdr, r, output, print_tsv_header, output_cpg, tp);
+	output_handler(&chash, &hdr, r, &mut[outfile], print_tsv_header, output_cpg);
 	debug!("output_cpg_thread closing down")
 }
 
 pub fn output_noncpg_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Recv, tp: TPool) {
 	let output = chash.get_str("noncpgfile").expect("Non CpG output filename is missing");
+	let outfile = open_output_file(output, &chash, tp);
 	debug!("output_noncpg_thread starting up");
-	output_handler(&chash, &hdr, r, output, print_tsv_header, output_noncpg, tp);
+	output_handler(&chash, &hdr, r, &mut[outfile], print_tsv_header, output_noncpg);
 	debug!("output_noncpg_thread closing down")
 }
 
 pub fn output_bed_methyl_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Recv, tp: TPool) {
-	for msg in r.iter() {
-		// Do nothing
-	}
-	info!("output_bed_methyl_thread closing down")	
+	let tc: &[_] = &['.', '_'];
+	let prefix = chash.get_str("bed_methyl").expect("bedMethyl prefix is missing")
+		.trim_end_matches(".bed").trim_end_matches("cpg").trim_end_matches("chg").trim_end_matches("chh").trim_end_matches(tc);
+	let mut outfiles: Vec<_> = ["cpg", "chg", "chh"].iter().map(|s| open_output_file(format!("{}_{}.bed", prefix, s).as_str(), &chash, tp.clone())).collect();
+	debug!("output_bed_methyl_thread thread starting up");
+	output_handler(&chash, &hdr, r, &mut outfiles, print_bed_methyl_header, output_bed_methyl);
+	debug!("output_bed_methyl_thread closing down")	
 }
