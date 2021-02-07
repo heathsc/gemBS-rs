@@ -12,14 +12,45 @@ pub const BCF_DT_ID: u32 = 0;
 pub const BCF_DT_CTG: u32 = 1;
 pub const BCF_DT_SAMPLE: u32 = 2;
 
+// Header line types
+pub const BCF_HL_FLT: c_int = 0;
+pub const BCF_HL_INFO: c_int = 1;
+pub const BCF_HL_FMT: c_int = 2;
+pub const BCF_HL_CTG: c_int = 3;
+pub const BCF_HL_STR: c_int = 4;
+pub const BCF_HL_GEN: c_int = 5;
+
 #[repr(C)]
-struct bcf_hrec_t { 
+pub struct bcf_hrec_t { 
 	_type: c_int,
 	key: *mut c_char,
 	val: *mut c_char,
 	nkeys: c_int,
 	keys: *mut *mut c_char,
 	vals: *mut *mut c_char,
+}
+
+impl bcf_hrec_t {
+	pub fn nkeys(&self) -> usize { self.nkeys as usize }
+	pub fn find_key<S: AsRef<str>>(&self, key: S) -> Option<&str> {
+		let ix = unsafe{bcf_hrec_find_key(self, get_cstr(key).as_ptr())};
+		if ix < 0 {	None }
+		else {
+			assert!(ix < self.nkeys);
+			Some(unsafe { from_cstr(*self.vals.add(ix as usize))})
+		}
+	}
+	pub fn key(&self) -> &str { from_cstr(self.key) }
+	pub fn val(&self) -> &str { from_cstr(self.val) }
+	pub fn vals(&self, ix: usize) -> io::Result<&str> {
+		if ix >= self.nkeys() { Err(hts_err("Invalid key id".to_string()))}
+		else { Ok(from_cstr(unsafe{*self.vals.add(ix)})) } 		
+	}
+	pub fn keys(&self, ix: usize) -> io::Result<&str> {
+		if ix >= self.nkeys() { Err(hts_err("Invalid key id".to_string()))}
+		else { Ok(from_cstr(unsafe{*self.keys.add(ix)})) } 		
+	}
+	pub fn get_type(&self) -> c_int { self._type } 
 }
 
 #[repr(C)]
@@ -127,7 +158,13 @@ impl bcf_hdr_t {
 			_ => Err(hts_err("Error adding sample to VCF/BCF header".to_string()))
 		}		
 	}
-	
+	pub fn nhrec(&self) -> usize { self.nhrec as usize }
+	pub fn hrec(&self, ix: usize) -> io::Result<&bcf_hrec_t> {
+		if ix >= self.nhrec() { Err(hts_err("Invalid hrec id".to_string()))}
+		else {
+			unsafe {(*self.hrec.add(ix)).as_ref() }.ok_or_else(|| hts_err("Invalid hrec id".to_string()))
+		}
+	}
 }
 #[link(name = "hts")]
 extern "C" {
@@ -147,6 +184,7 @@ extern "C" {
 	fn bcf_unpack(b: *mut bcf1_t, which: c_int);
 	fn bcf_get_format_values(hdr: *const bcf_hdr_t, line: *mut bcf1_t, tag: *const c_char, dst: *mut *mut c_void, ndst: *mut c_int, _type: c_int) -> c_int;
 	fn bcf_get_info_values(hdr: *const bcf_hdr_t, line: *mut bcf1_t, tag: *const c_char, dst: *mut *mut c_void, ndst: *mut c_int, _type: c_int) -> c_int;
+	fn bcf_hrec_find_key(hrec: *const bcf_hrec_t, key: *const c_char) -> c_int;
 }
 
 pub struct VcfHeader {
