@@ -76,6 +76,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
 		else { None }
 	};
 	if let Some((reg, flag)) = regions { sr.set_regions(&reg, flag)? }
+	sr.sort_regions();
 	sr.add_reader(infile)?;
 	
 	// Check sample numbers

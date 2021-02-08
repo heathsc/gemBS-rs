@@ -19,18 +19,21 @@ struct TabixFile {
 	last_off: u64,
 	last_x: usize,
 	line_no: usize,
+	skip: usize,
 	error: bool,
 }
 
 impl TabixFile {
-	fn new<S: AsRef<str>>(name: S) -> Self {
+	fn new<S: AsRef<str>>(name: S, skip: usize) -> Self {
 		let name = name.as_ref().to_owned();
+		
 		Self {
 			name,
 			last_off: 0,
 			prev_working_pos: 0,
 			last_x: 0,
 			line_no: 0,
+			skip,
 			idx: None,
 			error: false,
 			prev_ctg: Vec::new(),
@@ -74,8 +77,8 @@ impl TabixFile {
 				Ok(_) => {
 					self.prev_working_pos = bgzf.tell();
 					self.line_no += 1;
-					// Skip first line (+ lines starting with #) 
-					if line.is_empty() || line[0] == meta_char || self.line_no <= 1 {
+					// Skip initial lines if required (+ lines starting with #) 
+					if line.is_empty() || line[0] == meta_char || self.line_no <= self.skip {
 						self.last_off = bgzf.tell() as u64;
 						continue;
 					} 
@@ -169,7 +172,8 @@ pub fn tabix_thread(chash: Arc<ConfHash>, r: Receiver<bool>) {
 		if new_files {
 			for s in chash.out_files().drain(tabix_files.len()..) {
 				debug!("tabix_thread: Adding file {}", s);
-				tabix_files.push(TabixFile::new(s))
+				let skip_lines = if chash.get_bool("no_header") { 0 } else { 1 };
+				tabix_files.push(TabixFile::new(s, skip_lines))
 			}
 		}
 		new_files = chash.n_out_files() > tabix_files.len();
