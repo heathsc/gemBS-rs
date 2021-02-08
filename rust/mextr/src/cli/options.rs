@@ -63,6 +63,9 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
 		}
 	}
 
+	// If tabix option set, check that compress is also set
+	if chash.get_bool("tabix") && !chash.get_bool("compress") { chash.set("tabix", ConfVar::Bool(false)) }
+	
 	let mut sr = BcfSrs::new()?;
 	let infile = m.value_of("input").expect("No input filename"); // This should not be allowed by Clap	
 	let regions = {			

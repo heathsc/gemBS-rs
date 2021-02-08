@@ -18,6 +18,8 @@ pub mod output_noncpg;
 pub use output_noncpg::*;
 mod output_bed_methyl;
 use output_bed_methyl::*;
+pub mod md5;
+pub mod tabix;
 
 pub const GT_IUPAC: &[u8] = "AMRWCSYGKT".as_bytes();
 pub const GT_MASK: [u8; 10] = [0x11, 0xb3, 0x55, 0x99, 0xa2, 0xf6, 0xaa, 0x54, 0xdc, 0x88];
@@ -132,6 +134,7 @@ fn open_output_file(name: &str, chash: &ConfHash, tp: TPool) -> HtsFile {
 	} else { "w" };
 	match HtsFile::new(&fname, output_mode) {
 		Ok(mut f) => {
+			chash.add_file(&fname);
 			if let Some(tpool) = tp.deref() { f.set_thread_pool(tpool); }
 			f
 		},
