@@ -1,10 +1,10 @@
 use std::io;
-use std::ptr::NonNull;
+use std::ptr::{null_mut, NonNull};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 use libc::{c_char, c_int, c_void};
-use super::{hts_err, get_cstr, htsFile, htsThreadPool, tbx_t, hts_idx_t, hts_itr_t, HtsPos, kstring_t, bcf_hdr_t, bcf1_t};
+use super::{hts_err, get_cstr, from_cstr, htsFile, htsThreadPool, tbx_t, hts_idx_t, hts_itr_t, HtsPos, kstring_t, bcf_hdr_t, bcf1_t};
 
 #[repr(C)]
 #[allow(non_camel_case_types)]
@@ -48,6 +48,13 @@ struct bcf_sr_region_t {
 	creg: c_int,
 }
 
+impl bcf_sr_region_t {
+	fn get_reg(&self, ix: usize) -> io::Result<&region1_t> {
+		if (ix as c_int) >= self.nregs || self.regs.is_null() { Err(hts_err("Invalid access to BCF region".to_string()))}
+		else { Ok(unsafe{self.regs.add(ix).as_ref().expect("Invalid region")}) }	
+	}	
+}
+
 #[repr(C)]
 struct bcf_sr_regions_t {
 	tbx: *mut tbx_t,
@@ -73,6 +80,17 @@ struct bcf_sr_regions_t {
 	prev_seq: c_int,
 	prev_start: HtsPos,
 	prev_end: HtsPos,  
+}
+
+impl bcf_sr_regions_t {
+	fn seq_name(&self, ix: usize) -> io::Result<&str> {
+		if (ix as c_int) >= self.nseqs || self.seq_names.is_null() { Err(hts_err("Invalid access to synced BCF region".to_string()))}
+		else { Ok(from_cstr(unsafe{*(self.seq_names.add(ix))})) }
+	}	
+	fn seq_regs(&self, ix: usize) -> io::Result<&bcf_sr_region_t> {
+		if (ix as c_int) >= self.nseqs || self.regs.is_null() { Err(hts_err("Invalid access to synced BCF region".to_string()))}
+		else { Ok(unsafe{self.regs.add(ix).as_ref().expect("Invalid region")}) }		
+	}
 }
 
 #[repr(C)]
@@ -142,6 +160,34 @@ impl bcf_srs_t {
 		Ok(())
 	} 
 	pub fn thread_pool(&self) -> Option<&htsThreadPool> { unsafe { self.p.as_ref() }}
+	
+	// Sort regions (if they exist) by chromosome name
+	pub fn sort_regions(&mut self) {
+		if let Some(mut p) = NonNull::new(self.regions) {
+			let reg = unsafe {p.as_ref()};
+			let nseq = reg.nseqs;
+			let mut ix: Vec<usize> = (0..nseq).map(|x| x as usize).collect();
+			ix.sort_unstable_by_key(|i| reg.seq_name(*i).unwrap());
+			let mut reg_string = String::new();
+			let mut first = true;
+			for i in ix.iter() {
+				let seq = reg.seq_name(*i).unwrap();
+				let rgs = reg.seq_regs(*i).unwrap();
+				for j in 0..rgs.nregs {
+					let rg = rgs.get_reg(j as usize).unwrap();
+					if rg.start <= rg.end { 
+						if !first { reg_string.push(',') }
+						else { first = false }
+						reg_string.push_str(format!("{}:{}-{}", seq, rg.start, rg.end).as_ref()); 
+					}
+				}
+			}
+			if reg_string.is_empty() { panic!("No valid regions found!")}
+			unsafe {bcf_sr_regions_destroy(p.as_mut())};
+			self.regions = null_mut();
+			self.set_regions(&reg_string, false).unwrap();
+		}
+	}
 }
 
 #[link(name = "hts")]
@@ -149,6 +195,7 @@ extern "C" {
 	fn bcf_sr_init() -> *mut bcf_srs_t;
 	fn bcf_sr_destroy(readers: *mut bcf_srs_t);
 	fn bcf_sr_set_regions(readers: *mut bcf_srs_t, regions: *const c_char, is_file: c_int) -> c_int;
+	fn bcf_sr_regions_destroy(regions: *mut bcf_sr_regions_t);
 	fn bcf_sr_set_threads(readers: *mut bcf_srs_t, n_threads: c_int) -> c_int;
 	fn bcf_sr_add_reader(readers: *mut bcf_srs_t, fname: *const c_char) -> c_int;
 	fn bcf_sr_next_line(readers: *mut bcf_srs_t) -> c_int;
