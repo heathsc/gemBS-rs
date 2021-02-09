@@ -35,13 +35,19 @@ impl bcf_sr_t {
 }
 
 #[repr(C)]
-struct region1_t {
+pub struct region1_t {
 	start: HtsPos,
 	end: HtsPos,
 }
 
+impl region1_t {
+	pub fn start(&self) -> HtsPos { self.start }	
+	pub fn end(&self) -> HtsPos { self.end }	
+	pub fn set_end(&mut self, x: HtsPos) { self.end  = x}	
+}
+
 #[repr(C)]
-struct bcf_sr_region_t {
+pub struct bcf_sr_region_t {
 	regs: *mut region1_t,
 	nregs: c_int,
 	mregs: c_int,
@@ -49,14 +55,19 @@ struct bcf_sr_region_t {
 }
 
 impl bcf_sr_region_t {
-	fn get_reg(&self, ix: usize) -> io::Result<&region1_t> {
+	pub fn nregs(&self) -> usize { self.nregs as usize}	
+	pub fn get_reg(&self, ix: usize) -> io::Result<&region1_t> {
 		if (ix as c_int) >= self.nregs || self.regs.is_null() { Err(hts_err("Invalid access to BCF region".to_string()))}
 		else { Ok(unsafe{self.regs.add(ix).as_ref().expect("Invalid region")}) }	
+	}	
+	pub fn get_reg_mut(&mut self, ix: usize) -> io::Result<&mut region1_t> {
+		if (ix as c_int) >= self.nregs || self.regs.is_null() { Err(hts_err("Invalid access to BCF region".to_string()))}
+		else { Ok(unsafe{self.regs.add(ix).as_mut().expect("Invalid region")}) }	
 	}	
 }
 
 #[repr(C)]
-struct bcf_sr_regions_t {
+pub struct bcf_sr_regions_t {
 	tbx: *mut tbx_t,
 	its: *mut hts_itr_t,
 	line: kstring_t,
@@ -83,13 +94,18 @@ struct bcf_sr_regions_t {
 }
 
 impl bcf_sr_regions_t {
-	fn seq_name(&self, ix: usize) -> io::Result<&str> {
+	pub fn nseqs(&self) -> usize { self.nseqs as usize}	
+	pub fn seq_name(&self, ix: usize) -> io::Result<&str> {
 		if (ix as c_int) >= self.nseqs || self.seq_names.is_null() { Err(hts_err("Invalid access to synced BCF region".to_string()))}
 		else { Ok(from_cstr(unsafe{*(self.seq_names.add(ix))})) }
 	}	
-	fn seq_regs(&self, ix: usize) -> io::Result<&bcf_sr_region_t> {
+	pub fn seq_regs(&self, ix: usize) -> io::Result<&bcf_sr_region_t> {
 		if (ix as c_int) >= self.nseqs || self.regs.is_null() { Err(hts_err("Invalid access to synced BCF region".to_string()))}
 		else { Ok(unsafe{self.regs.add(ix).as_ref().expect("Invalid region")}) }		
+	}
+	pub fn seq_regs_mut(&mut self, ix: usize) -> io::Result<&mut bcf_sr_region_t> {
+		if (ix as c_int) >= self.nseqs || self.regs.is_null() { Err(hts_err("Invalid access to synced BCF region".to_string()))}
+		else { Ok(unsafe{self.regs.add(ix).as_mut().expect("Invalid region")}) }		
 	}
 }
 
@@ -160,6 +176,8 @@ impl bcf_srs_t {
 		Ok(())
 	} 
 	pub fn thread_pool(&self) -> Option<&htsThreadPool> { unsafe { self.p.as_ref() }}
+	
+	pub fn regions(&mut self) -> Option<&mut bcf_sr_regions_t> { unsafe{ self.regions.as_mut() } }
 	
 	// Sort regions (if they exist) by chromosome name
 	pub fn sort_regions(&mut self) {
