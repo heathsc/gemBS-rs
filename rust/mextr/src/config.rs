@@ -2,10 +2,23 @@ use std::collections::HashMap;
 use std::io::{self, Error, ErrorKind};
 use std::time::Duration;
 use std::thread::sleep;
-use std::sync::RwLock;
+use std::sync::{RwLock, Arc};
 
 pub fn new_err(s: String) -> io::Error {
 	Error::new(ErrorKind::Other, s)	
+}
+
+pub struct VcfContig {
+	name: Arc<Box<str>>,
+	length: usize,
+}
+
+impl VcfContig {
+	pub fn new<S: AsRef<str>>(name: S, length: usize) -> Self {
+		Self { name: Arc::new(name.as_ref().to_owned().into_boxed_str()), length }
+	}
+	pub fn name(&self) -> &str { self.name.as_ref() }
+	pub fn length(&self) -> usize { self.length }
 }
 
 #[derive(Debug,Copy, Clone)]
@@ -27,10 +40,17 @@ pub enum ConfVar {
 pub struct ConfHash {
 	hash: HashMap<&'static str, ConfVar>,
 	out_files: RwLock<Vec<String>>,
+	vcf_contigs: Vec<VcfContig>,
+	vcf_contig_hash: HashMap<Arc<Box<str>>, usize>,
 }
 
 impl ConfHash {
-	pub fn new(hash: HashMap<&'static str, ConfVar>) -> Self { ConfHash {hash, out_files: RwLock::new(Vec::new())} }
+	pub fn new(hash: HashMap<&'static str, ConfVar>, vcf_contigs: Vec<VcfContig>) -> Self { 
+		let vcf_contig_hash = vcf_contigs.iter().enumerate().fold(HashMap::new(), |mut h, (ix, ctg)| {h.insert(ctg.name.clone(), ix); h} );
+		ConfHash {hash, vcf_contigs, vcf_contig_hash, out_files: RwLock::new(Vec::new())} 
+	}
+	pub fn vcf_contigs(&self) -> &[VcfContig] { &self.vcf_contigs }	
+	pub fn contig_rid<S: AsRef<str>>(&self, ctg: S) -> Option<usize> { self.vcf_contig_hash.get(&(Box::<str>::from(ctg.as_ref()))).copied() }
 	pub fn get(&self,  key: &str) -> Option<&ConfVar> { self.hash.get(key) }
 	pub fn set(&mut self, key: &'static str, val: ConfVar) { self.hash.insert(key, val); }
 

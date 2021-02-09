@@ -30,6 +30,25 @@ pub const OPTS: [(&str, ConfVar);21] = [
 	("select", ConfVar::Select(Select::Hom)),
 ];
 
+fn read_header(infile: &str) -> io::Result<(usize, Vec<VcfContig>)> {
+	let fp = HtsFile::new(infile, "rz")?;
+	let hdr = VcfHeader::read(fp)?;
+	let ns = hdr.nsamples();
+	if ns == 0 { Err(new_err(format!("No samples in input file {}", infile)))}
+	else {
+		let nctgs = hdr.nctgs();
+		if nctgs == 0 { Err(new_err(format!("No contigs in input file {}", infile)))}
+		else {
+			let mut v = Vec::new();
+			for ix in 0..nctgs {
+				let (s, l) = hdr.ctg_name_len(ix)?;
+				v.push(VcfContig::new(s, l))
+			}
+			Ok((ns, v))
+		}
+	}
+}
+
 pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
 	
 	let mut conf_hash: HashMap<&'static str, ConfVar> = HashMap::new();
@@ -48,7 +67,10 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
 	// Min Proportion
 	let prop = if let Some(x) = cli_utils::get_f64(m, "prop", 0.0, 1.0)? { x } else { 0.0 };
 
-	let mut chash = ConfHash::new(conf_hash);
+	let infile = m.value_of("input").expect("No input filename"); // This should not be allowed by Clap	
+	let (ns, vcf_contigs) = read_header(infile)?;
+	
+	let mut chash = ConfHash::new(conf_hash, vcf_contigs);
 	
 	// Check threshold
 	if chash.get_int("threshold") > 255 { chash.set("threshold", ConfVar::Int(255)) }
@@ -67,22 +89,28 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
 	if chash.get_bool("tabix") && !chash.get_bool("compress") { chash.set("tabix", ConfVar::Bool(false)) }
 	
 	let mut sr = BcfSrs::new()?;
-	let infile = m.value_of("input").expect("No input filename"); // This should not be allowed by Clap	
-	let regions = {			
+	let (reg, flag) = {			
 		if let Some(mut v) = m.values_of("regions").or_else(|| m.values_of("region_list")) {
 			let s = v.next().unwrap().to_owned();
-			Some((v.fold(s, |mut st, x| {st.push(','); st.push_str(x); st}), false))
-		} else if let Some(s) = m.value_of("region_file") { Some((s.to_owned(), true))}
-		else { None }
+			(v.fold(s, |mut st, x| {st.push(','); st.push_str(x); st}), false)
+		} else if let Some(s) = m.value_of("region_file") { (s.to_owned(), true)}
+		else {
+			let ctgs = chash.vcf_contigs();
+			let mut s = ctgs[0].name().to_owned();
+			for v in ctgs[1..].iter() { 
+				s.push(',');
+				s.push_str(v.name());
+			}
+			(s, false)
+		}
 	};
-	if let Some((reg, flag)) = regions { sr.set_regions(&reg, flag)? }
+	sr.set_regions(&reg, flag)?;
 	sr.sort_regions();
+	
 	sr.add_reader(infile)?;
 	
-	// Check sample numbers
+	// Get VCF header from input file
 	let hdr = sr.get_reader_hdr(0)?;
-	let ns =hdr.nsamples();	
-	if ns == 0 { return Err(new_err(format!("No samples in input file {}", infile)))}
 	
 	// Check minimum sample numer
 	let mn = chash.get_int("number").min(ns);
@@ -90,7 +118,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
 	chash.set("number", ConfVar::Int(mn));
 	
 	if m.is_present("bed_methyl") {
-		if ns > 1 { return Err(new_err(format!("Input file {} has {} samples: bedMethyl output incompatible with multisample files", infile, ns))) } 
+		if ns > 1 { return Err(new_err(format!("Input file {} has {} samples: bedMethyl output incompatible with multi-sample files", infile, ns))) } 
 		// Get sample description from VCF header if possible, otherwise use sample name
 		let quotes = ['\'', '\"'];
 		let trim = |s: &str| s.trim_start_matches(&quotes[..]).trim_end_matches(&quotes[..]).to_owned();
