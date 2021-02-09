@@ -119,11 +119,19 @@ impl bcf_hdr_t {
 		}
 	}	
 	pub fn nctgs(&self) -> usize {self.n[BCF_DT_CTG as usize] as usize}
+	pub fn ctg_name_len(&self, rid: usize) -> io::Result<(&str, usize)> {
+		if rid >= self.nctgs() { Err(hts_err("Invalid contig id".to_string()))}
+		else {
+			let id_pair = unsafe {self.id[BCF_DT_CTG as usize].add(rid).as_ref()}.ok_or_else(|| hts_err("Invalid contig id".to_string()))?;
+			let id_info = unsafe{id_pair.val.as_ref()}.unwrap().info[0] as usize;		
+			Ok((from_cstr(id_pair.key), id_info))
+		}
+	}
 	pub fn ctg_name(&self, rid: usize) -> io::Result<&str> {
 		if rid >= self.nctgs() { Err(hts_err("Invalid contig id".to_string()))}
 		else {
-			let p = unsafe {self.id[BCF_DT_CTG as usize].add(rid).as_ref()}.ok_or_else(|| hts_err("Invalid contig id".to_string()))?.key;
-			Ok(from_cstr(p))
+			let id_pair = unsafe {self.id[BCF_DT_CTG as usize].add(rid).as_ref()}.ok_or_else(|| hts_err("Invalid contig id".to_string()))?;
+			Ok(from_cstr(id_pair.key))
 		}
 	}
 	pub fn sample_name(&self, ix: usize) -> io::Result<&str> {
@@ -170,6 +178,7 @@ impl bcf_hdr_t {
 extern "C" {
 	fn bcf_hdr_init(mode: *const c_char) -> *mut bcf_hdr_t;
 	fn bcf_hdr_dup(hdr: *const bcf_hdr_t) -> *mut bcf_hdr_t;
+	fn bcf_hdr_read(fp: *mut htsFile) -> *mut bcf_hdr_t;
 	fn bcf_hdr_destroy(hdr: *mut bcf_hdr_t);
 	fn bcf_hdr_append(hdr: *mut bcf_hdr_t, line: *const c_char) -> c_int;
 	fn bcf_hdr_get_version(hdr: *const bcf_hdr_t) -> *const c_char;
@@ -221,6 +230,12 @@ impl VcfHeader {
 		match NonNull::new(unsafe{ bcf_hdr_init(get_cstr(mode).as_ptr())}) {
 			None => Err(hts_err("Couldn't create VCF/BCF header".to_string())),
 			Some(hdr) => Ok(VcfHeader{inner: hdr, phantom: PhantomData}),
+		}
+	}
+	pub fn read<H: AsMut<htsFile>>(mut hts_file: H) -> io::Result<Self> {
+		match NonNull::new(unsafe { bcf_hdr_read(hts_file.as_mut()) }) {
+			None => Err(hts_err("Failed to load VCF header".to_string())),
+			Some(p) => Ok(Self{inner: p, phantom: PhantomData})
 		}
 	}
 }
