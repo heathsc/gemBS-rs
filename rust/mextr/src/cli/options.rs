@@ -88,6 +88,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
 	// If tabix option set, check that compress is also set
 	if chash.get_bool("tabix") && !chash.get_bool("compress") { chash.set("tabix", ConfVar::Bool(false)) }
 	
+	// Set regions
 	let mut sr = BcfSrs::new()?;
 	let (reg, flag) = {			
 		if let Some(mut v) = m.values_of("regions").or_else(|| m.values_of("region_list")) {
@@ -105,6 +106,24 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
 		}
 	};
 	sr.set_regions(&reg, flag)?;
+	
+	// Filter regions to ensure limits lie within contig limits (Shouldn't ne required, but just to make sure)
+	let regs = sr.regions().expect("No regions set!");
+	let ctgs = chash.vcf_contigs();
+	for ix in 0..regs.nseqs() {
+		if let Some(rid) = {
+			let seq = regs.seq_name(ix).unwrap();
+			chash.contig_rid(seq)
+		} {
+			let len = ctgs[rid].length() as HtsPos;
+			assert!(len > 0);
+			let rgs = regs.seq_regs_mut(ix).unwrap();
+			for j in 0..rgs.nregs() {
+				let rg = rgs.get_reg_mut(j).unwrap();
+				if rg.end() >= len { rg.set_end(len - 1)} 
+			}
+		}
+	}
 	sr.sort_regions();
 	
 	sr.add_reader(infile)?;

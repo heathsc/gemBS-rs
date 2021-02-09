@@ -13,7 +13,7 @@ use crate::output::{Record, MethRec, REC_BLOCK_SIZE};
 
 pub enum RecordBlockElem<'a> {
 	Single((&'a Record, &'a MethRec)),
-	Multi((&'a Record, &'a Box<[MethRec]>)),
+	Multi((&'a Record, &'a [MethRec])),
 }
 
 pub enum RecordBlock {
