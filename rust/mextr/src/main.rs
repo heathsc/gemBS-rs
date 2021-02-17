@@ -8,6 +8,7 @@ pub mod config;
 pub mod process;
 pub mod read_vcf;
 pub mod output;
+pub mod bbi;
 
 fn main() -> Result<(), String> {
 	let (chash, sr) = cli::process_cli().map_err(|e| format!("dbsnp_index initialization failed with error: {}", e))?;

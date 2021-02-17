@@ -44,6 +44,10 @@ impl region1_t {
 	pub fn start(&self) -> HtsPos { self.start }	
 	pub fn end(&self) -> HtsPos { self.end }	
 	pub fn set_end(&mut self, x: HtsPos) { self.end  = x}	
+	pub fn set_skip(&mut self) { 
+		self.start = 1;
+		self.end = 0;
+	}
 }
 
 #[repr(C)]

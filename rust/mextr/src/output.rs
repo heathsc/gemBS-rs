@@ -3,14 +3,19 @@ use std::io::{self, Write};
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::ops::Deref;
+use std::thread;
 
 use r_htslib::{HtsFile, VcfHeader};
 use libc::c_int;
+use crossbeam_channel::bounded;
 
 use super::config::*;
 use super::read_vcf::unpack::{Strand, RecordBlock, RecordBlockElem};
 use super::read_vcf::BREC_BLOCK_SIZE;
 use super::process::{Recv, TPool};
+use super::bbi::Bbi;
+use super::bbi::compress_bbi::compress_bbi_thread;
+use super::bbi::print_bbi::print_bbi_thread;
 
 mod output_cpg;
 use output_cpg::*;
@@ -227,7 +232,46 @@ pub fn output_bed_methyl_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Re
 	let prefix = chash.get_str("bed_methyl").expect("bedMethyl prefix is missing")
 		.trim_end_matches(".bed").trim_end_matches("cpg").trim_end_matches("chg").trim_end_matches("chh").trim_end_matches(tc);
 	let mut outfiles: Vec<_> = ["cpg", "chg", "chh"].iter().map(|s| open_output_file(format!("{}_{}.bed", prefix, s).as_str(), &chash, tp.clone())).collect();
+	
+	// Prepare bbi files (BigBed and BigWig)
+	let nt = chash.get_int("threads");
+	let (comp_send, comp_recv) = bounded(nt * 8);
+	let (prt_send, prt_recv) = bounded(nt * 8);
+	let bbi = Bbi::init(&prefix, comp_send, &chash).unwrap_or_else(|e| panic!("Error creating BigBed / BigWig files: {}", e));
+	chash.set_bbi(bbi);
+	
+	// setup compress threads
+	let mut threads = Vec::with_capacity(nt + 1);
+	for _ in 0..nt {
+		let ch = chash.clone();
+		let cr = comp_recv.clone();
+		let ps = prt_send.clone();
+		let th = thread::spawn(move || compress_bbi_thread(ch, cr, ps));
+		threads.push(th);
+	}
+	drop(prt_send);
+	
+	// setup print thread
+	let ch = chash.clone();
+	threads.push(thread::spawn(move || print_bbi_thread(ch, prt_recv)));
+	
 	debug!("output_bed_methyl_thread thread starting up");
 	output_handler(&chash, &hdr, r, &mut outfiles, print_bed_methyl_header, output_bed_methyl);
+
+	// Finish sending last bbi blocks
+	let bbi_ref = chash.bbi().read().unwrap();
+	bbi_ref.as_ref().expect("Bbi not set").finish();
+	drop(bbi_ref);
+
+	// Drop sender from the Bbi structure to trigger the compress threads to quit
+	chash.drop_sender();	
+	
+	debug!("wait for compress and print");
+	// Wait for compress and print threads
+	for th in threads.drain(..) { 
+		th.join().unwrap();
+	}
+	
+	
 	debug!("output_bed_methyl_thread closing down")	
 }

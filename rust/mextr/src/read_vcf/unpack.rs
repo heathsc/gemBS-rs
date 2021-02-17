@@ -16,6 +16,15 @@ pub enum RecordBlockElem<'a> {
 	Multi((&'a Record, &'a [MethRec])),
 }
 
+impl <'a>RecordBlockElem<'a> {
+	pub fn record(&'a self) -> &'a Record {
+		match self {
+			RecordBlockElem::Single((r, _)) => r,
+			RecordBlockElem::Multi((r, _)) => r,
+		}
+	} 
+}
+
 pub enum RecordBlock {
 	Single(Vec<(Record, MethRec)>),
 	Multi(Vec<(Record, Box<[MethRec]>)>),

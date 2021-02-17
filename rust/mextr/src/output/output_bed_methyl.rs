@@ -1,11 +1,15 @@
 use std::io::{self, Write};
 use std::str::from_utf8;
+use std::sync::RwLock;
+
 use lazy_static::lazy_static;
 
 use r_htslib::{HtsFile, VcfHeader};
 
 use crate::config::*;
 use crate::read_vcf::unpack::{RecordBlock, RecordBlockElem};
+use crate::bbi::*;
+
 use super::{OutputOpts, calc_phred, Record, MethRec};
 
 lazy_static! {
@@ -47,9 +51,22 @@ fn strand_and_context(rf: &[u8], call: &[u8]) -> Option<(char, [u8; 3], [u8; 3])
 	}
 }
 
-fn output_bed_methyl_rec<W: Write>(files: &mut[W], hdr: &VcfHeader, opts: &OutputOpts, srec: &[(Record, MethRec)]) -> io::Result<()> {
+fn output_bed_methyl_rec<W: Write>(files: &mut[W], chash: &ConfHash, hdr: &VcfHeader, opts: &OutputOpts, srec: &[(Record, MethRec)], mut prev_ctg: Option<u32>) -> io::Result<()> {
 	assert_eq!(files.len(), 3);
-	let sample_desc = opts.sample_desc().expect("Sample description nont set");
+	let sample_desc = opts.sample_desc().expect("Sample description not set");
+	let bbi_ref = chash.bbi().read().unwrap();
+	let bbi = bbi_ref.as_ref().expect("Bbi not set");
+	let sender = bbi.sender().expect("Bbi sender not set");
+
+	let bw_strand_specific = matches!(chash.get_mode("bw_mode"), Mode::StrandSpecific);
+	let mut bb_builders = Vec::new();
+	for f in bbi.bb_files().iter().map(|f| f.build().write().unwrap()) { bb_builders.push(f) }
+	let mut bw_builders = Vec::new();
+	for f in bbi.bw_files().iter().map(|f| f.build().write().unwrap()) { bw_builders.push(f) }
+	if bb_builders.len() != 3 { panic!("Unexpected number of bigBed files")}
+	if bw_builders.len() != if bw_strand_specific { 2 } else { 1 } { panic!("Unexpected number of bigWig files")}
+	
+	let mut zoom_data = prev_ctg.map(|x| chash.vcf_contigs()[x as usize].zoom_data().write().unwrap());
 	for (rec, meth_rec) in srec {
 		if let Some(gt) = meth_rec.max_gt() {
 			let (strand, ref_cx, call_cx) = match strand_and_context(&rec.cx, &meth_rec.cx) {
@@ -63,27 +80,65 @@ fn output_bed_methyl_rec<W: Write>(files: &mut[W], hdr: &VcfHeader, opts: &Outpu
 					(BM_TYPE_CHG, &ref_cx[..], &call_cx[..])
 				} else { (BM_TYPE_CHH, &ref_cx[..], &call_cx[..]) }			
 			}; 
+			
 			let (a, b) = if strand == '+' { (meth_rec.counts[5], meth_rec.counts[7]) } else { (meth_rec.counts[6], meth_rec.counts[4]) };
 			let cov = a + b;
 			if cov > 0 {
 				let m = (a as f64) / (cov as f64);
 				let f = &mut files[bm_type];
 				let gq = calc_phred(1.0 - (meth_rec.gt_probs()[gt as usize]).exp()); // Prob of not calling genotype
-				writeln!(f, "{}\t{}\t{}\t\"{}\"\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", 
-					hdr.ctg_name(rec.rid as usize).unwrap(), rec.pos, rec.pos + 1, sample_desc, cov.min(1000),
-					strand, rec.pos, rec.pos + 1, RGB_TAB[(m * 10.0 + 0.5) as usize], cov, (100.0 * m) as usize, 
-					from_utf8(rf).unwrap(), from_utf8(call).unwrap(), gq)?;	
+				let sbuf = format!("\"{}\"\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", 
+					sample_desc, cov.min(1000), strand, 
+					rec.pos, rec.pos + 1, RGB_TAB[(m * 10.0 + 0.5) as usize], cov, (100.0 * m) as usize, 
+					from_utf8(rf).unwrap(), from_utf8(call).unwrap(), gq);	
+
+				writeln!(f, "{}\t{}\t{}\t\t{}",	hdr.ctg_name(rec.rid as usize).unwrap(), rec.pos, rec.pos + 1, &sbuf)?;	
+
+				// Handle bbi files
+				//
+				// If contig has changed, finish any partly completed blocks
+				match prev_ctg {
+					Some(old_rid) => {
+						if old_rid != rec.rid {
+							for build in bb_builders.iter_mut() { 
+								build.finish(sender);
+								build.clear_counts(); 
+							}
+							for build in bw_builders.iter_mut() { 
+								build.finish(sender); 
+								build.clear_counts();
+							}
+							prev_ctg = Some(rec.rid);
+							zoom_data = Some(chash.vcf_contigs()[rec.rid as usize].zoom_data().write().unwrap());
+						}
+					},
+					None => {
+						prev_ctg = Some(rec.rid);
+						zoom_data = Some(chash.vcf_contigs()[rec.rid as usize].zoom_data().write().unwrap());
+					},
+				}
+				
+				let out_ix = chash.vcf_contigs()[rec.rid as usize].out_ix().expect("Missing out index for contig");
+				// Handle bb record 
+				let bb_build = &mut bb_builders[bm_type];
+				bb_build.add_bb_rec(out_ix as u32, rec.pos, &sbuf, sender);
+				// Handle bw record
+				let bw_build = &mut bw_builders[ if bw_strand_specific && strand == '-' { 1 } else { 0 } ];
+				bw_build.add_bw_rec(out_ix as u32, rec.pos, m as f32, sender);
+				// Store detailed zoom data
+				zoom_data.as_mut().unwrap().as_mut().unwrap().add_data(rec.pos, bm_type as u8, strand, a, m as f32);
 			}
 		}
 	} 
 	Ok(())
 }
 
-pub fn output_bed_methyl(outfiles: &mut [HtsFile], rec_blk: &RecordBlock, _prev: Option<RecordBlockElem>, chash: &ConfHash, hdr: &VcfHeader) -> io::Result<()> {
+pub fn output_bed_methyl(outfiles: &mut [HtsFile], rec_blk: &RecordBlock, prev: Option<RecordBlockElem>, chash: &ConfHash, hdr: &VcfHeader) -> io::Result<()> {
 	
 	let opts = OutputOpts::new(chash);
+	let prev_ctg = prev.map(|x| x.record().rid());
 	match rec_blk {
-		RecordBlock::Single(svec) => output_bed_methyl_rec(outfiles, hdr, &opts, svec), 
-		RecordBlock::Multi(_) => panic!("Multi sample fils not compatible with bedMethyl"), 
+		RecordBlock::Single(svec) => output_bed_methyl_rec(outfiles, chash, hdr, &opts, svec, prev_ctg), 
+		RecordBlock::Multi(_) => panic!("Multi sample files not compatible with bedMethyl"), 
 	}
 }
