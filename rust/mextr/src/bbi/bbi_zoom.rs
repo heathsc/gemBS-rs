@@ -6,9 +6,9 @@ use libc::c_int;
 
 pub const ZOOM_LEVELS: usize = 10;
 
-const BB_INITIAL_REDUCTION: usize = 10;
-const BW_INITIAL_REDUCTION: usize = 40;
-const ZOOM_RES_INCREMENT: usize = 4;
+const BB_INITIAL_REDUCTION: u32 = 10;
+const BW_INITIAL_REDUCTION: u32 = 40;
+const ZOOM_RES_INCREMENT: u32 = 4;
 
 #[derive(Default)]
 pub struct ZoomCounts {
@@ -39,43 +39,44 @@ pub fn make_zoom_scales() -> (Vec<u32>, Vec<u32>) {
 	(make_scales(BB_INITIAL_REDUCTION), make_scales(BW_INITIAL_REDUCTION))
 }
 
-// Stored data to allow generation of zoom levels for bigBed and bigWig files
-// We store data on two bases in each byte of base_type;
-// bits 4-7: base 1, bits 0-3: base 2
-//
-// bits 0-1: bedmethyl_type
-// bit 2: strand (0 == top, 1 == bottom)
-// bit 3: non-zero methylation (1 == yes)
-// bits 4-5: bedmethyl_type
-// bit 6: strand (0 == top, 1 == bottom)
-// bit 7: non-zero methylation (1 == yes)
-//
-// There is one ZoomData structure per contig
-//
-
-pub struct ZoomData {
-	base_type: Vec<u8>,
-	val: Vec<f32>,
-} 
-
-impl ZoomData {
-	pub fn new(len: usize) -> Self {
-		Self {
-			base_type: vec!(0; (len + 1) >> 1),
-			val: Vec::new()
-		}
-	}
-
-	pub fn add_data(&mut self, pos: u32, bm_type: u8, strand: char, a: c_int, m: f32) {
-		let ix = (pos >> 1) as usize;
-		let mut base_type = bm_type;
-		if strand == '-' { base_type |= 4 }
-		if a > 0 {
-			base_type |= 8;
-			self.val.push(100.0 * m);
-		}
-		if (pos & 1) == 0  { base_type <<= 4 }
-		self.base_type[ix] |= base_type;	
-	}
+#[derive(Default)]
+pub struct ZoomRec {
+	end: u32,       // End base of zoom region (start base is given by the scale)
+	count: u32,     // How many data items in this record
+	sum_x: f32,
+	sum_xsq: f32,
+	min: f32,
+	max: f32,
 }
 
+impl ZoomRec {
+	pub fn clear(&mut self, end: u32) {
+		self.count = 0;
+		self.sum_x = 0.0;
+		self.sum_xsq = 0.0;
+		self.min = 0.0;
+		self.max = 0.0;
+		self.end = end;
+	}	
+	pub fn set(&mut self, end: u32, x: f32) {
+		self.count = 1;
+		self.sum_x = x;
+		self.sum_xsq = x * x;
+		self.min = x;
+		self.max = x;
+		self.end = end;
+	}
+	pub fn add(&mut self, x: f32) {
+		self.count += 1;
+		self.sum_x += x;
+		self.sum_xsq += x * x;
+		self.min = self.min.min(x);
+		self.max = self.max.max(x);
+	}
+	pub fn end(&self) -> u32 { self.end }
+	pub fn count(&self) -> u32 { self.count }
+	pub fn sum_x(&self) -> f32 { self.sum_x }
+	pub fn sum_xsq(&self) -> f32 { self.sum_xsq }
+	pub fn min(&self) -> f32 { self.min}
+	pub fn max(&self) -> f32 { self.max }
+}

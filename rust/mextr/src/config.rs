@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::thread::sleep;
 use std::sync::{RwLock, Arc};
 
-use crate::bbi::{Bbi, bbi_zoom::ZoomData};
+use crate::bbi::Bbi;
 
 pub fn new_err(s: String) -> io::Error {
 	Error::new(ErrorKind::Other, s)	
@@ -14,7 +14,6 @@ pub struct VcfContig {
 	name: Arc<Box<str>>,
 	length: usize,
 	out_ix: Option<usize>, // Output index (used for bbi files)
-	zoom_data: RwLock<Option<ZoomData>>,
 }
 
 impl VcfContig {
@@ -23,17 +22,11 @@ impl VcfContig {
 			name: Arc::new(name.as_ref().to_owned().into_boxed_str()), 
 			length, 
 			out_ix: None,
-			zoom_data: RwLock::new(None)
 		 }
 	}
 	pub fn name(&self) -> &str { self.name.as_ref() }
 	pub fn length(&self) -> usize { self.length }
 	pub fn out_ix(&self) -> Option<usize> { self.out_ix }
-	pub fn zoom_data(&self) -> &RwLock<Option<ZoomData>> { &self.zoom_data } 
-	pub fn init_zoom_data(&self) {
-		let mut p = self.zoom_data.write().unwrap();
-		*p = Some(ZoomData::new(self.length));
-	}
 }
 
 #[derive(Debug,Copy, Clone)]

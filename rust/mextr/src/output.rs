@@ -15,7 +15,7 @@ use super::read_vcf::BREC_BLOCK_SIZE;
 use super::process::{Recv, TPool};
 use super::bbi::Bbi;
 use super::bbi::compress_bbi::compress_bbi_thread;
-use super::bbi::print_bbi::print_bbi_thread;
+use super::bbi::write_bbi::write_bbi_thread;
 
 mod output_cpg;
 use output_cpg::*;
@@ -28,9 +28,6 @@ pub mod tabix;
 
 pub const GT_IUPAC: &[u8] = "AMRWCSYGKT".as_bytes();
 pub const GT_MASK: [u8; 10] = [0x11, 0xb3, 0x55, 0x99, 0xa2, 0xf6, 0xaa, 0x54, 0xdc, 0x88];
-
-// REC_BLOCK_SIZE can not be smaller than BREC_BLOCK_SIZE
-pub const REC_BLOCK_SIZE: usize = BREC_BLOCK_SIZE;
 
 pub struct MethRec {
 	counts: [c_int; 8],	
@@ -203,7 +200,7 @@ pub fn output_handler(chash: &ConfHash, hdr: &VcfHeader, r: Recv, outfiles: &mut
 			while let Some(blk) = blk_store.remove(&curr_ix) {
 				let prev = if let Some(b) = pblk.as_ref() { b.last() } else { None };
 				ob(outfiles, &blk, prev, chash, hdr).expect("Error writing file");
-				pblk = Some(rblk.clone());
+				pblk = Some(blk.clone());
 				curr_ix += 1;
 			}
 		} else { blk_store.insert(ix, rblk); }
@@ -236,7 +233,7 @@ pub fn output_bed_methyl_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Re
 	// Prepare bbi files (BigBed and BigWig)
 	let nt = chash.get_int("threads");
 	let (comp_send, comp_recv) = bounded(nt * 8);
-	let (prt_send, prt_recv) = bounded(nt * 8);
+	let (wrt_send, wrt_recv) = bounded(nt * 8);
 	let bbi = Bbi::init(&prefix, comp_send, &chash).unwrap_or_else(|e| panic!("Error creating BigBed / BigWig files: {}", e));
 	chash.set_bbi(bbi);
 	
@@ -245,15 +242,14 @@ pub fn output_bed_methyl_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Re
 	for _ in 0..nt {
 		let ch = chash.clone();
 		let cr = comp_recv.clone();
-		let ps = prt_send.clone();
+		let ps = wrt_send.clone();
 		let th = thread::spawn(move || compress_bbi_thread(ch, cr, ps));
 		threads.push(th);
 	}
-	drop(prt_send);
 	
-	// setup print thread
+	// setup write thread
 	let ch = chash.clone();
-	threads.push(thread::spawn(move || print_bbi_thread(ch, prt_recv)));
+	threads.push(thread::spawn(move || write_bbi_thread(ch, wrt_recv)));
 	
 	debug!("output_bed_methyl_thread thread starting up");
 	output_handler(&chash, &hdr, r, &mut outfiles, print_bed_methyl_header, output_bed_methyl);
@@ -262,12 +258,16 @@ pub fn output_bed_methyl_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Re
 	let bbi_ref = chash.bbi().read().unwrap();
 	bbi_ref.as_ref().expect("Bbi not set").finish();
 	drop(bbi_ref);
-
+	
+	// Write main index
+	
 	// Drop sender from the Bbi structure to trigger the compress threads to quit
 	chash.drop_sender();	
+	// Drop write sender to trigger the write thread to exit
+	drop(wrt_send);
 	
-	debug!("wait for compress and print");
-	// Wait for compress and print threads
+	debug!("wait for compress and write threads");
+	// Wait for compress and write threads
 	for th in threads.drain(..) { 
 		th.join().unwrap();
 	}

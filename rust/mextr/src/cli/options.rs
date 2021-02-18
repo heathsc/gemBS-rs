@@ -104,7 +104,7 @@ fn handle_regions(m: &ArgMatches, chash: &mut ConfHash, sr: &mut BcfSrs) -> io::
 		let rid = chash.contig_rid(seq).expect("Unexpected contig");
 		chash.set_contig_out_ix(rid, ix);
 		// Allocate detailed zoom data for contig
-		chash.vcf_contigs()[rid].init_zoom_data();
+//		chash.vcf_contigs()[rid].init_zoom_data();
 	}
 	Ok(())
 }

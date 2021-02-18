@@ -9,7 +9,8 @@ use crate::config::*;
 
 use super::model::{Model, MAX_QUAL};
 use super::BrecBlock;
-use crate::output::{Record, MethRec, REC_BLOCK_SIZE};
+use crate::output::{Record, MethRec};
+use crate::read_vcf::BREC_BLOCK_SIZE;
 
 pub enum RecordBlockElem<'a> {
 	Single((&'a Record, &'a MethRec)),
@@ -170,35 +171,29 @@ impl UnpackData {
 		let bq = chash.get_int("bq_threshold").min(MAX_QUAL) as c_int;
 		let common_gt = chash.get_bool("common_gt");
 		let mrec_vec = Some(Vec::with_capacity(ns));
-		let rec_blk = Some(if ns > 1 { RecordBlock::Multi(Vec::with_capacity(REC_BLOCK_SIZE))}
-		else { RecordBlock::Single(Vec::with_capacity(REC_BLOCK_SIZE))});
+		let rec_blk = Some(if ns > 1 { RecordBlock::Multi(Vec::with_capacity(BREC_BLOCK_SIZE))}
+		else { RecordBlock::Single(Vec::with_capacity(BREC_BLOCK_SIZE))});
 		Self{ mdb_mc8, mdb_aq, mdb_mq, mdb_cx, model, bq, common_gt, ns, mrec_vec, rec_blk, idx: 0}		
 	}	
 }
 
 pub fn send_blk(udata: &mut UnpackData, channel_vec: &[Sender<(usize, Arc<RecordBlock>)>]) {
-	if udata.rec_blk.as_ref().unwrap().len() > 0 {
-		let arc_rec_blk = Arc::new(udata.rec_blk.take().unwrap());
-		for s in channel_vec.iter() {
-			let rb = arc_rec_blk.clone();
-			s.send((udata.idx, rb)).expect("Error sending record block");
-		} 
-		drop(arc_rec_blk);
-		udata.rec_blk = Some(if udata.ns > 1 { RecordBlock::Multi(Vec::with_capacity(REC_BLOCK_SIZE))}
-		else { RecordBlock::Single(Vec::with_capacity(REC_BLOCK_SIZE))});
-	}
+	let arc_rec_blk = Arc::new(udata.rec_blk.take().unwrap());
+	for s in channel_vec.iter() {
+		let rb = arc_rec_blk.clone();
+		s.send((udata.idx, rb)).expect("Error sending record block");
+	} 
+	drop(arc_rec_blk);
+	udata.rec_blk = Some(if udata.ns > 1 { RecordBlock::Multi(Vec::with_capacity(BREC_BLOCK_SIZE))}
+	else { RecordBlock::Single(Vec::with_capacity(BREC_BLOCK_SIZE))});
 }
 
-pub fn unpack_vcf(brec: &mut BcfRec, idx: usize, hdr: &VcfHeader, udata: &mut UnpackData, channel_vec: &[Sender<(usize, Arc<RecordBlock>)>]) {
+pub fn unpack_vcf(brec: &mut BcfRec, hdr: &VcfHeader, udata: &mut UnpackData) {
 	let alls = brec.alleles();
 	// We only consider sites where at least one allele is C or G 
 	if !alls.iter().any(|a| a == &"C" || a == &"G") { return }
 	// Get site context from INFO field
 	if brec.get_info_u8(&hdr, "CX", &mut udata.mdb_cx).is_none() || udata.mdb_cx.len() != 5 { return }
-	if udata.idx != idx {
-		send_blk(udata, channel_vec);
-		udata.idx = idx;
-	}
 	let ns = udata.ns;
 	let cx: [u8; 5] = (&udata.mdb_cx as &[u8]).try_into().unwrap();
 	// Get reference base coded as 1,2,3,4 for A,C,G,T or 0 for anything else 
@@ -246,8 +241,6 @@ pub fn unpack_vcf(brec: &mut BcfRec, idx: usize, hdr: &VcfHeader, udata: &mut Un
 			udata.mrec_vec = Some(Vec::with_capacity(ns));
 		},
 	}
-	// Send full blocks for output
-	if rec_blk.len() == REC_BLOCK_SIZE { send_blk(udata, channel_vec) }
 }
 
 pub fn unpack_vcf_slave(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, channel_vec: Arc<Vec<Sender<(usize, Arc<RecordBlock>)>>>, 
@@ -258,11 +251,12 @@ pub fn unpack_vcf_slave(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, channel_vec: 
 	let mut udata = UnpackData::new(&chash, ns);
 	for mut bblk in full_r.iter() {
 		let idx = bblk.idx;
+		udata.idx = idx;
 		for brec in bblk.buf().iter_mut() {
-			unpack_vcf(brec, idx, &hdr, &mut udata, &channel_vec);
+			unpack_vcf(brec, &hdr, &mut udata);
 		}
+		send_blk(&mut udata, &channel_vec);
 		empty_s.send(bblk).expect("Error sending empty buffers");
 	}
-	send_blk(&mut udata, &channel_vec);
 }
 

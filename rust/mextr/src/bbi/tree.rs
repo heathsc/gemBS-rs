@@ -3,7 +3,7 @@ use std::fs::File;
 use std::convert::TryInto;
 
 use crate::config::{VcfContig, ConfHash};
-use super::print_bbi::BbiWriter;
+use super::write_bbi::BbiWriter;
 use super::bbi_utils::*;
 
 const BLOCK_SIZE: usize = 256;

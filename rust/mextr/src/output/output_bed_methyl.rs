@@ -1,6 +1,5 @@
 use std::io::{self, Write};
 use std::str::from_utf8;
-use std::sync::RwLock;
 
 use lazy_static::lazy_static;
 
@@ -8,7 +7,6 @@ use r_htslib::{HtsFile, VcfHeader};
 
 use crate::config::*;
 use crate::read_vcf::unpack::{RecordBlock, RecordBlockElem};
-use crate::bbi::*;
 
 use super::{OutputOpts, calc_phred, Record, MethRec};
 
@@ -66,8 +64,29 @@ fn output_bed_methyl_rec<W: Write>(files: &mut[W], chash: &ConfHash, hdr: &VcfHe
 	if bb_builders.len() != 3 { panic!("Unexpected number of bigBed files")}
 	if bw_builders.len() != if bw_strand_specific { 2 } else { 1 } { panic!("Unexpected number of bigWig files")}
 	
-	let mut zoom_data = prev_ctg.map(|x| chash.vcf_contigs()[x as usize].zoom_data().write().unwrap());
 	for (rec, meth_rec) in srec {
+		// For bbi files - handle new ctg
+		match prev_ctg {
+			Some(old_rid) => {
+				if old_rid != rec.rid {
+					for build in bb_builders.iter_mut() { 
+						build.finish(sender);
+						build.clear_counts(); 
+					}
+					for build in bw_builders.iter_mut() { 
+						build.finish(sender); 
+						build.clear_counts();
+					}
+					prev_ctg = Some(rec.rid);
+					debug!("Output_bed_methyl - finishing {}, processing {}", chash.vcf_contigs()[old_rid as usize].name(), chash.vcf_contigs()[rec.rid as usize].name());
+				}
+			},
+			None => {
+				prev_ctg = Some(rec.rid);
+				debug!("Output_bed_methyl - processing {}", chash.vcf_contigs()[rec.rid as usize].name());
+			},
+		}
+			
 		if let Some(gt) = meth_rec.max_gt() {
 			let (strand, ref_cx, call_cx) = match strand_and_context(&rec.cx, &meth_rec.cx) {
 				Some(v) => v,
@@ -96,37 +115,16 @@ fn output_bed_methyl_rec<W: Write>(files: &mut[W], chash: &ConfHash, hdr: &VcfHe
 
 				// Handle bbi files
 				//
-				// If contig has changed, finish any partly completed blocks
-				match prev_ctg {
-					Some(old_rid) => {
-						if old_rid != rec.rid {
-							for build in bb_builders.iter_mut() { 
-								build.finish(sender);
-								build.clear_counts(); 
-							}
-							for build in bw_builders.iter_mut() { 
-								build.finish(sender); 
-								build.clear_counts();
-							}
-							prev_ctg = Some(rec.rid);
-							zoom_data = Some(chash.vcf_contigs()[rec.rid as usize].zoom_data().write().unwrap());
-						}
-					},
-					None => {
-						prev_ctg = Some(rec.rid);
-						zoom_data = Some(chash.vcf_contigs()[rec.rid as usize].zoom_data().write().unwrap());
-					},
-				}
 				
 				let out_ix = chash.vcf_contigs()[rec.rid as usize].out_ix().expect("Missing out index for contig");
 				// Handle bb record 
 				let bb_build = &mut bb_builders[bm_type];
 				bb_build.add_bb_rec(out_ix as u32, rec.pos, &sbuf, sender);
+				bb_build.add_zoom_obs(out_ix as u32, rec.pos, m as f32, sender);
 				// Handle bw record
 				let bw_build = &mut bw_builders[ if bw_strand_specific && strand == '-' { 1 } else { 0 } ];
 				bw_build.add_bw_rec(out_ix as u32, rec.pos, m as f32, sender);
-				// Store detailed zoom data
-				zoom_data.as_mut().unwrap().as_mut().unwrap().add_data(rec.pos, bm_type as u8, strand, a, m as f32);
+				bw_build.add_zoom_obs(out_ix as u32, rec.pos, m as f32, sender);
 			}
 		}
 	} 
@@ -137,6 +135,7 @@ pub fn output_bed_methyl(outfiles: &mut [HtsFile], rec_blk: &RecordBlock, prev: 
 	
 	let opts = OutputOpts::new(chash);
 	let prev_ctg = prev.map(|x| x.record().rid());
+
 	match rec_blk {
 		RecordBlock::Single(svec) => output_bed_methyl_rec(outfiles, chash, hdr, &opts, svec, prev_ctg), 
 		RecordBlock::Multi(_) => panic!("Multi sample files not compatible with bedMethyl"), 

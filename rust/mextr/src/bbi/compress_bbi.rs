@@ -24,13 +24,25 @@ fn compress_buf(inbuf: &[u8]) -> Vec<u8> {
 	out
 }
 
-pub fn compress_bbi_thread(ch: Arc<ConfHash>, r: Receiver<(BbiBlock, Vec<u8>)>, ps: Sender<(BbiBlock, Vec<u8>)>) {
+pub fn compress_bbi_thread(ch: Arc<ConfHash>, r: Receiver<BbiMsg>, ps: Sender<BbiMsg>) {
 	info!("compress_bbi_thread starting up");
 	let mut max_uncomp_size = 0;
-	for (blk, v) in r.iter() {
-		max_uncomp_size = max_uncomp_size.max(v.len());
-		let cbuf = compress_buf(&v);
-		ps.send((blk, cbuf)).expect("Error sending compressed data block");
+	for msg in r.iter() {
+		match msg {
+			BbiMsg::Data((blk, v)) => {
+				max_uncomp_size = max_uncomp_size.max(v.len());
+				let mut cbuf = compress_buf(&v);
+				cbuf.shrink_to_fit();
+				ps.send(BbiMsg::Data((blk, cbuf))).expect("Error sending compressed data block");			
+			},
+			BbiMsg::ZData((blk, v, level)) => {
+				max_uncomp_size = max_uncomp_size.max(v.len());
+				let mut cbuf = compress_buf(&v);
+				cbuf.shrink_to_fit();
+				ps.send(BbiMsg::ZData((blk, cbuf, level))).expect("Error sending compressed data block");			
+			},
+			BbiMsg::EndOfSection(_) => ps.send(msg).expect("Error sending compressed data block"),
+		}
 	}	
 	ch.update_max_uncomp_size(max_uncomp_size);	
 	info!("compress_bbi_thread shutting down");
