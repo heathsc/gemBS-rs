@@ -2,42 +2,63 @@ use std::sync::Arc;
 use std::fs::File;
 use std::io::{BufWriter, Write, SeekFrom};
 use std::collections::HashMap;
+use std::thread;
 
 use crossbeam_channel::Receiver;
 
 use crate::config::ConfHash;
 use super::*;
 use super::tree::CtgTree;
+use super::bbi_finish::bbi_finish;
 
 pub struct BbiWriter {
-	fp: BufWriter<File>,
-	ctg_blocks: Arc<RwLock<Vec<Vec<BbiCtgBlock>>>>,	
-	header: BbiHeader,
-	index_offset: u64,
+	pub fp: BufWriter<File>,
+	pub ctg_blocks: Vec<Vec<BbiCtgBlock>>,	
+	pub zoom_data: [Vec<(BbiBlock, Vec<u8>)>; ZOOM_LEVELS],
+	pub header: BbiHeader,
+	bbi_type: BbiBlockType,
+	n_ctgs: usize,
+	pub index_offset: u64,
 }
 
 impl BbiWriter {
 	pub fn fp(&mut self) -> &mut BufWriter<File> { &mut self.fp }
 	pub fn header(&mut self) -> &mut BbiHeader { &mut self.header }
-	pub fn init(bbi_file: &BbiFile, bb_flag: bool) -> Self {
+	pub fn init(bbi_file: &BbiFile, bbi_type: BbiBlockType, n_ctgs: usize) -> Self {
+		trace!("In init for {:?}", bbi_type);
+		let bb_flag = matches!(bbi_type, BbiBlockType::Bb(_));
 		let header = BbiHeader::new(bb_flag);
 		let fp = match File::create(bbi_file.name()) {
 			Ok(f) => BufWriter::new(f),
 			Err(e) => panic!("Could not open output file {}: {}", bbi_file.name(), e),
 		};
-		Self{header, ctg_blocks: bbi_file.ctg_blocks(), fp, index_offset: 0}
+		let blocks: Vec<Vec<BbiCtgBlock>> = (0..n_ctgs).map(|_| Vec::new()).collect();
+		trace!("Leaving init for {:?}", bbi_type);
+		Self{header, ctg_blocks: blocks, n_ctgs, bbi_type, zoom_data: Default::default(), fp, index_offset: 0}
 	}	
+	pub fn bbi_type(&self) -> BbiBlockType { self.bbi_type }
+	pub fn ctg_blocks(&self) -> &[Vec<BbiCtgBlock>] { &self.ctg_blocks }
+	pub fn index_offset(&self) -> u64 { self.index_offset }
+	pub fn clear_ctg_blocks(&mut self) {
+		let blocks: Vec<Vec<BbiCtgBlock>> = (0..self.n_ctgs).map(|_| Vec::new()).collect();
+		self.ctg_blocks = blocks;
+	}
 }
 
 fn init_writers(ch: &ConfHash) -> (Vec<BbiWriter>, Vec<BbiWriter>) {
+	trace!("write_bbi_thread - initialize writers");
 	let bbi_ref = ch.bbi().read().unwrap();
 	let bbi = bbi_ref.as_ref().expect("Bbi not set");
-	let mut bb_writers: Vec<_> = bbi.bb_files().iter().map(|f| BbiWriter::init(f, true)).collect();
-	let mut bw_writers: Vec<_> = bbi.bw_files().iter().map(|f| BbiWriter::init(f, false)).collect();
+	let n_ctgs = bbi.n_output_ctgs();
+	trace!("init bb writers");
+	let mut bb_writers: Vec<_> = bbi.bb_files().iter().enumerate().map(|(i, f)| BbiWriter::init(f, BbiBlockType::Bb(i as u8), n_ctgs)).collect();
+	trace!("init bw writers");
+	let mut bw_writers: Vec<_> = bbi.bw_files().iter().enumerate().map(|(i, f)| BbiWriter::init(f, BbiBlockType::Bw(i as u8), n_ctgs)).collect();
 	let ctg_tree = CtgTree::init(ch);
 	for w in bb_writers.iter_mut().chain(bw_writers.iter_mut()) { 
 		ctg_tree.write(w).expect("Error writing header to bbi file"); 
 	}
+	trace!("initalize writers finished");
 	(bb_writers, bw_writers)
 }
 
@@ -50,24 +71,21 @@ struct WriterState<'a> {
 	writer: &'a mut BbiWriter,
 	curr_idx: u32,
 	curr_zoom_idx: [u32; ZOOM_LEVELS],
-	zoom_data: [Vec<(BbiBlock, Vec<u8>)>; ZOOM_LEVELS],
-//	zoom_data: [Vec<BbiBlock>; ZOOM_LEVELS],
 	state: State,
-	bbi_type: BbiBlockType,
 	store: HashMap<u32, (BbiBlock, Vec<u8>)>,
 	zstore: HashMap<(u32, u32), (BbiBlock, Vec<u8>)>,
 } 
 
 impl <'a>WriterState<'a> {
-	fn new(writer: &'a mut BbiWriter, bbi_type: BbiBlockType) -> WriterState<'a> {
-		Self { writer, curr_idx: 0, curr_zoom_idx: Default::default(), zoom_data: Default::default(), 
-			state: State::Writing, bbi_type, store: HashMap::new(), zstore: HashMap::new() }
+	fn new(writer: &'a mut BbiWriter) -> WriterState<'a> {
+		Self { writer, curr_idx: 0, curr_zoom_idx: Default::default(), 
+			state: State::Writing, store: HashMap::new(), zstore: HashMap::new() }
 	}	
 	fn clear_state(&mut self) {
 		assert!(self.store.is_empty());
 		self.curr_idx = 0;
 		self.state = State::Writing;
-		debug!("clear_state() called for {:?}", self.bbi_type);
+		debug!("clear_state() called for {:?}", self.writer.bbi_type);
 	}
 	fn check_idx(&self, idx: u32, zoom_idx: &[u32]) -> bool {
 		assert!(idx >= self.curr_idx);
@@ -83,19 +101,18 @@ impl <'a>WriterState<'a> {
 
 fn add_block(ws: &mut WriterState, blk: &BbiBlock) {
 	let pos = ws.writer.fp.seek(SeekFrom::Current(0)).expect("Error getting position from BBI file");
-	let mut ctg_block = ws.writer.ctg_blocks.write().unwrap();
+	let ctg_block = &mut ws.writer.ctg_blocks;
 	let blocks = &mut ctg_block[blk.id() as usize];
 	blocks.push(BbiCtgBlock::new(blk, pos));
 }
 
 pub fn write_bbi_thread(ch: Arc<ConfHash>, r: Receiver<BbiMsg>) {
 	info!("write_bbi_thread starting up");
-
 	let (mut bb_writers, mut bw_writers) = init_writers(&ch);
 	let mut state = HashMap::new();
 	
-	for (ix, w) in bb_writers.iter_mut().enumerate() { state.insert(BbiBlockType::Bb(ix as u8), WriterState::new(w, BbiBlockType::Bb(ix as u8))); }
-	for (ix, w) in bw_writers.iter_mut().enumerate() { state.insert(BbiBlockType::Bw(ix as u8), WriterState::new(w, BbiBlockType::Bw(ix as u8))); }
+	for (ix, w) in bb_writers.iter_mut().enumerate() { state.insert(BbiBlockType::Bb(ix as u8), WriterState::new(w)); }
+	for (ix, w) in bw_writers.iter_mut().enumerate() { state.insert(BbiBlockType::Bw(ix as u8), WriterState::new(w)); }
 	
 	for msg in r.iter() {
 		match msg {
@@ -123,12 +140,10 @@ pub fn write_bbi_thread(ch: Arc<ConfHash>, r: Receiver<BbiMsg>) {
 				let ws = state.get_mut(&blk.bbi_type()).expect("Unexpected block type");
 				let l = level as usize;
 				if blk.idx() == ws.curr_zoom_idx[l] {
-					ws.zoom_data[level as usize].push((blk, v));
-//					ws.zoom_data[level as usize].push(blk);
+					ws.writer.zoom_data[level as usize].push((blk, v));
 					ws.curr_zoom_idx[l] += 1;
 					while let Some((blk1, v1)) = ws.zstore.remove(&(ws.curr_zoom_idx[l], level)) {
-						ws.zoom_data[level as usize].push((blk1, v1));
-//						ws.zoom_data[level as usize].push(blk1);
+						ws.writer.zoom_data[level as usize].push((blk1, v1));
 						ws.curr_zoom_idx[l] += 1;
 					}
 				} else {
@@ -158,19 +173,21 @@ pub fn write_bbi_thread(ch: Arc<ConfHash>, r: Receiver<BbiMsg>) {
 		debug!("Writer state: {:?} {} {:?}", bbi_type, ws.curr_idx, ws.curr_zoom_idx);
 		assert!(ws.store.is_empty());
 		assert!(ws.zstore.is_empty());
-		let mut tot = 0;
-		let mut tot1 = 0;
-		for zd in ws.zoom_data.iter() {
-			let (sz, sz1) = zd.iter().fold((0, 0), |(s, s1), (_, v)| (s + v.len(), s1 + v.capacity()));
-			tot += sz;
-			tot1 += sz1;
-			debug!("zoom data: {} {}", sz, sz1);
-		}
-		debug!("total zoom data: {} {} ", tot, tot1);
 	}
 	
 	// Store start of index in file
 	for w in bb_writers.iter_mut().chain(bw_writers.iter_mut()) { w.index_offset = w.fp.seek(SeekFrom::Current(0)).expect("Error getting position from BBI file") }
+	
+	// Launch threads to generate indices and wrute out zoom data
+	let mut threads = Vec::with_capacity(5);
+	for w in bb_writers.drain(..).chain(bw_writers.drain(..)) { 
+		let chc = ch.clone();
+		let th = thread::spawn(move || bbi_finish(chc, w));
+		threads.push(th);
+	}	
+	
+	// Wait for daughter threads
+	for th in threads.drain(..) { th.join().unwrap() }
 	
 	info!("write_bbi_thread shutting down");
 	

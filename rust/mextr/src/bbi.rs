@@ -1,9 +1,8 @@
-use std::io::{self, Write, Seek, BufWriter};
-use std::fs::File;
+use std::io::{self, Write, Seek};
 use std::sync::{RwLock, Arc};
 
 use crossbeam_channel::Sender;
-use libc::{c_void, size_t, memcpy};
+use libc::{c_void, memcpy};
 use crate::config::{Mode, ConfHash};
 
 pub mod bbi_file_struct;
@@ -12,6 +11,7 @@ pub mod write_bbi;
 pub mod bbi_zoom;
 pub mod bbi_utils;
 pub mod tree;
+pub mod bbi_finish;
 
 use bbi_zoom::*;
 use bbi_file_struct::*;
@@ -57,12 +57,14 @@ pub struct BbiBlockBuild {
 	zblock: [Option<(BbiBlock, Vec<u8>)>; ZOOM_LEVELS],
 	zidx: [u32; ZOOM_LEVELS], 
 	zrec: [ZoomRec; ZOOM_LEVELS],
+	summary: Summary,
 	bbi_type: BbiBlockType,
 	idx: u32,
 	n_items: u32,
 	n_rec: u32,
 	items_per_slot: u32,
 	n_zoom_items: [u32; ZOOM_LEVELS],
+	n_zoom_rec: [u32; ZOOM_LEVELS],
 	zoom_scales: Arc<Vec<u32>>,
 	zoom_counts: ZoomCounts,	
 }
@@ -104,6 +106,7 @@ impl BbiBlockBuild {
 	pub fn add_zoom_obs(&mut self, id: u32, pos: u32, val: f32, s: &Sender<BbiMsg>) {
 		for (i, zr) in self.zrec.iter_mut().enumerate() {
 			if pos >= zr.end() {
+				self.n_zoom_rec[i] += 1;
 				let scale = self.zoom_scales[i];
 				let start = zr.end() - scale;
 				let v = if let Some((blk, v)) = self.zblock[i].as_mut() {
@@ -114,12 +117,13 @@ impl BbiBlockBuild {
 					self.zidx[i] += 1;
 					&mut self.zblock[i].as_mut().unwrap().1
 				};
-				zr.set(pos + self.zoom_scales[i], val);
+				zr.set(id, pos + self.zoom_scales[i], val);
 				let tbuf = [id, start, zr.end(), zr.count()];
 				write_u32_slice(v, &tbuf).expect("Error writing zoom data");
 				let tbuf = [zr.min(), zr.max(), zr.sum_x(), zr.sum_xsq()];
 				write_f32_slice(v, &tbuf).expect("Error writing zoom data");
 				self.n_zoom_items[i] += 1;
+				self.summary.add_zrec(&zr);
 				if self.n_zoom_items[i] >= self.items_per_slot {
 					let (blk, mut v) = self.zblock[i].take().unwrap();
 					v.shrink_to_fit();
@@ -129,6 +133,29 @@ impl BbiBlockBuild {
 			} else { zr.add(val) }
 		}
 	}
+	
+	pub fn flush_zoom_obs(&mut self) {
+		for (i, zr) in self.zrec.iter_mut().enumerate() {
+			let scale = self.zoom_scales[i];
+			let start = zr.end() - scale;
+			let v = if let Some((blk, v)) = self.zblock[i].as_mut() {
+				blk.end = zr.end();
+				v
+			} else {				
+				self.zblock[i] = Some((BbiBlock{start, id: zr.id(), end: zr.end(), idx: self.zidx[i], bbi_type: self.bbi_type}, Vec::new())); 
+				self.zidx[i] += 1;
+				&mut self.zblock[i].as_mut().unwrap().1
+			};
+			let tbuf = [zr.id(), start, zr.end(), zr.count()];
+			write_u32_slice(v, &tbuf).expect("Error writing zoom data");
+			let tbuf = [zr.min(), zr.max(), zr.sum_x(), zr.sum_xsq()];
+			write_f32_slice(v, &tbuf).expect("Error writing zoom data");
+			self.summary.add_zrec(&zr);
+			self.n_zoom_items[i] += 1;	
+			zr.clear();			
+		}
+	}
+	
 	pub fn finish_bbi(&mut self, s: &Sender<BbiMsg>) {
 		let (blk, mut buf) = self.block.take().unwrap();
 		if matches!(self.bbi_type, BbiBlockType::Bb(_)) { self.n_rec += self.n_items } 
@@ -144,6 +171,7 @@ impl BbiBlockBuild {
 
 	pub fn finish(&mut self, s: &Sender<BbiMsg>) {
 		if self.n_items > 0 { self.finish_bbi(s) }
+		self.flush_zoom_obs();
 		for (i, j) in self.n_zoom_items.iter_mut().enumerate().filter(|(_, j)| **j > 0) {
 			let (blk, mut v) = self.zblock[i].take().unwrap();
 			v.shrink_to_fit();
@@ -157,31 +185,30 @@ impl BbiBlockBuild {
 	}	
 	pub fn clear_counts(&mut self) { 
 		self.zoom_counts.clear();
-		for zr in self.zrec.iter_mut() { zr.clear(0) }
-		
+		for zr in self.zrec.iter_mut() { zr.clear() }
 	}
 	pub fn n_rec(&self) -> u32 { self.n_rec }
+	pub fn n_zoom_rec(&self) -> [u32; ZOOM_LEVELS] { self.n_zoom_rec }
+	pub fn zoom_scales(&self) -> Arc<Vec<u32>> { self.zoom_scales.clone() }
+	pub fn summary(&self) -> Summary { self.summary }
 }
 
 pub struct BbiFile {
 	name: String,
 	build: RwLock<BbiBlockBuild>,
-	ctg_blocks: Arc<RwLock<Vec<Vec<BbiCtgBlock>>>>,	
 }
 
 impl BbiFile {
-	pub fn new<S: AsRef<str>>(name: S, ix: usize, zoom_scales: Arc<Vec<u32>>, n_ctgs: usize, bb_flag: bool) -> io::Result<Self> {
+	pub fn new<S: AsRef<str>>(name: S, ix: usize, zoom_scales: Arc<Vec<u32>>, bb_flag: bool) -> io::Result<Self> {
 		let name = name.as_ref().to_owned();
 		let (bbi_type, items_per_slot) = if bb_flag { (BbiBlockType::Bb(ix as u8), BB_ITEMS_PER_SLOT) } else { (BbiBlockType::Bw(ix as u8), BW_ITEMS_PER_SLOT) };
 		let build = RwLock::new(BbiBlockBuild{ block: None, n_rec: 0, idx: 0, n_items: 0, bbi_type, zoom_scales, 
-			items_per_slot, n_zoom_items: Default::default(),
-			zidx: Default::default(), zblock: Default::default(), zrec: Default::default(), zoom_counts: Default::default()});
-		let blocks: Vec<Vec<BbiCtgBlock>> = (0..n_ctgs).map(|_| Vec::new()).collect();
-		Ok(Self{name, build, ctg_blocks: Arc::new(RwLock::new(blocks))} )
+			items_per_slot, n_zoom_items: Default::default(), n_zoom_rec: Default::default(),
+			zidx: Default::default(), zblock: Default::default(), zrec: Default::default(), summary: Default::default(), zoom_counts: Default::default()});
+		Ok(Self{name, build } )
 	}
 	pub fn build(&self) -> &RwLock<BbiBlockBuild> { &self.build }	
 	pub fn name(&self) -> &str { &self.name }
-	pub fn ctg_blocks(&self) -> Arc<RwLock<Vec<Vec<BbiCtgBlock>>>> { self.ctg_blocks.clone() }
 }
 
 pub enum BbiMsg {
@@ -208,35 +235,51 @@ impl Bbi {
 		let n_output_ctgs = chash.vcf_contigs().iter().filter(|x| x.out_ix().is_some()).count();
 		
 		let bb_files = vec!(
-			BbiFile::new(format!("{}_cpg.bb", prefix.as_ref()), 0, bb_zoom_scales.clone(), n_output_ctgs, true)?,
-			BbiFile::new(format!("{}_chg.bb", prefix.as_ref()), 1, bb_zoom_scales.clone(), n_output_ctgs, true)?,
-			BbiFile::new(format!("{}_chh.bb", prefix.as_ref()), 2, bb_zoom_scales, n_output_ctgs, true)?
+			BbiFile::new(format!("{}_cpg.bb", prefix.as_ref()), 0, bb_zoom_scales.clone(), true)?,
+			BbiFile::new(format!("{}_chg.bb", prefix.as_ref()), 1, bb_zoom_scales.clone(), true)?,
+			BbiFile::new(format!("{}_chh.bb", prefix.as_ref()), 2, bb_zoom_scales, true)?
 		);
 		let bw_files = if strand_specific { vec!( 
-			BbiFile::new(format!("{}_pos.bw", prefix.as_ref()), 0, bw_zoom_scales.clone(), n_output_ctgs, false)?,
-			BbiFile::new(format!("{}_neg.bw", prefix.as_ref()), 1, bw_zoom_scales, n_output_ctgs, false)?
-		)} else { vec!(BbiFile::new(format!("{}.bw", prefix.as_ref()), 0, bw_zoom_scales, n_output_ctgs, false)?)};
+			BbiFile::new(format!("{}_pos.bw", prefix.as_ref()), 0, bw_zoom_scales.clone(), false)?,
+			BbiFile::new(format!("{}_neg.bw", prefix.as_ref()), 1, bw_zoom_scales, false)?
+		)} else { vec!(BbiFile::new(format!("{}.bw", prefix.as_ref()), 0, bw_zoom_scales, false)?)};
 		
 		Ok(Bbi{bb_files, bw_files, sender: Some(sender), n_output_ctgs})
 
 	}
 	pub fn drop_sender(&mut self) { 
 		self.sender = None;
+		trace!("Bbi drop_sender()");
 		for b in self.bb_files.iter() { println!("BB: n_rec = {}", b.build.read().unwrap().n_rec)} 
 		for b in self.bw_files.iter() { println!("BW: n_rec = {}", b.build.read().unwrap().n_rec)} 
+		trace!("Bbi drop_sender() done");
+	}
+	pub fn n_rec(&self, bbi_type: BbiBlockType) -> u32 {
+		trace!("Bbi nrec()");
+		let n = match bbi_type {
+			BbiBlockType::Bb(i) => self.bb_files[i as usize].build.read().unwrap().n_rec,
+			BbiBlockType::Bw(i) => self.bw_files[i as usize].build.read().unwrap().n_rec,
+		};
+		trace!("Bbi nrec() done");
+		n
 	}
 	pub fn bb_files(&self) -> &[BbiFile] { &self.bb_files }
 	pub fn bw_files(&self) -> &[BbiFile] { &self.bw_files }
+	pub fn n_output_ctgs(&self) -> usize { self.n_output_ctgs }
 	pub fn sender(&self) -> Option<&Sender<BbiMsg>> { self.sender.as_ref() }
 	pub fn finish(&self) {
 		let sender = self.sender.as_ref().expect("Sender is not set");
+		trace!("Bbi finish()");
 		for mut bb in self.bb_files.iter().map(|f| f.build().write().unwrap()) {
 			bb.finish(sender);
 			bb.end_of_input(sender);
+			println!("{:?} {:?} {:?}", bb.bbi_type, bb.n_zoom_rec, bb.zoom_counts.counts());
 		}
 		for mut bw in self.bw_files.iter().map(|f| f.build().write().unwrap()) {
 			bw.finish(sender);
 			bw.end_of_input(sender);
+			println!("{:?} {:?} {:?}", bw.bbi_type, bw.n_zoom_rec, bw.zoom_counts.counts());
 		}
+		trace!("Bbi finish() done");
 	}
 }

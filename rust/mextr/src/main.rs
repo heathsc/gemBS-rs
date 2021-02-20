@@ -11,7 +11,7 @@ pub mod output;
 pub mod bbi;
 
 fn main() -> Result<(), String> {
-	let (chash, sr) = cli::process_cli().map_err(|e| format!("dbsnp_index initialization failed with error: {}", e))?;
+	let (chash, sr) = cli::process_cli().map_err(|e| format!("mextr_index initialization failed with error: {}", e))?;
 	match process::process(chash, sr) {
 		Ok(_) => Ok(()),
 		Err(e) => {

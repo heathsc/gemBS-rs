@@ -11,7 +11,6 @@ use crossbeam_channel::bounded;
 
 use super::config::*;
 use super::read_vcf::unpack::{Strand, RecordBlock, RecordBlockElem};
-use super::read_vcf::BREC_BLOCK_SIZE;
 use super::process::{Recv, TPool};
 use super::bbi::Bbi;
 use super::bbi::compress_bbi::compress_bbi_thread;
@@ -232,8 +231,8 @@ pub fn output_bed_methyl_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Re
 	
 	// Prepare bbi files (BigBed and BigWig)
 	let nt = chash.get_int("threads");
-	let (comp_send, comp_recv) = bounded(nt * 8);
-	let (wrt_send, wrt_recv) = bounded(nt * 8);
+	let (comp_send, comp_recv) = bounded(nt * 10);
+	let (wrt_send, wrt_recv) = bounded(nt * 10);
 	let bbi = Bbi::init(&prefix, comp_send, &chash).unwrap_or_else(|e| panic!("Error creating BigBed / BigWig files: {}", e));
 	chash.set_bbi(bbi);
 	
@@ -259,19 +258,14 @@ pub fn output_bed_methyl_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Re
 	bbi_ref.as_ref().expect("Bbi not set").finish();
 	drop(bbi_ref);
 	
-	// Write main index
-	
 	// Drop sender from the Bbi structure to trigger the compress threads to quit
 	chash.drop_sender();	
-	// Drop write sender to trigger the write thread to exit
+	// Drop write sender to trigger the write thread to finish up and exit
 	drop(wrt_send);
 	
 	debug!("wait for compress and write threads");
 	// Wait for compress and write threads
-	for th in threads.drain(..) { 
-		th.join().unwrap();
-	}
-	
+	for th in threads.drain(..) { th.join().unwrap() }
 	
 	debug!("output_bed_methyl_thread closing down")	
 }

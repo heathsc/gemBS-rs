@@ -58,6 +58,7 @@ fn output_bed_methyl_rec<W: Write>(files: &mut[W], chash: &ConfHash, hdr: &VcfHe
 
 	let bw_strand_specific = matches!(chash.get_mode("bw_mode"), Mode::StrandSpecific);
 	let mut bb_builders = Vec::new();
+
 	for f in bbi.bb_files().iter().map(|f| f.build().write().unwrap()) { bb_builders.push(f) }
 	let mut bw_builders = Vec::new();
 	for f in bbi.bw_files().iter().map(|f| f.build().write().unwrap()) { bw_builders.push(f) }

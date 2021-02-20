@@ -32,12 +32,6 @@ pub enum RecordBlock {
 }
 
 impl RecordBlock {
-	fn len(&self) -> usize {
-		match self {
-			RecordBlock::Single(v) => v.len(),
-			RecordBlock::Multi(v) => v.len(),
-		}
-	}
 	pub fn last(&self) -> Option<RecordBlockElem> {
 		match self {
 			RecordBlock::Single(v) => v.last().map(|(r, m)| RecordBlockElem::Single((r, m))),

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::collections::HashMap;
 
 use crossbeam_channel::{Sender, Receiver};
 use libc::{c_int, c_ulong};
@@ -24,26 +25,31 @@ fn compress_buf(inbuf: &[u8]) -> Vec<u8> {
 	out
 }
 
+fn update_max_size(hash: &mut HashMap<BbiBlockType, usize>, bbi_type: BbiBlockType, sz: usize) {
+	let curr_val = hash.entry(bbi_type).or_insert(0);
+	*curr_val = (*curr_val).max(sz);
+}
+
 pub fn compress_bbi_thread(ch: Arc<ConfHash>, r: Receiver<BbiMsg>, ps: Sender<BbiMsg>) {
 	info!("compress_bbi_thread starting up");
-	let mut max_uncomp_size = 0;
+	let mut max_uncomp_size = HashMap::new();
 	for msg in r.iter() {
 		match msg {
 			BbiMsg::Data((blk, v)) => {
-				max_uncomp_size = max_uncomp_size.max(v.len());
+				update_max_size(&mut max_uncomp_size, blk.bbi_type(), v.len());
 				let mut cbuf = compress_buf(&v);
 				cbuf.shrink_to_fit();
 				ps.send(BbiMsg::Data((blk, cbuf))).expect("Error sending compressed data block");			
 			},
 			BbiMsg::ZData((blk, v, level)) => {
-				max_uncomp_size = max_uncomp_size.max(v.len());
+				update_max_size(&mut max_uncomp_size, blk.bbi_type(), v.len());
 				let mut cbuf = compress_buf(&v);
 				cbuf.shrink_to_fit();
 				ps.send(BbiMsg::ZData((blk, cbuf, level))).expect("Error sending compressed data block");			
 			},
 			BbiMsg::EndOfSection(_) => ps.send(msg).expect("Error sending compressed data block"),
 		}
-	}	
-	ch.update_max_uncomp_size(max_uncomp_size);	
+	}
+	for (bbi_type, sz) in max_uncomp_size.iter() {	ch.update_max_uncomp_size(*bbi_type, *sz) }
 	info!("compress_bbi_thread shutting down");
 }
