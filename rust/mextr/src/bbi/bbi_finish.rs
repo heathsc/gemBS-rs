@@ -43,7 +43,7 @@ pub fn bbi_finish(ch: Arc<ConfHash>, mut writer: BbiWriter) {
 		debug!("bbi_finish: generating main index for {:?}", bbi_type);
 		let offset = writer.index_offset;
 		let ctg_blocks = &writer.ctg_blocks;
-		let rtree = RTree::init(&ctg_blocks, n_rec, offset);
+		let rtree = RTree::init(&ctg_blocks, n_rec as u32, offset);
 		rtree.write(&mut writer.fp, bbi_type, offset).expect("Error writing out main index");
 	}
 	

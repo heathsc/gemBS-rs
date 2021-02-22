@@ -178,7 +178,7 @@ pub fn write_bbi_thread(ch: Arc<ConfHash>, r: Receiver<BbiMsg>) {
 	// Store start of index in file
 	for w in bb_writers.iter_mut().chain(bw_writers.iter_mut()) { w.index_offset = w.fp.seek(SeekFrom::Current(0)).expect("Error getting position from BBI file") }
 	
-	// Launch threads to generate indices and wrute out zoom data
+	// Launch threads to generate indices and write out zoom data
 	let mut threads = Vec::with_capacity(5);
 	for w in bb_writers.drain(..).chain(bw_writers.drain(..)) { 
 		let chc = ch.clone();

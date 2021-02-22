@@ -1,5 +1,6 @@
 use std::io::{self, Write, Seek};
 use std::sync::{RwLock, Arc};
+use std::ffi::CString;
 
 use crossbeam_channel::Sender;
 use libc::{c_void, memcpy};
@@ -26,6 +27,7 @@ pub enum BbiBlockType {
 	Bw(u8),
 }
 
+#[derive(Debug)]
 pub struct BbiCtgBlock {
 	start: u32,
 	end: u32,
@@ -36,6 +38,7 @@ impl BbiCtgBlock {
 	pub fn new(blk: &BbiBlock, offset: u64) -> Self { Self { start: blk.start, end: blk.end, offset }}	
 }
 
+#[derive(Debug)]
 pub struct BbiBlock {
 	start: u32,
 	end: u32,
@@ -61,7 +64,7 @@ pub struct BbiBlockBuild {
 	bbi_type: BbiBlockType,
 	idx: u32,
 	n_items: u32,
-	n_rec: u32,
+	n_rec: u64,
 	items_per_slot: u32,
 	n_zoom_items: [u32; ZOOM_LEVELS],
 	n_zoom_rec: [u32; ZOOM_LEVELS],
@@ -81,7 +84,8 @@ impl BbiBlockBuild {
 		};	
 		let tbuf = [id, pos, pos + 1];
 		write_u32_slice(v, &tbuf).expect("Error writing bb data");
-		v.write_all(desc.as_bytes()).expect("Error writing bb data");
+		let cdesc = CString::new(desc.as_bytes()).unwrap();		
+		v.write_all(cdesc.as_bytes_with_nul()).expect("Error writing bb data");
 		self.n_items += 1;
 		self.zoom_counts.add_count(pos, &self.zoom_scales);
 		if self.n_items >= BB_ITEMS_PER_SLOT { self.finish_bbi(s) }		
@@ -106,59 +110,63 @@ impl BbiBlockBuild {
 	pub fn add_zoom_obs(&mut self, id: u32, pos: u32, val: f32, s: &Sender<BbiMsg>) {
 		for (i, zr) in self.zrec.iter_mut().enumerate() {
 			if pos >= zr.end() {
-				self.n_zoom_rec[i] += 1;
-				let scale = self.zoom_scales[i];
-				let start = zr.end() - scale;
-				let v = if let Some((blk, v)) = self.zblock[i].as_mut() {
-					blk.end = zr.end();
-					v
-				} else {				
-					self.zblock[i] = Some((BbiBlock{start, id, end: zr.end(), idx: self.zidx[i], bbi_type: self.bbi_type}, Vec::new())); 
-					self.zidx[i] += 1;
-					&mut self.zblock[i].as_mut().unwrap().1
-				};
-				zr.set(id, pos + self.zoom_scales[i], val);
-				let tbuf = [id, start, zr.end(), zr.count()];
-				write_u32_slice(v, &tbuf).expect("Error writing zoom data");
-				let tbuf = [zr.min(), zr.max(), zr.sum_x(), zr.sum_xsq()];
-				write_f32_slice(v, &tbuf).expect("Error writing zoom data");
-				self.n_zoom_items[i] += 1;
-				self.summary.add_zrec(&zr);
-				if self.n_zoom_items[i] >= self.items_per_slot {
-					let (blk, mut v) = self.zblock[i].take().unwrap();
-					v.shrink_to_fit();
-					s.send(BbiMsg::ZData((blk, v, i as u32))).expect("Error sending Zoom data block");
-					self.n_zoom_items[i] = 0;
+				if zr.count() > 0 {
+					self.n_zoom_rec[i] += 1;
+					let scale = self.zoom_scales[i];
+					let start = zr.end() - scale;
+					let v = if let Some((blk, v)) = self.zblock[i].as_mut() {
+						blk.end = zr.end();
+						v
+					} else {				
+						self.zblock[i] = Some((BbiBlock{start, id, end: zr.end(), idx: self.zidx[i], bbi_type: self.bbi_type}, Vec::new())); 
+						self.zidx[i] += 1;
+						&mut self.zblock[i].as_mut().unwrap().1
+					};
+					let tbuf = [id, start, zr.end(), zr.count()];
+					write_u32_slice(v, &tbuf).expect("Error writing zoom data");
+					let tbuf = [zr.min(), zr.max(), zr.sum_x(), zr.sum_xsq()];
+					write_f32_slice(v, &tbuf).expect("Error writing zoom data");
+					self.n_zoom_items[i] += 1;
+					self.summary.add_zrec(&zr);
+					if self.n_zoom_items[i] >= self.items_per_slot {
+						let (blk, mut v) = self.zblock[i].take().unwrap();
+						v.shrink_to_fit();
+						s.send(BbiMsg::ZData((blk, v, i as u32))).expect("Error sending Zoom data block");
+						self.n_zoom_items[i] = 0;
+					}
 				}
+				zr.set(id, pos + self.zoom_scales[i], val);
 			} else { zr.add(val) }
 		}
 	}
 	
 	pub fn flush_zoom_obs(&mut self) {
 		for (i, zr) in self.zrec.iter_mut().enumerate() {
-			let scale = self.zoom_scales[i];
-			let start = zr.end() - scale;
-			let v = if let Some((blk, v)) = self.zblock[i].as_mut() {
-				blk.end = zr.end();
-				v
-			} else {				
-				self.zblock[i] = Some((BbiBlock{start, id: zr.id(), end: zr.end(), idx: self.zidx[i], bbi_type: self.bbi_type}, Vec::new())); 
-				self.zidx[i] += 1;
-				&mut self.zblock[i].as_mut().unwrap().1
-			};
-			let tbuf = [zr.id(), start, zr.end(), zr.count()];
-			write_u32_slice(v, &tbuf).expect("Error writing zoom data");
-			let tbuf = [zr.min(), zr.max(), zr.sum_x(), zr.sum_xsq()];
-			write_f32_slice(v, &tbuf).expect("Error writing zoom data");
-			self.summary.add_zrec(&zr);
-			self.n_zoom_items[i] += 1;	
+			if zr.count() > 0 {
+				let scale = self.zoom_scales[i];
+				let start = zr.end() - scale;
+				let v = if let Some((blk, v)) = self.zblock[i].as_mut() {
+					blk.end = zr.end();
+					v
+				} else {				
+					self.zblock[i] = Some((BbiBlock{start, id: zr.id(), end: zr.end(), idx: self.zidx[i], bbi_type: self.bbi_type}, Vec::new())); 
+					self.zidx[i] += 1;
+					&mut self.zblock[i].as_mut().unwrap().1
+				};
+				let tbuf = [zr.id(), start, zr.end(), zr.count()];
+				write_u32_slice(v, &tbuf).expect("Error writing zoom data");
+				let tbuf = [zr.min(), zr.max(), zr.sum_x(), zr.sum_xsq()];
+				write_f32_slice(v, &tbuf).expect("Error writing zoom data");
+				self.summary.add_zrec(&zr);
+				self.n_zoom_items[i] += 1;
+			}	
 			zr.clear();			
 		}
 	}
 	
 	pub fn finish_bbi(&mut self, s: &Sender<BbiMsg>) {
 		let (blk, mut buf) = self.block.take().unwrap();
-		if matches!(self.bbi_type, BbiBlockType::Bb(_)) { self.n_rec += self.n_items } 
+		if matches!(self.bbi_type, BbiBlockType::Bb(_)) { self.n_rec += self.n_items as u64 } 
 		else { 
 			let bw_hdr = BwDataHeader::init(&blk, self.n_items as u16);
 			unsafe { memcpy(buf.as_mut_ptr() as *mut c_void, &bw_hdr as *const BwDataHeader as *const c_void, 24); }
@@ -187,7 +195,7 @@ impl BbiBlockBuild {
 		self.zoom_counts.clear();
 		for zr in self.zrec.iter_mut() { zr.clear() }
 	}
-	pub fn n_rec(&self) -> u32 { self.n_rec }
+	pub fn n_rec(&self) -> u64 { self.n_rec }
 	pub fn n_zoom_rec(&self) -> [u32; ZOOM_LEVELS] { self.n_zoom_rec }
 	pub fn zoom_scales(&self) -> Arc<Vec<u32>> { self.zoom_scales.clone() }
 	pub fn summary(&self) -> Summary { self.summary }
@@ -250,11 +258,8 @@ impl Bbi {
 	pub fn drop_sender(&mut self) { 
 		self.sender = None;
 		trace!("Bbi drop_sender()");
-		for b in self.bb_files.iter() { println!("BB: n_rec = {}", b.build.read().unwrap().n_rec)} 
-		for b in self.bw_files.iter() { println!("BW: n_rec = {}", b.build.read().unwrap().n_rec)} 
-		trace!("Bbi drop_sender() done");
 	}
-	pub fn n_rec(&self, bbi_type: BbiBlockType) -> u32 {
+	pub fn n_rec(&self, bbi_type: BbiBlockType) -> u64 {
 		trace!("Bbi nrec()");
 		let n = match bbi_type {
 			BbiBlockType::Bb(i) => self.bb_files[i as usize].build.read().unwrap().n_rec,
@@ -273,12 +278,10 @@ impl Bbi {
 		for mut bb in self.bb_files.iter().map(|f| f.build().write().unwrap()) {
 			bb.finish(sender);
 			bb.end_of_input(sender);
-			println!("{:?} {:?} {:?}", bb.bbi_type, bb.n_zoom_rec, bb.zoom_counts.counts());
 		}
 		for mut bw in self.bw_files.iter().map(|f| f.build().write().unwrap()) {
 			bw.finish(sender);
 			bw.end_of_input(sender);
-			println!("{:?} {:?} {:?}", bw.bbi_type, bw.n_zoom_rec, bw.zoom_counts.counts());
 		}
 		trace!("Bbi finish() done");
 	}

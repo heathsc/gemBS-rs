@@ -84,8 +84,8 @@ impl <'a>CtgTree<'a> {
 		let depth = self.depth();
 		for i in 0..depth - 1 { self.write_non_leaf_level(w, depth - 1 - i)? }
 		self.write_leaf_level(w)?;
-		let pos = w.seek(SeekFrom::Current(4))?;
-		wrt.header().set_full_data_offset(pos - 4);
+		let pos = w.seek(SeekFrom::Current(8))?;
+		wrt.header().set_full_data_offset(pos - 8);
 		Ok(())
 	}
 
@@ -175,7 +175,6 @@ impl <'a>RTree<'a> {
 		ctg_blk_ends.push(ctg_blocks[0].len());
 		for (i, v) in ctg_blocks[1..].iter().enumerate() { ctg_blk_ends.push(ctg_blk_ends[i] + v.len())}
 		let n_nodes = *ctg_blk_ends.last().unwrap();
-
 		// Set widths
 		let mut width = Vec::new();
 		let mut n1 = n_nodes;
@@ -230,6 +229,7 @@ impl <'a>RTree<'a> {
 				nodes.push(node);
 				off += sz;
 			}
+			assert_eq!(off, w1 as usize);
 			nodes.push(RNode{start_idx: w1 as u32, start_ctg: 0, start_base: 0, end_ctg: 0, end_base: 0});
 			start.push(nodes);
 		}
@@ -241,13 +241,11 @@ impl <'a>RTree<'a> {
 		let items_per_slot = if matches!(bbi_type, BbiBlockType::Bb(_)) { BB_ITEMS_PER_SLOT } else { BW_ITEMS_PER_SLOT };
 		let tmp: [u32; 2] = [ 0x2468ACE0, self.block_size];
 		write_u32_slice(w, &tmp)?;
-		let n_ctgs = self.ctg_blocks.len();
-		write_u64(w, n_ctgs as u64)?;
+		write_u64(w, self.n_items as u64)?;
 		
 		// Find first and last bases in index
 		let (ctg0, start) = self.ctg_blocks.iter().enumerate().filter(|(__, v)| !v.is_empty()).map(|(i, v)| (i as u32, v[0].start)).next().expect("No data in index");
 		let (ctg1, end) = self.ctg_blocks.iter().enumerate().rev().filter(|(__, v)| !v.is_empty()).map(|(i, v)| (i as u32, v.last().unwrap().end)).next().unwrap();
-		
 		let tmp: [u32; 4] = [ctg0, start, ctg1, end];
 		write_u32_slice(w, &tmp)?;
 		write_u64(w, offset)?;
@@ -277,7 +275,7 @@ impl <'a>RTree<'a> {
 			for (i, nd) in rn1[a..b].iter().enumerate() {
 				write_u32_slice(w, &[nd.start_ctg, nd.start_base, nd.end_ctg, nd.end_base])?;
 				write_u64(w, off)?;
-				off += 4 + item_size1 + (rn1[i + 1].start_idx - nd.start_idx) as u64; 
+				off += 4 + item_size1 * (rn1[i + a + 1].start_idx - nd.start_idx) as u64; 
 			}
 		}
 		Ok(())
@@ -302,11 +300,7 @@ impl <'a>RTree<'a> {
 			for j in a..b {
 				let nd = &self.ctg_blocks[ctg][x];
 				write_u32_slice(w, &[ctg as u32, nd.start, ctg as u32, nd.end])?;
-				let size = {
-					if j + 1 < self.n_nodes { self.ctg_blocks[ctg][x].offset } else { self.offset }
-				} - nd.offset;
-				write_u64_slice(w, &[nd.offset, size])?;
-				if j + 1 < a {				
+				let next_offset = if j + 1 < self.n_nodes {				
 					if j + 1 == self.ctg_blk_ends[ctg] {
 						loop {
 							x = 0;
@@ -315,7 +309,10 @@ impl <'a>RTree<'a> {
 							if j + 1 != self.ctg_blk_ends[ctg] { break }
 						}
 					} else { x += 1 }
-				}
+					self.ctg_blocks[ctg][x].offset
+				} else { self.offset };
+				assert!(next_offset > nd.offset);
+				write_u64_slice(w, &[nd.offset, next_offset - nd.offset])?;
 			}		
 		}	
 		Ok(())

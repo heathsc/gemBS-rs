@@ -95,9 +95,9 @@ impl BbiHeader {
 		// Fill the rest with zeros
 		fp.write_all(&[0; (EXT_HEADER_SIZE as usize) - 2])
 	}
-	pub fn write_data_count(&self, fp: &mut BufWriter<File>, data_count: u32) -> io::Result<()> {
+	pub fn write_data_count(&self, fp: &mut BufWriter<File>, data_count: u64) -> io::Result<()> {
 		fp.seek(SeekFrom::Start(self.full_data_offset))?;
-		write_u32(fp, data_count)
+		write_u64(fp, data_count)
 	}
 	pub fn write_terminator(&self, fp: &mut BufWriter<File>) -> io::Result<()> {
 		fp.seek(SeekFrom::End(0))?;
