@@ -33,7 +33,6 @@ gemBS: gemBS_config.mk
 
 install: all installdirs
 	cp rust/bin/* $(bin_dir)
-	cp c_tools/bin/* $(bin_dir)
 	cp c_tools/bcftools/bcftools $(bin_dir)
 	cp c_tools/samtools/samtools $(bin_dir)
 	cp $(TMP_ROOT)/bin/bgzip $(bin_dir)
