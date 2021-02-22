@@ -1,7 +1,8 @@
 use std::io::{Write, Read};
 use std::fs::File;
-use crossbeam_channel::{Receiver, RecvTimeoutError};
+use crossbeam_channel::{Receiver, RecvTimeoutError, unbounded};
 use std::time::Duration;
+use std::thread;
 use md5::{Md5, Digest};
 use std::sync::Arc;
 use crate::config::ConfHash;
@@ -47,35 +48,52 @@ impl Md5File {
 	}	
 }
 
+pub fn md5_worker<S: AsRef<str>>(name: S, r: Receiver<()>) {
+	let mut md5 = Md5File::new(name);
+	let mut buf = [0; 8192];
+	let d = Duration::from_millis(100);
+    loop {
+		md5.update(&mut buf);
+        match r.recv_timeout(d) {
+			Err(RecvTimeoutError::Timeout) => (),
+			_ => break,
+		}
+    }
+	md5.update(&mut buf);
+	md5.finalize();	
+}
+
 pub fn md5_thread(chash: Arc<ConfHash>, r: Receiver<bool>) {
 
 	debug!("md5_thread starting up");
-	let d = Duration::from_millis(500);
-	let mut buf = [0; 8192];
-	let mut md5_files = Vec::new();
-	let mut new_files = chash.n_out_files() > md5_files.len();
+	let d = Duration::from_millis(100);
+	let mut md5_threads = Vec::new();
+	let mut new_files = chash.n_out_files() > md5_threads.len();
+	let mut ending = false;
+	let (cs, cr) = unbounded();
 	loop {
 		if new_files {
-			for s in chash.out_files().drain(md5_files.len()..) {
+			for s in chash.out_files().drain(md5_threads.len()..) {
 				debug!("md5_thread: Adding file {}", s);
-				md5_files.push(Md5File::new(s))
+				let crc = cr.clone();
+				let th = thread::spawn(move || md5_worker(&s, crc));
+				
+				md5_threads.push(th)
 			}
 		}
-		new_files = chash.n_out_files() > md5_files.len();
-		for m in md5_files.iter_mut() { m.update(&mut buf) }
+		new_files = chash.n_out_files() > md5_threads.len();
 		if new_files { continue }
+		if ending { break }
         match r.recv_timeout(d) {
-			Ok(_) => break,
+			Ok(_) => { ending = true },
 			Err(RecvTimeoutError::Timeout) => (),
 			Err(e) => {
 				error!("md5_thread received error: {}", e);
 				break;
 			},
 		}		
-	}	
-	for mut m in md5_files.drain(..) { 
-		m.update(&mut buf);
-		m.finalize();
 	}
+	drop(cs);
+	for th in md5_threads.drain(..) { th.join().unwrap() }
 	debug!("md5_thread shutting down");
 }

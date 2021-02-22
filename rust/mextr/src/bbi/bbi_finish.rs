@@ -86,5 +86,8 @@ pub fn bbi_finish(ch: Arc<ConfHash>, mut writer: BbiWriter) {
 	// Write magic number at end of file
 	header.write_terminator(&mut writer.fp).expect("Error writing out terminator");
 	
+	// Trigger MD5 generation
+	ch.add_file(&writer.name);
+	
 	debug!("bbi_finish ending for {:?}", bbi_type);
 }

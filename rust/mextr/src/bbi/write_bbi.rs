@@ -16,6 +16,7 @@ pub struct BbiWriter {
 	pub ctg_blocks: Vec<Vec<BbiCtgBlock>>,	
 	pub zoom_data: [Vec<(BbiBlock, Vec<u8>)>; ZOOM_LEVELS],
 	pub header: BbiHeader,
+	pub name: String,
 	bbi_type: BbiBlockType,
 	n_ctgs: usize,
 	pub index_offset: u64,
@@ -28,13 +29,14 @@ impl BbiWriter {
 		trace!("In init for {:?}", bbi_type);
 		let bb_flag = matches!(bbi_type, BbiBlockType::Bb(_));
 		let header = BbiHeader::new(bb_flag);
-		let fp = match File::create(bbi_file.name()) {
+		let name = bbi_file.name().to_owned();
+		let fp = match File::create(&name) {
 			Ok(f) => BufWriter::new(f),
-			Err(e) => panic!("Could not open output file {}: {}", bbi_file.name(), e),
+			Err(e) => panic!("Could not open output file {}: {}", &name, e),
 		};
 		let blocks: Vec<Vec<BbiCtgBlock>> = (0..n_ctgs).map(|_| Vec::new()).collect();
 		trace!("Leaving init for {:?}", bbi_type);
-		Self{header, ctg_blocks: blocks, n_ctgs, bbi_type, zoom_data: Default::default(), fp, index_offset: 0}
+		Self{header, ctg_blocks: blocks, n_ctgs, name, bbi_type, zoom_data: Default::default(), fp, index_offset: 0}
 	}	
 	pub fn bbi_type(&self) -> BbiBlockType { self.bbi_type }
 	pub fn ctg_blocks(&self) -> &[Vec<BbiCtgBlock>] { &self.ctg_blocks }
