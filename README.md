@@ -12,12 +12,14 @@ The manuscript describing the original gemBS pipeline is available
 [here](https://doi.org/10.1093/bioinformatics/bty690)
 
 The rewrite of the pipeline into Rust has two aims: (1) to have a more
-robust pipeline and (2) to provide a more flesible platform for future
-develments.  At the moment the pipeline itself (previously in Python)
-and the SNP/methylation caller bs_call (previously in C) have been
-re-written in Rust.  It is planned to continue moving the other
-binaries (mextr, snpxtr and dbSNP_idx) to Rust.  The GEM3 mapper,
-being an external project (and also very stable!) will remain in C. 
+robust pipeline and (2) to provide a more flexible platform for future
+developments.  All of the tools developed for the pipeline except for the GEM3 mapper (being an external project that is also very stable!) have now been re-written in Rust. These include bs_call, the methylation and SNV-variant caller, and the methylation and SNP extractions tools mextr and snpxtr.  In all cases the running times are comparable to the original C versions.
+
+------------
+Dependencies
+------------
+
+The pipeline uses samtools for gnerating sorted BAM/CRAM files from GEM3.  In addition, many of the tools link to htslb to enable reading of BAM/CRAM and reading/writing of BCF files.  Samtools and htslib are automatically installed during the installation of the gemBS pipeline.   There is also an optional dependency on TeXLive which is used to produce pdf versions of the QC reports.  If requested by the user this is also installed with the pipeline.
 
 ---------   
 Licensing
