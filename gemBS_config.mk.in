@@ -15,10 +15,10 @@ GEMBS_INSTALL_ROOT=$(INSTALL_PREFIX)/lib/gemBS
 # A working texlive distribution is required to 
 # produce pdf versions of the QC reports
 #
-INSTALL_TEXLIVE=yes
+# INSTALL_TEXLIVE=yes
 
 #
 # Add support for submitting the pipeline directly to the Slurm
 # workflow manager
 #
-SLURM_SUPPORT=yes
+# SLURM_SUPPORT=yes
