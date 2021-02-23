@@ -19,7 +19,7 @@ developments.  All of the tools developed for the pipeline except for the GEM3 m
 Dependencies
 ------------
 
-The pipeline uses samtools for gnerating sorted BAM/CRAM files from GEM3.  In addition, many of the tools link to htslb to enable reading of BAM/CRAM and reading/writing of BCF files.  Samtools and htslib are automatically installed during the installation of the gemBS pipeline.   There is also an optional dependency on TeXLive which is used to produce pdf versions of the QC reports.  If requested by the user this is also installed with the pipeline.
+The pipeline uses samtools for generating sorted BAM/CRAM files from GEM3 and bcftools for merging and indexing BCF files produced by bs_call.  In addition, many of the tools link to htslb to enable reading of BAM/CRAM and reading/writing of BCF files.  Samtools and htslib are automatically installed during the installation of the gemBS pipeline.   There is also an optional dependency on TeXLive which is used to produce pdf versions of the QC reports.  If requested by the user this is also installed with the pipeline.
 
 ---------   
 Licensing
