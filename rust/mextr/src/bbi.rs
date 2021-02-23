@@ -127,7 +127,7 @@ impl BbiBlockBuild {
 					let tbuf = [zr.min(), zr.max(), zr.sum_x(), zr.sum_xsq()];
 					write_f32_slice(v, &tbuf).expect("Error writing zoom data");
 					self.n_zoom_items[i] += 1;
-					self.summary.add_zrec(&zr);
+					if i == 0 { self.summary.add_zrec(&zr) }
 					if self.n_zoom_items[i] >= self.items_per_slot {
 						let (blk, mut v) = self.zblock[i].take().unwrap();
 						v.shrink_to_fit();
@@ -157,7 +157,7 @@ impl BbiBlockBuild {
 				write_u32_slice(v, &tbuf).expect("Error writing zoom data");
 				let tbuf = [zr.min(), zr.max(), zr.sum_x(), zr.sum_xsq()];
 				write_f32_slice(v, &tbuf).expect("Error writing zoom data");
-				self.summary.add_zrec(&zr);
+				if i == 0 { self.summary.add_zrec(&zr) }
 				self.n_zoom_items[i] += 1;
 			}	
 			zr.clear();			
