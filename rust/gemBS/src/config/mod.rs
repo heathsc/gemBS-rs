@@ -13,6 +13,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::time::Instant;
+use std::os::unix::fs::PermissionsExt;
 
 use crate::common::defs::{Section, Metadata, DataValue, JobLen, MemSize, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 use crate::common::assets::{Asset, AssetList, AssetType, AssetStatus, GetAsset};
@@ -248,6 +249,10 @@ impl GemBS {
 			if !config_dir.is_dir() { return Err(format!("Config directory {} does not exist (or is not accessible)", config_dir.display())); }
 			if !config_file.exists() { return Err(format!("Config file {} does not exist (or is not accessible)", config_file.display())); }
 		}
+		// Check permissions in config dir
+		let mode = config_dir.metadata().map_err(|e| format!("Could not get metadata for config dir {}: {}", config_dir.display(), e))?.permissions().mode();
+		if (mode & 0o1700) != 0o0700 { return Err(format!("Incorrect permissions for config_dir {}", config_dir.display()))}
+		
 		debug!("gem_bs_root set to {}", gem_bs_root.display());
 		self.fs = Some(GemBSFiles{config_dir: config_dir.to_path_buf(), config_file, gem_bs_root});	
 		Ok(())
@@ -337,14 +342,13 @@ impl GemBS {
 		self.assets.recheck_status(&running_ids);
 		self.assets.calc_mod_time_ances();
 		self.assets.check_delete_status();		
-		self.handle_status(&running)?;
+		self.handle_status(&running);
 		Ok(())				
 	}
 
-	fn handle_status(&mut self, running: &[RunningTask]) -> Result<(), String> {
+	fn handle_status(&mut self, running: &[RunningTask]) {
 		self.tasks.iter_mut().for_each(|x| x.clear_status());
 		self.calc_task_statuses(running);	
-		Ok(())	
 	}
 	fn calc_task_statuses(&mut self, running: &[RunningTask]) {
 		let hset: HashSet<&str> = running.iter().fold(HashSet::new(),|mut hr, x| {hr.insert(x.id()); hr});

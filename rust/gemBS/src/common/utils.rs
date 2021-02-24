@@ -319,9 +319,10 @@ pub fn check_signal(sig: Arc<AtomicUsize>) -> Result<(), String> {
 	}
 }
 
-pub fn wait_for_lock<'a>(sig: Arc<AtomicUsize>, path: &'a Path) -> Result<FileLock<'a>, String> { timed_wait_for_lock(sig, path) }
+//pub fn wait_for_lock<'a>(sig: Arc<AtomicUsize>, path: &'a Path) -> Result<FileLock<'a>, String> { timed_wait_for_lock(sig, path) }
+pub fn wait_for_lock(sig: Arc<AtomicUsize>, path: &Path) -> Result<FileLock<'_>, String> { timed_wait_for_lock(sig, path) }
 
-pub fn timed_wait_for_lock<'a>(sig: Arc<AtomicUsize>, path: &'a Path) -> Result<FileLock<'a>, String> {
+pub fn timed_wait_for_lock(sig: Arc<AtomicUsize>, path: &Path) -> Result<FileLock<'_>, String> {
 	let delay = time::Duration::from_millis(250);
 	let now = time::SystemTime::now();
 	let mut signal = sig.swap(0, Ordering::Relaxed);
