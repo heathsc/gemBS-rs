@@ -44,7 +44,7 @@ or check the installation of several packages.
 
   a) gcc with development libraries
   
-  b) rust (for installation instructions see [here](https://www.rust-lang.org/learn/get-started))
+  b) rust (for installation instructions see [here](https://www.rust-lang.org/learn/get-started)).  Note that if you have rust already installed you should update it using ``rustup update`` before trying to compile gemBS.
   
   c) zlib, libz2, lzma, openssl, libcurl, libncurses, wget, expat, ncurses, openssl, freetype, fontconfig
   
