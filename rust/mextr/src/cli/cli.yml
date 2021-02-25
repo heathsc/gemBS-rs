@@ -5,7 +5,7 @@ setting: GlobalVersion
 setting: DeriveDisplayOrder
 args:
     - quiet: {short: q, long: quiet, help: Silence all output}
-    - timestamp: {short: X, long: time, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
+    - timestamp: {short: X, long: time, help: Prepend log entries with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
     - loglevel: {short: v, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
     - threads: {short: "@", long: threads, takes_value: true, value_name: "THREADS", help: "Set number of threads per file (default: number of cores)"} 
     - cpgfile: {short: o, long: cpgfile, takes_value: true, value_name: NAME, help: "Set file name for CpG file (default: not output)" }

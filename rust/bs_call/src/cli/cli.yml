@@ -6,7 +6,7 @@ setting: DeriveDisplayOrder
 args:
     - reference: {short: r, long: reference, required: true, takes_value: true, value_name: FILE, help: Specify genomic reference (FASTA) }
     - quiet: {short: q, long: quiet, help: Silence all output}
-    - timestamp: {short: T, long: time, help: Prepend log entires with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
+    - timestamp: {short: T, long: time, help: Prepend log entries with a timestamp, takes_value: true, value_name: GRANULARITY, possible_values: [none, sec, ms, us, ns]}
     - loglevel: {short: v, long: loglevel, takes_value: true, value_name: LOGLEVEL, possible_values: [none, error, warn, info, debug, trace], case_insensitive: true, help: Set log level}
     - haploid: {short: '1', long: haploid, help: Assume genome is haploid}
     - keep_duplicates: {short: d, long: keep-duplicates, help: Don't merge duplicate reads}
