@@ -96,12 +96,12 @@ fn get_requirements(gem_bs: &GemBS, section: Section, default_all: bool) -> (f64
 	let ncpus = num_cpus::get() as isize;
 	let total_mem = gem_bs.total_mem();
 	let n = {
-		if let Some(x) = gem_bs.get_config_int(section, "cores") { if x > ncpus { ncpus as f64 } else {x as f64 }}
-		else if let Some(x) = gem_bs.get_config_int(section, "jobs") { if x > ncpus { 1.0 } else { (ncpus as f64) / (x as f64) }}
+		if let Some(x) = gem_bs.get_config_int(section, "cores") { x.min(ncpus) as f64 }
+		else if let Some(x) = gem_bs.get_config_int(section, "jobs") {  ((ncpus as f64) / (x as f64)).max(1.0) }
 		else if default_all { ncpus as f64 }
 		else { 1.0 }
 	};
-	let m = { if let Some(x) = gem_bs.get_config_memsize(section, "memory") { if x.mem() > total_mem { total_mem } else {x.mem() } } else if default_all { total_mem } else { 0 }};
+	let m = { if let Some(x) = gem_bs.get_config_memsize(section, "memory") { x.mem().min(total_mem) } else if default_all { total_mem } else { 0 }};
 	(n, m)
 }
 
