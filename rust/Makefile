@@ -12,6 +12,7 @@ all: $(GEMBS_CTOML) $(BINDIR)
 	cp target/release/read_filter $(BINDIR)/
 	cp target/release/bs_call $(BINDIR)/
 	cp target/release/snpxtr $(BINDIR)/
+	cp target/release/mextr $(BINDIR)/
 	cp target/release/dbsnp_index $(BINDIR)/
 
 ifeq ($(SLURM_SUPPORT),yes)
