@@ -15,10 +15,7 @@ fn get_fli(href: &Map<String, Value>) -> Result<(String, String), String> {
 }
 
 fn check_pass(href: &Map<String, Value>) -> bool {
-	match href.get("passfail").and_then(|x| x.as_str()) {
-		Some(s) if s == "pass" => true,
-		_ => false,
-	}
+	matches!(href.get("passfail").and_then(|x| x.as_str()), Some(s) if s == "pass")
 }
 	
 pub fn process_json_metadata_file(file_name: &str, gem_bs: &mut GemBS) -> Result<(), String> {

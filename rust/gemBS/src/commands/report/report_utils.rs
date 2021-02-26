@@ -140,7 +140,7 @@ impl ReportJob {
 }
 
 pub struct Worker {
-	pub handle: thread::JoinHandle<Result<(), String>>,
+	pub handle: thread::JoinHandle<()>,
 	pub tx: mpsc::Sender<Option<ReportJob>>,
 	pub ix: usize,
 }
