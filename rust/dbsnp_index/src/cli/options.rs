@@ -51,6 +51,24 @@ fn read_alias_file(s: &str) -> io::Result<HashMap<String, String>> {
 	Ok(smap)	
 }
 
+fn check_for_indexed_vcf_file(file: &str, tf: &mut Vec<(DbInput, i64)>, chrom_alias: Option<&HashMap<String, String>>) -> bool {
+	if let Ok(hfile) = HtsFile::new(file, "r") {
+		if hfile.format().format() != htsExactFormat::Vcf || !hfile.test_bgzf() { return false }
+		if let Ok(tbx) = Tbx::new(file) {
+			if let Some(v) = tbx.seq_names() {
+				if let Some(alias) = &chrom_alias {
+					for (tid, c) in v.iter().enumerate() {
+						if let Some(ctg) = alias.get(*c) { tf.push((DbInput::VcfContig(file.to_owned(), ctg.to_string(), tid as libc::c_int), 1))}
+					}
+				} else {
+					for (tid, c) in v.iter().enumerate() { tf.push((DbInput::VcfContig(file.to_owned(), c.to_string(), tid as libc::c_int), 1))}
+				}
+				true
+			} else { false }
+		} else { false }
+	} else { false }	
+}
+
 pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[DbInput]>)> {
 	trace!("Handle command line options");
 	let threads = get_arg_usize(m, "threads")?.unwrap_or_else(num_cpus::get);
@@ -67,6 +85,11 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[DbInput]>)> {
 		Some(s) => read_select_file(s)?,
 		None => HashSet::new(),
 	};
+	let hts_log_level = unsafe {
+		let t = hts_get_log_level();
+		hts_set_log_level(htsLogLevel::HTS_LOG_OFF);
+		t
+	};
 	let files: Vec<DbInput> = match m.values_of("input") {
 		Some(v) => { 
 			// Sort input files by file size in reverse order so that larger files are processed first
@@ -75,23 +98,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[DbInput]>)> {
 				match metadata(file) {
 					Ok(m) => {
 						let indexed_vcf = match input_type {
-							IType::Auto | IType::Vcf => {
-								let hfile = HtsFile::new(file, "r")?;
-								if hfile.format().format() == htsExactFormat::Vcf && hfile.test_bgzf() {
-									if let Ok(tbx) = Tbx::new(file) {
-										if let Some(v) = tbx.seq_names() {
-											if let Some(alias) = &chrom_alias {
-												for (tid, c) in v.iter().enumerate() {
-													if let Some(ctg) = alias.get(*c) { tf.push((DbInput::VcfContig(file.to_owned(), ctg.to_string(), tid as libc::c_int), 1))}
-												}
-											} else {
-												for (tid, c) in v.iter().enumerate() { tf.push((DbInput::VcfContig(file.to_owned(), c.to_string(), tid as libc::c_int), 1))}
-											}
-											true
-										} else { false }
-									} else { false }
-								} else { false }
-							},
+							IType::Auto | IType::Vcf => check_for_indexed_vcf_file(file, &mut tf, chrom_alias.as_ref()),
 							_ => false,
 						};
 						if !indexed_vcf { 
@@ -110,6 +117,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[DbInput]>)> {
 		},
 		None => vec!(DbInput::File("-".to_string())),
 	};
+	unsafe { hts_set_log_level(hts_log_level) };
 	trace!("Finished handling command line options");
 	Ok((Config::new(threads, jobs, maf_limit, output, description, input_type, chrom_alias, selected), files.into_boxed_slice()))
 }

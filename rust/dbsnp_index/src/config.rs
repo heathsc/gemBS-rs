@@ -8,7 +8,7 @@ pub fn new_err(s: String) -> io::Error {
 	Error::new(ErrorKind::Other, s)	
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum IType { Auto, Bed, Vcf, Json }
 
 pub struct Config {
