@@ -45,7 +45,7 @@ pub enum ConfVar {
 
 pub struct ConfHash {
 	hash: HashMap<&'static str, ConfVar>,
-	out_files: RwLock<Vec<String>>,
+	out_files: RwLock<Vec<(String, bool)>>,
 	vcf_contigs: Vec<VcfContig>,
 	vcf_contig_hash: HashMap<Arc<Box<str>>, usize>,
 	bbi: RwLock<Option<Bbi>>,
@@ -88,12 +88,12 @@ impl ConfHash {
 		if let Some(ConfVar::Mode(x)) = self.get(key) { *x } else { panic!("Bool config var {} not set", key); }
 	}
 	pub fn n_out_files(&self) -> usize { self.out_files.read().unwrap().len() } 
-	pub fn out_files(&self) -> Vec<String> {
+	pub fn out_files(&self) -> Vec<(String, bool)> {
 		let rf = self.out_files.read().unwrap();
 		rf.iter().map(|s| s.to_owned()).collect()
 	} 
-	pub fn add_file<S: AsRef<str>>(&self, fname: S) {
-		self.out_files.write().unwrap().push(fname.as_ref().to_owned());
+	pub fn add_file<S: AsRef<str>>(&self, fname: S, tabix_flag: bool) {
+		self.out_files.write().unwrap().push((fname.as_ref().to_owned(), tabix_flag));
 	}
 	pub fn set_bbi(&self, bbi: Bbi) { 
 		trace!("set_bbi()");

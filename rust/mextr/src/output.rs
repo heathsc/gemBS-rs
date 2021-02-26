@@ -135,7 +135,7 @@ fn open_output_file(name: &str, chash: &ConfHash, tp: TPool) -> HtsFile {
 	} else { "w" };
 	match HtsFile::new(&fname, output_mode) {
 		Ok(mut f) => {
-			chash.add_file(&fname);
+			chash.add_file(&fname, true);
 			if let Some(tpool) = tp.deref() { f.set_thread_pool(tpool); }
 			f
 		},

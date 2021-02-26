@@ -58,7 +58,7 @@ fn handle_regions(m: &ArgMatches, chash: &mut ConfHash, sr: &mut BcfSrs) -> io::
 		if let Some(mut v) = m.values_of("regions").or_else(|| m.values_of("region_list")) {
 			let s = v.next().unwrap().to_owned();
 			(v.fold(s, |mut st, x| {st.push(','); st.push_str(x); st}), false)
-		} else if let Some(s) = m.value_of("region_file") { (s.to_owned(), true)}
+		} else if let Some(s) = m.value_of("regions_file") { (s.to_owned(), true)}
 		else {
 			let ctgs = chash.vcf_contigs();
 			let mut s = ctgs[0].name().to_owned();

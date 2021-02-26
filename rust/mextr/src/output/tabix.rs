@@ -167,16 +167,18 @@ pub fn tabix_thread(chash: Arc<ConfHash>, r: Receiver<bool>) {
 	let mut line = Vec::new();
 	let mut tabix_files = Vec::new();
 	let mut end = false;
-	let mut new_files = chash.n_out_files() > tabix_files.len();
+	let mut n_files = 0;
+	let mut new_files = chash.n_out_files() > n_files;
 	loop {
 		if new_files {
-			for s in chash.out_files().drain(tabix_files.len()..) {
+			for (s, _) in chash.out_files().drain(tabix_files.len()..).filter(|(_, fg)| *fg) {
 				debug!("tabix_thread: Adding file {}", s);
 				let skip_lines = if chash.get_bool("no_header") { 0 } else { 1 };
 				tabix_files.push(TabixFile::new(s, skip_lines))
 			}
+			n_files = chash.n_out_files();
 		}
-		new_files = chash.n_out_files() > tabix_files.len();
+		new_files = chash.n_out_files() > n_files;
 		for m in tabix_files.iter_mut() { m.update(&mut line) }
 		if new_files { continue }
 		if end { break }

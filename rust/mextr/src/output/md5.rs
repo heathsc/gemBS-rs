@@ -73,7 +73,7 @@ pub fn md5_thread(chash: Arc<ConfHash>, r: Receiver<bool>) {
 	let (cs, cr) = unbounded();
 	loop {
 		if new_files {
-			for s in chash.out_files().drain(md5_threads.len()..) {
+			for (s, _) in chash.out_files().drain(md5_threads.len()..) {
 				debug!("md5_thread: Adding file {}", s);
 				let crc = cr.clone();
 				let th = thread::spawn(move || md5_worker(&s, crc));

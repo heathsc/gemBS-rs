@@ -87,7 +87,7 @@ pub fn bbi_finish(ch: Arc<ConfHash>, mut writer: BbiWriter) {
 	header.write_terminator(&mut writer.fp).expect("Error writing out terminator");
 	
 	// Trigger MD5 generation
-	ch.add_file(&writer.name);
+	ch.add_file(&writer.name, false);
 	
 	debug!("bbi_finish ending for {:?}", bbi_type);
 }
