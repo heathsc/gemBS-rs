@@ -18,12 +18,9 @@ fn make_contig_file(gem_bs: &GemBS, barcode: &str, output_dir: &Path) -> PathBuf
 			oc.iter().fold(HashSet::new(), |mut h, x| { h.insert(x.clone()); h })	
 		} else { HashSet::new() }
 	};
-//	let mut ctg_list: Vec<_> = vr_ctg.iter().filter(|x| !omit_hash.contains((x.name).as_str())).map(|x| Rc::clone(&x.name)).collect();
-//	ctg_list.sort();
 	let mut wr = BufWriter::new(fs::File::create(&ctg_path)
 		.unwrap_or_else(|e| panic!("Couldn't open contig_sizes file {} for output: {}", ctg_path.to_string_lossy(), e)));
 	for ctg in vr_ctg.iter().filter(|x| !omit_hash.contains(x.name.as_str())) {
-//		let ctg = if let ContigData::Contig(x) = hr_ctg.get(ctg_name).expect("No contig entry") {x} else {panic!("Wrong datatype")};
 		writeln!(wr, "{}\t0\t{}", ctg.name, ctg.len)
 			.unwrap_or_else(|e| panic!("Error writing to file {}: {}", ctg_path.display(), e))
 	}
@@ -39,7 +36,7 @@ fn make_mextr_pipeline(gem_bs: &GemBS, job: usize, bc: &str) -> QPipe {
 	let mextr_path = gem_bs.get_exec_path("mextr");
 	
 	// Set up arg list
-	let mut args = format!("--bgzip\x1e--md5\x1e--regions-file\x1e{}\x1e", contig_file.to_string_lossy());
+	let mut args = format!("--loglevel\x1e{}\x1e--bgzip\x1e--md5\x1e--regions-file\x1e{}\x1e", gem_bs.verbose(), contig_file.to_string_lossy());
 	let (mut cpg, mut noncpg, mut bedmethyl) = (false, false, false);
 	for out in task.outputs() {
 		let oname = gem_bs.get_asset(*out).expect("Couldn't get output asset").path().to_string_lossy();
@@ -75,7 +72,7 @@ fn make_mextr_pipeline(gem_bs: &GemBS, job: usize, bc: &str) -> QPipe {
 	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
 	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
 	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get mextr output asset").path()); }
-	if gem_bs.get_config_bool(Section::Extract, "keep_logs") { pipeline.set_remove_log(false) }
+	if gem_bs.keep_logs() || gem_bs.get_config_bool(Section::Extract, "keep_logs") { pipeline.set_remove_log(false) }
 	pipeline.add_stage(&mextr_path, &args).add_remove_file(&contig_file);
 	pipeline	
 }
@@ -87,7 +84,7 @@ fn make_snpxtr_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
 	let snpxtr_path = gem_bs.get_exec_path("snpxtr");
 
 	// Set up arg list
-	let mut args = format!("--bgzip\x1e--md5\x1e--tabix\x1e--output\x1e{}\x1e", first_out.to_string_lossy());
+	let mut args = format!("--loglevel\x1e{}\x1e--bgzip\x1e--md5\x1e--tabix\x1e--output\x1e{}\x1e", gem_bs.verbose(), first_out.to_string_lossy());
 	let mut opt_list = Vec::new();
 	opt_list.push(("threads", "threads", VarType::Bool));
 	opt_list.push(("snp_list", "snps", VarType::String));
@@ -99,7 +96,7 @@ fn make_snpxtr_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
 	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
 	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
 	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get snpxtr output asset").path()); }
-	if gem_bs.get_config_bool(Section::Extract, "keep_logs") { pipeline.set_remove_log(false) }
+	if gem_bs.keep_logs() || gem_bs.get_config_bool(Section::Extract, "keep_logs") { pipeline.set_remove_log(false) }
 	pipeline.add_stage(&snpxtr_path, &args);
 	pipeline	
 }

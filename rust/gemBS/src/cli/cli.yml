@@ -43,7 +43,11 @@ subcommands:
           - make_bs_index: {short: b, long: bs-index, help: Generate bisulfite index}
           - make_nonbs_index: {short: n, long: nonbs-index, help: Generate non-bisulfite (regular) index}
           - make_dbsnp_index: {short: D, long: dbsnp-index, help: Generate dbSNP index}
-          - dbsnp_files: {short: d, long: list-dbsnp-files, value_name: DBSNP_FILES, multiple: true, takes_value: true, help: List of input files from dbSNP}
+          - dbsnp_jobs: {short: j, long: dbsnp-jobs, value_name: JOBS, takes_value: true, help: Number of parallel read jobs for dbsnp_index}
+          - dbsnp_files: {short: d, long: dbsnp-files, value_name: FILES, multiple: true, takes_value: true, help: List of input files from dbSNP}
+          - dbsnp_selected: {short: S, long: dbsnp-selected, value_name: FILE, takes_value: true, help: File with list of selected SNPs from dbSNP}
+          - dbsnp_type: {long: dbsnp-type, value_name: DBSNP_TYPE, takes_value: true,  possible_values: [AUTO, BED, JSON, VCF], case_insensitive: true, help: Type of dbSNP input files}
+          - dbsnp_chrom_alias: {long: dbsnp-chrom-alias, value_name: FILE, takes_value: true, help: Chromosome alias}
     - map:
         setting: DeriveDisplayOrder
         about: Read mapping

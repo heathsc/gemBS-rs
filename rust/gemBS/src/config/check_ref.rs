@@ -138,34 +138,39 @@ fn add_index_assets(gem_bs: &mut GemBS) -> Result<(), String> {
 }
 
 fn make_dbsnp_tasks(gem_bs: &mut GemBS, dbsnp_files: Vec<PathBuf>) {
-	let dbsnp_index = if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::Index, "dbsnp_index") { PathBuf::from(idx) } 
+	let dbsnp_index = if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::DbSnp, "dbsnp_index").or_else(|| gem_bs.get_config(Section::Index, "dbsnp_index")) { PathBuf::from(idx) } 
 	else { 
-		let dir = if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::Index, "index_dir" ) { idx } else { "." };
+		let dir = if let Some(DataValue::String(idx)) = gem_bs.get_config(Section::DbSnp, "index_dir" ).or_else(|| gem_bs.get_config(Section::Index, "index_dir")) { idx } else { "." };
 		let p: PathBuf = [dir, "dbSNP_gemBS.idx"].iter().collect();
-		gem_bs.set_config(Section::Index, "dbsnp_index", DataValue::String(p.to_string_lossy().to_string()));
+		gem_bs.set_config(Section::DbSnp, "dbsnp_index", DataValue::String(p.to_string_lossy().to_string()));
 		p
 	};
-	let index = gem_bs.insert_asset("dbsnp_index", &dbsnp_index, AssetType::Derived);
 	if !dbsnp_files.is_empty() {
+		for a in ["dbsnp_selected", "dbsnp_chrom_alias"].iter() {
+			if let Some(DataValue::String(s)) = gem_bs.get_config(Section::DbSnp, a).or_else(|| gem_bs.get_config(Section::Index, a)) { 
+				let s = s.to_owned();
+				gem_bs.insert_asset(a, s, AssetType::Supplied); }
+		}
 		let mut in_vec = Vec::new();
-		for (ix, f) in dbsnp_files.iter().enumerate() { in_vec.push(gem_bs.insert_asset(format!("dbsnp_file_{}", ix + 1).as_str(), &f, AssetType::Supplied)); }
+		for (ix, f) in dbsnp_files.iter().enumerate() { in_vec.push(gem_bs.insert_asset(&format!("dbsnp_file_{}", ix + 1), &f, AssetType::Supplied)); }
 		let (id, desc, command, args) = ("dbsnp_index", "Generate dbSNP index", Command::Index, "--dbsnp-index");
 		let (log_name, log_path) = assets::derive_log_asset(id, &dbsnp_index);
 		let log_index = gem_bs.insert_asset(&log_name, &log_path, AssetType::Log);
 		let index_task = gem_bs.add_task(id, desc, command, args);
-		let cores = gem_bs.get_config_int(Section::Index, "cores").map(|x| x as usize);
-		let memory = gem_bs.get_config_memsize(Section::Index, "memory");
-		let time = gem_bs.get_config_joblen(Section::Index, "time").or_else(|| Some(21600.into()));
+		let cores = gem_bs.get_config_int(Section::DbSnp, "cores").or_else(|| gem_bs.get_config_int(Section::Index, "cores")).map(|x| x as usize);
+		let memory = gem_bs.get_config_memsize(Section::DbSnp, "memory").or_else(|| gem_bs.get_config_memsize(Section::Index, "memory"));
+		let time = gem_bs.get_config_joblen(Section::DbSnp, "time").or_else(|| gem_bs.get_config_joblen(Section::Index, "time")).or_else(|| Some(21600.into()));
+		let index = gem_bs.insert_asset("dbsnp_index", &dbsnp_index, AssetType::Derived);
 		gem_bs.add_task_inputs(index_task, &in_vec).add_outputs(&[index]).set_log(Some(log_index))
 			.add_cores(cores).add_memory(memory).add_time(time);
 		gem_bs.get_asset_mut(index).unwrap().set_creator(index_task, &in_vec);
-	}	
+	} else { let _ = gem_bs.insert_asset("dbsnp_index", &dbsnp_index, AssetType::Derived); }	
 }
 
 fn check_dbsnp_ref(gem_bs: &mut GemBS) -> Result<(), String> {	
 	gem_bs.check_signal()?;	
 	let mut files = Vec::new();
-	if let Some(DataValue::StringVec(dbsnp_files)) = gem_bs.get_config(Section::Index, "dbsnp_files") { 
+	if let Some(DataValue::StringVec(dbsnp_files)) = gem_bs.get_config(Section::DbSnp, "dbsnp_files") { 
 		for pat in dbsnp_files.iter() {
 			for mat in glob(pat).map_err(|e| format!("{}",e))? {
 				match mat {
@@ -175,7 +180,7 @@ fn check_dbsnp_ref(gem_bs: &mut GemBS) -> Result<(), String> {
 			}
 		}
 	}
-	if !files.is_empty() || gem_bs.get_config(Section::Index, "dbsnp_index").is_some() { make_dbsnp_tasks(gem_bs, files); }
+	if !files.is_empty() || gem_bs.get_config(Section::DbSnp, "dbsnp_index").is_some() { make_dbsnp_tasks(gem_bs, files); }
 	gem_bs.check_signal()
 }
 

@@ -19,7 +19,9 @@ pub fn index_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	let mut asset_names = Vec::new();
 	if options.contains_key("make_bs_index") { asset_names.push("index") }
 	if options.contains_key("make_nonbs_index") { asset_names.push("nonbs_index") }
-	if options.contains_key("make_dbsnp_index") { asset_names.push("dbsnp_index") }
+	if options.contains_key("make_dbsnp_index") { 
+		asset_names.push("dbsnp_index") 
+	}
 	let chk = if asset_names.is_empty() { 
 		asset_names.extend_from_slice(&["index", "nonbs_index", "dbsnp_index"]);
 		false

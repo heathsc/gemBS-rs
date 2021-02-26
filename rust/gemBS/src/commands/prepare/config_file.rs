@@ -64,16 +64,20 @@ fn make_known_var_list() -> KnownVarList {
 	kv_list.add_known_var("extra_references", VarType::String, vec!(Section::Index));
 	kv_list.add_known_var("reference_basename", VarType::String, vec!(Section::Index));
 	kv_list.add_known_var("contig_sizes", VarType::String, vec!(Section::Index));
-	kv_list.add_known_var("dbsnp_files", VarType::StringVec, vec!(Section::Index));
-	kv_list.add_known_var("dbsnp_index", VarType::String, vec!(Section::Index));
+	kv_list.add_known_var("dbsnp_files", VarType::StringVec, vec!(Section::DbSnp));
+	kv_list.add_known_var("dbsnp_index", VarType::String, vec!(Section::DbSnp));
+	kv_list.add_known_var("dbsnp_selected", VarType::String, vec!(Section::DbSnp));
+	kv_list.add_known_var("dbsnp_chrom_alias", VarType::String, vec!(Section::DbSnp));
+	kv_list.add_known_var("dbsnp_type", VarType::DbSnpFileType, vec!(Section::DbSnp));
+	kv_list.add_known_var("dbsnp_jobs", VarType::Int, vec!(Section::DbSnp));
 	kv_list.add_known_var("sampling_rate", VarType::Int, vec!(Section::Index));
 	kv_list.add_known_var("min_contig_size", VarType::Int, vec!(Section::Index));
 	kv_list.add_known_var("populate_cache", VarType::Bool, vec!(Section::Index));
-	kv_list.add_known_var("threads", VarType::Int, vec!(Section::Index, Section::Mapping, Section::Calling, Section::Extract, Section::Report, Section::MD5Sum));
-	kv_list.add_known_var("cores", VarType::Int, vec!(Section::Index, Section::Mapping, Section::Calling, Section::Extract, Section::Report, Section::MD5Sum));
-	kv_list.add_known_var("time", VarType::JobLen, vec!(Section::Index, Section::Mapping, Section::Calling, Section::Extract, Section::Report, Section::MD5Sum));
-	kv_list.add_known_var("memory", VarType::MemSize, vec!(Section::Index, Section::Mapping, Section::Calling, Section::Extract, Section::Report, Section::MD5Sum));
-	kv_list.add_known_var("keep_logs", VarType::Bool, vec!(Section::Index, Section::Mapping, Section::Calling, Section::Extract, Section::Report, Section::MD5Sum));
+	kv_list.add_known_var("threads", VarType::Int, vec!(Section::Index, Section::DbSnp, Section::Mapping, Section::Calling, Section::Extract, Section::Report, Section::MD5Sum));
+	kv_list.add_known_var("cores", VarType::Int, vec!(Section::Index, Section::DbSnp, Section::Mapping, Section::Calling, Section::Extract, Section::Report, Section::MD5Sum));
+	kv_list.add_known_var("time", VarType::JobLen, vec!(Section::Index, Section::DbSnp, Section::Mapping, Section::Calling, Section::Extract, Section::Report, Section::MD5Sum));
+	kv_list.add_known_var("memory", VarType::MemSize, vec!(Section::Index, Section::DbSnp, Section::Mapping, Section::Calling, Section::Extract, Section::Report, Section::MD5Sum));
+	kv_list.add_known_var("keep_logs", VarType::Bool, vec!(Section::Index, Section::DbSnp, Section::Mapping, Section::Calling, Section::Extract, Section::Report, Section::MD5Sum));
 	kv_list.add_known_var("merge_threads", VarType::Int, vec!(Section::Mapping, Section::Calling));
 	kv_list.add_known_var("merge_cores", VarType::Int, vec!(Section::Mapping, Section::Calling));
 	kv_list.add_known_var("merge_memory", VarType::MemSize, vec!(Section::Mapping, Section::Calling));
@@ -94,7 +98,7 @@ fn make_known_var_list() -> KnownVarList {
 	kv_list.add_known_var("sequence_dir", VarType::String, vec!(Section::Mapping));
 	kv_list.add_known_var("benchmark_mode", VarType::Bool, vec!(Section::Mapping, Section::Calling));
 	kv_list.add_known_var("make_cram", VarType::Bool, vec!(Section::Mapping));
-	kv_list.add_known_var("jobs", VarType::Int, vec!(Section::Index, Section::Mapping, Section::Calling, Section::Extract, Section::Report));
+	kv_list.add_known_var("jobs", VarType::Int, vec!(Section::Index, Section::DbSnp, Section::Mapping, Section::Calling, Section::Extract, Section::Report));
 	kv_list.add_known_var("bcf_dir", VarType::String, vec!(Section::Calling));
 	kv_list.add_known_var("mapq_threshold", VarType::Int, vec!(Section::Calling, Section::Report));
 	kv_list.add_known_var("qual_threshold", VarType::Int, vec!(Section::Calling, Section::Extract));
@@ -221,7 +225,7 @@ impl PrepConfig {
 		let name = x.0;
 		let section = x.1;
 		let pvar = x.2;
-		let vector = if let DataValue::StringVec(_) = pvar.var { true } else { false };
+		let vector = matches!(pvar.var, DataValue::StringVec(_));
 		match tok {
 			LexToken::Name(_) => {
 				self.handle_assignment(name, section, pvar)?;

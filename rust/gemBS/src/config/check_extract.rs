@@ -47,7 +47,7 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 	let handle_file = |gb: &mut GemBS, nm: String, p: &Path| {
 		let tpath = Path::new(nm.as_str());
 		let path: PathBuf = [p, tpath].iter().collect();
-		gb.insert_asset(nm.as_str(), &path, AssetType::Derived)
+		gb.insert_asset(nm, &path, AssetType::Derived)
 	}; 
 
 	for (bc, name) in samples.iter() {

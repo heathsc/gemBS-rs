@@ -65,7 +65,7 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 	}	
 	if let Some(s) = m.value_of("config_file") { gem_bs.set_config(Section::Default, "config_file", DataValue::String(s.to_string())); }
 	if let Some(s) = m.value_of("gembs_root") { gem_bs.set_config(Section::Default, "gembs_root", DataValue::String(s.to_string())); }
-	if m.is_present("keep_logs") { gem_bs.set_config(Section::Default, "keep_logs", DataValue::Bool(true)); }
+	if m.is_present("keep_logs") { gem_bs.set_keep_logs(true) }
 	if m.is_present("ignore_times") { gem_bs.set_ignore_times(true); }
 	if m.is_present("ignore_status") { gem_bs.set_ignore_status(true); }
 	if m.is_present("all") { gem_bs.set_all(true); }
@@ -75,7 +75,7 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 	if let Some(s) = m.value_of("slurm_script") { gem_bs.set_slurm_script(s); }
 
 	let mem = (gem_bs.total_mem() as f64) / 1073741824.0;
-	info!("Total memory detected: {:.1} GB", mem);
+	debug!("Total memory detected: {:.1} GB", mem);
 	
 	// Now handle subcommands
 	

@@ -21,15 +21,38 @@ fn make_gem_index(gem_bs: &GemBS, job: usize, bisulfite: bool) -> QPipe
 	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
 	if let Some(x) = gem_bs.get_tasks()[job].log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
 	if gem_bs.get_config_bool(Section::Index, "keep_logs") { pipeline.set_remove_log(false) }
-	for out in gem_bs.get_tasks()[job].outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get md5sum output asset").path()); }
+	for out in gem_bs.get_tasks()[job].outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get index output asset").path()); }
 	pipeline.add_stage(&gem_indexer, &args);	
 	pipeline	
 }
 
-fn make_dbsnp_index(gem_bs: &GemBS, _options: &HashMap<&'static str, DataValue>, _job: usize) -> QPipe
+fn make_dbsnp_index(gem_bs: &GemBS, _options: &HashMap<&'static str, DataValue>, job: usize) -> QPipe
 {
+	let index = gem_bs.get_asset("dbsnp_index").expect("Couldn't find dbSNP index asset").path();
+	let dbsnp_index = gem_bs.get_exec_path("dbsnp_index");
+	let task = &gem_bs.get_tasks()[job];
+	let mut args = format!("--loglevel\x1e{}", gem_bs.verbose());
+	if let Some(x) = gem_bs.get_config_int(Section::DbSnp, "dbsnp_jobs")
+		.or_else(|| gem_bs.get_config_int(Section::Index, "dbsnp_jobs")) { args.push_str(format!("\x1e--jobs\x1e{}", x).as_str()) }	
+	if let Some(x) = gem_bs.get_config_int(Section::DbSnp, "threads")
+		.or_else(|| gem_bs.get_config_int(Section::Index, "threads")) { args.push_str(format!("\x1e--threads\x1e{}", x).as_str()) }	
+	if let Some(x) = gem_bs.get_config_str(Section::DbSnp, "dbsnp_selected")
+		.or_else(|| gem_bs.get_config_str(Section::Index, "dbsnp_selected")) { args.push_str(format!("\x1e--selected\x1e{}", x).as_str()) }	
+	if let Some(x) = gem_bs.get_config_str(Section::DbSnp, "dbsnp_chrom_alias")
+		.or_else(|| gem_bs.get_config_str(Section::Index, "dbsnp_chrom_alias")) { args.push_str(format!("\x1e--chrom-alias\x1e{}", x).as_str()) }	
+	if let Some(x) = gem_bs.get_config_dbsnp_file_type(Section::DbSnp, "dbsnp_type")
+		.or_else(|| gem_bs.get_config_dbsnp_file_type(Section::Index, "dbsnp_type")) { args.push_str(format!("\x1e--type\x1e{}", x).as_str()) }	
+	args.push_str(format!("\x1e--output\x1e{}", index.display()).as_str());	
+	for asset in task.inputs().map(|ix| gem_bs.get_asset(*ix).expect("Missing asset")).filter(|asset| asset.id().starts_with("dbsnp_file_")) {
+		args.push_str(format!("\x1e{}", asset.path().display()).as_str())
+	}
 	let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
-	if gem_bs.get_config_bool(Section::Index, "keep_logs") { pipeline.set_remove_log(false) }
+	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }	
+	let keep_logs = if gem_bs.keep_logs() { true } else if let Some(DataValue::Bool(x)) = gem_bs.get_config(Section::DbSnp, "keep_logs")
+		.or_else(|| gem_bs.get_config(Section::Index, "keep_logs")) { *x } else { false };
+	if keep_logs { pipeline.set_remove_log(false) }
+	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get dbsnp_index output asset").path()); }
+	pipeline.add_stage(&dbsnp_index, &args);	
 	pipeline	
 }
 

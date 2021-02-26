@@ -170,7 +170,7 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 					};
 					let p_abs = p.canonicalize().expect("Could not get absolute path");
 					gem_bs.set_sample_data(dat, *md, DataValue::String(format!("{}", p_abs.display())));
-					in_vec.push(gem_bs.insert_asset(format!("{}_{}", dat, ext).as_str(), &p_abs, AssetType::Supplied));		
+					in_vec.push(gem_bs.insert_asset(&format!("{}_{}", dat, ext), &p_abs, AssetType::Supplied));		
 				}
 			}
 			if in_vec.is_empty() { return Err(format!("No datafiles for dataset {}", dat)); }

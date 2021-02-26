@@ -12,7 +12,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 	let bcf_dir = get_dir("bcf_dir").to_owned();
 	let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");
 	let (ext, idx_ext) = if make_cram { ("cram", "cram.crai") } else { ("bam", "bam.csi") };
-	let cores = gem_bs.get_config_int(Section::Calling, "cores").map(|x| x as usize).or_else(|| Some(2));
+	let cores = gem_bs.get_config_int(Section::Calling, "cores").map(|x| x as usize).or(Some(2));
 	let merge_cores = gem_bs.get_config_int(Section::Calling, "merge_cores").map(|x| x as usize).or(cores);
 	let memory = gem_bs.get_config_memsize(Section::Calling, "memory").or_else(|| Some(0x100000000.into())); // 4G
 	let merge_memory = gem_bs.get_config_memsize(Section::Calling, "merge_memory").or(memory);
@@ -28,8 +28,8 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 	let handle_file = |gb: &mut GemBS, nm: String, id: Option<String>, p: &Path, st: AssetType| {
 		let tpath = Path::new(nm.as_str());
 		let path: PathBuf = [p, tpath].iter().collect();
-		if let Some(s) = id { gb.insert_asset(s.as_str(), &path, st) }
-		else { gb.insert_asset(nm.as_str(), &path, st) }
+		if let Some(s) = id { gb.insert_asset(s, &path, st) }
+		else { gb.insert_asset(nm, &path, st) }
 	}; 
 	for (bcode, name) in samples.iter() {
 		let bam = if let Some(x) = gem_bs.get_asset(format!("{}.{}", bcode, ext).as_str()) { x.idx() } 

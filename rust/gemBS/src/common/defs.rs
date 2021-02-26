@@ -9,7 +9,7 @@ use super::latex_utils::PageSize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Section {
-	Default, Index, Mapping, Calling, Extract, Report, MD5Sum,
+	Default, Index, DbSnp, Mapping, Calling, Extract, Report, MD5Sum,
 }
 
 impl FromStr for Section {
@@ -19,6 +19,7 @@ impl FromStr for Section {
         match s.to_lowercase().as_str() {
             "default" => Ok(Section::Default),
             "index" => Ok(Section::Index),
+            "dbsnp" | "dbsnp_index" | "dbsnpindex" => Ok(Section::DbSnp),
             "mapping" => Ok(Section::Mapping),
             "calling" => Ok(Section::Calling),
             "extract" => Ok(Section::Extract),
@@ -135,6 +136,34 @@ impl From<usize> for MemSize {
 	fn from(mem: usize) -> Self { MemSize{mem}}	
 }
 
+
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub enum DbSnpFileType { Auto, Json, Bed, Vcf }
+
+impl FromStr for DbSnpFileType {
+	type Err = &'static str;
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+        	"auto" => Ok(DbSnpFileType::Auto),
+        	"json" => Ok(DbSnpFileType::Json),
+            "bed" => Ok(DbSnpFileType::Bed),
+            "vcf" => Ok(DbSnpFileType::Vcf),
+            _ => Err("DbSnpFileType: no match"),
+        }
+	}	
+}
+
+impl fmt::Display for DbSnpFileType {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			DbSnpFileType::Auto => write!(f, "AUTO"),
+			DbSnpFileType::Json => write!(f, "JSON"),
+			DbSnpFileType::Bed => write!(f, "BED"),
+			DbSnpFileType::Vcf => write!(f, "VCF"),		
+		}
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct JobLen {
 	secs: usize,	
@@ -218,6 +247,7 @@ pub enum DataValue {
 	JobLen(JobLen),
 	PageSize(PageSize),
 	MemSize(MemSize),
+	DbSnpFileType(DbSnpFileType),
 }
 
 impl DataValue {
@@ -229,6 +259,7 @@ impl DataValue {
 			VarType::PageSize => Ok(DataValue::PageSize(s.parse::<PageSize>()?)),
 			VarType::FileType => Ok(DataValue::FileType(s.parse::<FileType>()?)),
 			VarType::MemSize => Ok(DataValue::MemSize(s.parse::<MemSize>()?)),
+			VarType::DbSnpFileType => Ok(DataValue::DbSnpFileType(s.parse::<DbSnpFileType>()?)),
 			VarType::Bool => match s.to_lowercase().as_str() {
 				"false" | "no" | "0" => Ok(DataValue::Bool(false)),
 				"true" | "yes" | "1" => Ok(DataValue::Bool(true)),
@@ -248,7 +279,7 @@ impl DataValue {
 
 #[derive(Debug, Clone, Copy)]
 pub enum VarType {
-	String, StringVec, Bool, Int, IntVec, Float, FloatVec, ReadEnd, FileType, JobLen, PageSize, MemSize,
+	String, StringVec, Bool, Int, IntVec, Float, FloatVec, ReadEnd, FileType, JobLen, PageSize, MemSize, DbSnpFileType,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

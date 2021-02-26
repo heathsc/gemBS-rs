@@ -137,8 +137,8 @@ pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 	let (under, over) = get_conversion_rate(gem_bs, barcode);
 	
 	// Set up bs_call arguments
-	let mut args = format!("--output\x1e{}\x1e--output-type\x1eb\x1e--reference\x1e{}\x1e--sample\x1e{}\x1e--contig-include\x1e{}\x1e--report-file\x1e{}\x1e"
-		, output_bcf.to_string_lossy(), gembs_ref.path().to_string_lossy(), barcode, contig_sizes.to_string_lossy(), report_file.to_string_lossy());
+	let mut args = format!("--loglevel\x1e{}\x1e--output\x1e{}\x1e--output-type\x1eb\x1e--reference\x1e{}\x1e--sample\x1e{}\x1e--contig-include\x1e{}\x1e--report-file\x1e{}\x1e",
+		gem_bs.verbose(), output_bcf.to_string_lossy(), gembs_ref.path().to_string_lossy(), barcode, contig_sizes.to_string_lossy(), report_file.to_string_lossy());
 	if let Some(cp) = contig_pool { 
 		args.push_str(format!("--contig-bed\x1e{}\x1e", cp.to_string_lossy()).as_str());
 		pipeline.add_remove_file(&cp);
@@ -150,7 +150,7 @@ pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
 
 	if let Some(x) = task.log() { pipeline.log = Some(gem_bs.get_asset(x).expect("Couldn't get log file").path().to_owned()) }
 	for out in task.outputs() { pipeline.add_outputs(gem_bs.get_asset(*out).expect("Couldn't get md5sum output asset").path()); }
-	if gem_bs.get_config_bool(Section::Calling, "keep_logs") { pipeline.set_remove_log(false) }
+	if gem_bs.keep_logs() || gem_bs.get_config_bool(Section::Calling, "keep_logs") { pipeline.set_remove_log(false) }
 	pipeline.add_stage(&bs_call_path, &args);
 	pipeline
 }

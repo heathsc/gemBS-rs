@@ -15,7 +15,7 @@ use std::str::FromStr;
 use std::time::Instant;
 use std::os::unix::fs::PermissionsExt;
 
-use crate::common::defs::{Section, Metadata, DataValue, JobLen, MemSize, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
+use crate::common::defs::{Section, Metadata, DataValue, JobLen, MemSize, DbSnpFileType, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 use crate::common::assets::{Asset, AssetList, AssetType, AssetStatus, GetAsset};
 use crate::common::tasks::{Task, TaskList, TaskStatus, RunningTask};
 use crate::common::utils::{FileLock, timed_wait_for_lock, get_phys_memory};
@@ -54,6 +54,7 @@ pub struct GemBS {
 	signal: Arc<AtomicUsize>,
 	ignore_times: bool,
 	ignore_status: bool,
+	keep_logs: bool,
 	json_out: Option<String>,
 	all: bool,
 	slurm: bool,
@@ -72,7 +73,7 @@ impl GemBS {
 			GemBSData::ContigPools(HashMap::new()),			
 		];
 		let gem_bs = GemBS{var, fs: None, 
-			ignore_times: false, ignore_status: false, total_mem,
+			ignore_times: false, ignore_status: false, keep_logs: false, total_mem,
 			json_out: None, all: false, slurm: false, slurm_script: None, dry_run: false, verbose: LogLevel::from_str("error").unwrap(),
 			assets: AssetList::new(), tasks: TaskList::new(), signal: Arc::new(AtomicUsize::new(0))};
 		gem_bs.mask_signals();
@@ -170,13 +171,16 @@ impl GemBS {
 	pub fn get_config_memsize(&self, section: Section, name: &str) -> Option<MemSize> {
 		if let Some(DataValue::MemSize(x)) = self.get_config(section, name) { Some(*x) } else { None }
 	}	
+	pub fn get_config_dbsnp_file_type(&self, section: Section, name: &str) -> Option<DbSnpFileType> {
+		if let Some(DataValue::DbSnpFileType(x)) = self.get_config(section, name) { Some(*x) } else { None }
+	}	
 	pub fn get_sample_data_ref(&self) ->  &HashMap<String, HashMap<Metadata, DataValue>> {
 		if let GemBSData::SampleData(href) = &self.var[1] { &href }
 		else { panic!("Internal error!"); }
 	}
-	pub fn insert_asset(&mut self, id: &str, path: &Path, asset_type: AssetType) -> usize {
-		let ix = self.assets.insert(id, path, asset_type);
-		debug!("Inserting Asset({}): {} {} {:?}", ix, id, path.to_string_lossy(), asset_type);
+	pub fn insert_asset<P: AsRef<Path>, S: AsRef<str>>(&mut self, id: S, path: P, asset_type: AssetType) -> usize {
+		let ix = self.assets.insert(id.as_ref(), path.as_ref(), asset_type);
+		debug!("Inserting Asset({}): {} {} {:?}", ix, id.as_ref(), path.as_ref().display(), asset_type);
 		ix
 	}
 	pub fn add_task_inputs(&mut self, task: usize, inputs: &[usize]) -> &mut Task {
@@ -324,7 +328,7 @@ impl GemBS {
 			let i = asset.idx();
 			for j in asset.parents() {
 				if *j > i {
-					error!("Parent asset {}:{} large number than child {}:{}", *j, self.get_asset(*j).unwrap().id(), i, self.get_asset(i).unwrap().id());
+					error!("Parent asset {}:{} larger number than child {}:{}", *j, self.get_asset(*j).unwrap().id(), i, self.get_asset(i).unwrap().id());
 				}
 			}
 		}
@@ -427,6 +431,8 @@ impl GemBS {
 	pub fn ignore_times(&self) -> bool { self.ignore_times }
 	pub fn set_ignore_status(&mut self, x: bool) { self.ignore_status = x; }
 	pub fn ignore_status(&self) -> bool { self.ignore_status }
+	pub fn set_keep_logs(&mut self, x: bool) { self.keep_logs = x; }
+	pub fn keep_logs(&self) -> bool { self.keep_logs }
 	pub fn set_all(&mut self, x: bool) { self.all = x; }
 	pub fn all(&self) -> bool { self.all }
 	pub fn set_verbose(&mut self, verbose: LogLevel) { self.verbose = verbose; }

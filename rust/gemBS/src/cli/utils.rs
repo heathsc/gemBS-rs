@@ -1,28 +1,13 @@
 use clap::ArgMatches;
 use std::str::FromStr;
 use std::collections::HashMap;
-use crate::config::GemBS;
+
 use lazy_static::lazy_static;
-use crate::common::defs::{Section, DataValue, VarType, FileType, JobLen, MemSize, ReadEnd};
-use crate::common::latex_utils::PageSize;
 use clap::Shell;
 
-/*
-pub fn from_arg_matches<T: FromStr>(m: &ArgMatches, option: &str) -> Option<T> {
-	match m.value_of(option) {
-		None => None,
-		Some(s) => {
-			match <T>::from_str(s) {
-				Ok(i) => Some(i),
-				_ => {
-					error!("Invalid value '{}' for option '{}'", s, option);
-					None
-				},
-			}
-		}
-	}
-} 
-*/
+use crate::config::GemBS;
+use crate::common::defs::{Section, DataValue, VarType, FileType, JobLen, MemSize, DbSnpFileType, ReadEnd};
+use crate::common::latex_utils::PageSize;
 
 pub fn get_shell(s: &str) -> Shell {
 	match s.to_lowercase().as_str() {
@@ -49,6 +34,7 @@ pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
 		VarType::JobLen => m.value_of(opt).and_then(|x| <JobLen>::from_str(x).ok().map(DataValue::JobLen)),
 		VarType::PageSize => m.value_of(opt).and_then(|x| <PageSize>::from_str(x).ok().map(DataValue::PageSize)),
 		VarType::MemSize => m.value_of(opt).and_then(|x| <MemSize>::from_str(x).ok().map(DataValue::MemSize)),
+		VarType::DbSnpFileType => m.value_of(opt).and_then(|x| <DbSnpFileType>::from_str(x).ok().map(DataValue::DbSnpFileType)),
 		VarType::FloatVec => m.values_of(opt).map(|v| {			
 			let vec:Vec<_> = v.map(|x| <f64>::from_str(x).ok().unwrap()).collect();
 			DataValue::FloatVec(vec)
@@ -133,6 +119,7 @@ lazy_static! {
       	m.push(("pool", OptionType::Special("_pool", VarType::StringVec)));
       	m.push(("haploid", OptionType::Global("haploid", VarType::Bool)));
       	m.push(("keep_duplicates", OptionType::Global("keep_duplicates", VarType::Bool)));
+      	m.push(("keep_logs", OptionType::Global("keep_logs", VarType::Bool)));
       	m.push(("ignore_duplicate_flag", OptionType::Global("ignore_duplicate_flag", VarType::Bool)));
      	m.push(("keep_unmatched", OptionType::Global("keep_improper_pairs", VarType::Bool)));
       	m.push(("mapq_threshold", OptionType::Global("mapq_threshold", VarType::Int)));
@@ -161,6 +148,10 @@ lazy_static! {
 	  	m.push(("make_nonbs_index", OptionType::Local(VarType::Bool)));
 	  	m.push(("make_dbsnp_index", OptionType::Local(VarType::Bool)));
 	  	m.push(("dbsnp_files", OptionType::Global("dbsnp_files", VarType::StringVec)));
+	  	m.push(("dbsnp_chrom_alias", OptionType::Global("dbsnp_chrom_alias", VarType::StringVec)));
+	  	m.push(("dbsnp_selected", OptionType::Global("dbsnp_selected", VarType::StringVec)));
+	  	m.push(("dbsnp_type", OptionType::Global("dbsnp_type", VarType::DbSnpFileType)));
+	  	m.push(("dbsnp_jobs", OptionType::Global("dbsnp_jobs", VarType::Int)));
 	  	m.push(("project", OptionType::Global("project", VarType::String)));
 	  	m.push(("report_dir", OptionType::Global("report_dir", VarType::String)));
 	  	m.push(("paper_size", OptionType::Global("paper_size", VarType::PageSize)));
