@@ -372,19 +372,19 @@ impl Lexer {
 								let etok = match token {
 									IntLexToken::End => Ok(LexToken::End),
 									IntLexToken::Name => {
-										if ostr.is_some() { Ok(LexToken::Name(ostr.unwrap())) }
+										if let Some(x) = ostr { Ok(LexToken::Name(x)) }
 										else { Err("Internal error - empty Name".to_string()) }
 									},
 									IntLexToken::Value => {
-										if ostr.is_some() { Ok(LexToken::Value(ostr.unwrap())) }
+										if let Some(x) = ostr { Ok(LexToken::Value(x)) }
 										else { Err("Internal error - empty Value".to_string()) }
 									},
 									IntLexToken::Include => {
-										if ostr.is_some() { Ok(LexToken::Include(ostr.unwrap())) }
+										if let Some(x) = ostr { Ok(LexToken::Include(x)) }
 										else { Err("Internal error - empty Value".to_string()) }
 									},
 									IntLexToken::Section => {
-										if ostr.is_some() { Ok(LexToken::Section(ostr.unwrap())) }
+										if let Some(x) = ostr { Ok(LexToken::Section(x)) }
 										else { Err("Internal error - empty Value".to_string()) }
 									},
 									_ => Err("Internal error - unexpected emitted token".to_string()),									
