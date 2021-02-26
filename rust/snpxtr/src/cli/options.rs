@@ -40,7 +40,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<Config> {
 		if let Some(mut v) = m.values_of("regions").or_else(|| m.values_of("region_list")) {
 			let s = v.next().unwrap().to_owned();
 			Some((v.fold(s, |mut st, x| {st.push(','); st.push_str(x); st}), false))
-		} else if let Some(s) = m.value_of("region_file") { Some((s.to_owned(), true))}
+		} else if let Some(s) = m.value_of("regions_file") { Some((s.to_owned(), true))}
 		else { None }
 	};
 	if let Some((reg, flag)) = regions { sr.set_regions(&reg, flag)? }
