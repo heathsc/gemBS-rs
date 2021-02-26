@@ -36,7 +36,7 @@ fn make_mextr_pipeline(gem_bs: &GemBS, job: usize, bc: &str) -> QPipe {
 	let mextr_path = gem_bs.get_exec_path("mextr");
 	
 	// Set up arg list
-	let mut args = format!("--loglevel\x1e{}\x1e--bgzip\x1e--md5\x1e--regions-file\x1e{}\x1e", gem_bs.verbose(), contig_file.to_string_lossy());
+	let mut args = format!("--loglevel\x1e{}\x1e--compress\x1e--md5\x1e--regions-file\x1e{}\x1e", gem_bs.verbose(), contig_file.to_string_lossy());
 	let (mut cpg, mut noncpg, mut bedmethyl) = (false, false, false);
 	for out in task.outputs() {
 		let oname = gem_bs.get_asset(*out).expect("Couldn't get output asset").path().to_string_lossy();
@@ -53,9 +53,9 @@ fn make_mextr_pipeline(gem_bs: &GemBS, job: usize, bc: &str) -> QPipe {
 		}
 	}
 	let mut opt_list = Vec::new();
-	opt_list.push(("threads", "threads", VarType::Bool));
+	opt_list.push(("threads", "threads", VarType::Int));
    	opt_list.push(("reference_bias", "reference-bias", VarType::Float));
-    	opt_list.push(("qual_threshold", "bq-threshold", VarType::Int));
+   	opt_list.push(("qual_threshold", "bq-threshold", VarType::Int));
 	if cpg || noncpg { 
 		args.push_str("--tabix\x1e");
 	  	opt_list.push(("phred_threshold", "threshold", VarType::Int));
@@ -84,9 +84,9 @@ fn make_snpxtr_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
 	let snpxtr_path = gem_bs.get_exec_path("snpxtr");
 
 	// Set up arg list
-	let mut args = format!("--loglevel\x1e{}\x1e--bgzip\x1e--md5\x1e--tabix\x1e--output\x1e{}\x1e", gem_bs.verbose(), first_out.to_string_lossy());
+	let mut args = format!("--loglevel\x1e{}\x1e--compress\x1e--md5\x1e--tabix\x1e--output\x1e{}\x1e", gem_bs.verbose(), first_out.to_string_lossy());
 	let mut opt_list = Vec::new();
-	opt_list.push(("threads", "threads", VarType::Bool));
+	opt_list.push(("threads", "threads", VarType::Int));
 	opt_list.push(("snp_list", "snps", VarType::String));
 	opt_list.push(("dbsnp_index", "dbsnp", VarType::String));
 	super::add_command_opts(gem_bs, &mut args, Section::Extract, &opt_list);

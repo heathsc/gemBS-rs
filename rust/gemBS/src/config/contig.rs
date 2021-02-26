@@ -108,8 +108,8 @@ pub fn setup_contigs(gem_bs: &mut GemBS) -> Result<(), String> {
 				let mut iter = line.split('\t');
 				let e = if let Some(name) = iter.next() {
 					if let Some(s) = iter.next() {
-						if s.starts_with("LN:") {
-							let len = s[3..].parse::<usize>().map_err(|e| format!("{}", e))?;
+						if let Some(s1) = s.strip_prefix("LN:") {
+							let len = s1.parse::<usize>().map_err(|e| format!("{}", e))?;
 							contigs.push(Contig{name: Rc::new(name.to_owned()), len, omit: omit_ctg.contains(name)});
 							false
 						} else { true }

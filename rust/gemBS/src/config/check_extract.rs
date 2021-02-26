@@ -10,7 +10,7 @@ use super::GemBS;
 pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Extract, name ) { x } else { "." } };
 	let extract_dir = get_dir("extract_dir").to_owned();
-	let cores = gem_bs.get_config_int(Section::Extract, "cores").map(|x| x as usize).or_else(|| Some(2));
+	let cores = gem_bs.get_config_int(Section::Extract, "cores").map(|x| x as usize).or(Some(2));
 	let memory = gem_bs.get_config_memsize(Section::Extract, "memory");
 	let time = gem_bs.get_config_joblen(Section::Extract, "time").or_else(|| Some(3600.into()));
 	let bw_strand_specific = gem_bs.get_config_bool(Section::Extract, "bigwig_strand_specific");

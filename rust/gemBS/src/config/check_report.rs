@@ -14,7 +14,7 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let rdir = Path::new(get_dir("report_dir"));
 	let report_dir: PathBuf = [rdir, Path::new("mapping")].iter().collect(); 
 	let css_dir: PathBuf = [rdir, Path::new("css")].iter().collect(); 
-	let cores = gem_bs.get_config_int(Section::Report, "cores").map(|x| x as usize).or_else(|| Some(2));
+	let cores = gem_bs.get_config_int(Section::Report, "cores").map(|x| x as usize).or(Some(2));
 	let memory = gem_bs.get_config_memsize(Section::Report, "memory");
 	let time = gem_bs.get_config_joblen(Section::Report, "time").or_else(|| Some(3600.into()));
 
@@ -66,7 +66,7 @@ pub fn check_call_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Report, name ) { x } else { "gemBS_reports" } };
 	let rdir = Path::new(get_dir("report_dir"));
 	let report_dir: PathBuf = [rdir, Path::new("calling")].iter().collect(); 
-	let cores = gem_bs.get_config_int(Section::Report, "cores").map(|x| x as usize).or_else(|| Some(2));
+	let cores = gem_bs.get_config_int(Section::Report, "cores").map(|x| x as usize).or(Some(2));
 	let memory = gem_bs.get_config_memsize(Section::Report, "memory");
 	let time = gem_bs.get_config_joblen(Section::Report, "time").or_else(|| Some(3600.into()));
 

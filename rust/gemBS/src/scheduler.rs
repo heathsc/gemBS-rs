@@ -287,7 +287,7 @@ impl QPipe {
 	pub fn set_output(&mut self, out: Option<PathBuf>) { self.output = out; }
 }
 
-fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: usize) -> Option<QPipe> {
+fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: usize) -> QPipe {
 	let task = &gem_bs.get_tasks()[job];
 	for p in task.outputs().map(|x| gem_bs.get_asset(*x).expect("Couldn't get output asset").path()) {
 		if let Some(par) = p.parent() {
@@ -295,18 +295,18 @@ fn handle_job(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, job: u
 		}
 	}
 	match task.command() {
-		Command::Index => Some(index::make_index_pipeline(gem_bs, options, job)),
-		Command::Map => Some(map::make_map_pipeline(gem_bs, options, job)),
-		Command::MergeBams => Some(map::make_merge_bams_pipeline(gem_bs, options, job)),
-		Command::Call => Some(call::make_call_pipeline(gem_bs, job)),
-		Command::MergeBcfs => Some(call::make_merge_bcfs_pipeline(gem_bs, options, job)),
-		Command::IndexBcf => Some(call::make_index_bcf_pipeline(gem_bs, job)),
-		Command::MD5SumMap | Command::MD5SumCall => Some(md5sum::make_md5sum_pipeline(gem_bs, job)),
-		Command::Extract => Some(extract::make_extract_pipeline(gem_bs, job)),
-		Command::MapReport => Some(report::make_map_report_pipeline(gem_bs, job)),
-		Command::CallReport => Some(report::make_call_report_pipeline(gem_bs, job)),
-		Command::Report => Some(report::make_report_pipeline(gem_bs, job)),
-		Command::MergeCallJsons => Some(report::make_merge_call_jsons_pipeline(gem_bs, job)),
+		Command::Index => index::make_index_pipeline(gem_bs, options, job),
+		Command::Map => map::make_map_pipeline(gem_bs, options, job),
+		Command::MergeBams => map::make_merge_bams_pipeline(gem_bs, options, job),
+		Command::Call => call::make_call_pipeline(gem_bs, job),
+		Command::MergeBcfs => call::make_merge_bcfs_pipeline(gem_bs, options, job),
+		Command::IndexBcf => call::make_index_bcf_pipeline(gem_bs, job),
+		Command::MD5SumMap | Command::MD5SumCall => md5sum::make_md5sum_pipeline(gem_bs, job),
+		Command::Extract => extract::make_extract_pipeline(gem_bs, job),
+		Command::MapReport => report::make_map_report_pipeline(gem_bs, job),
+		Command::CallReport => report::make_call_report_pipeline(gem_bs, job),
+		Command::Report => report::make_report_pipeline(gem_bs, job),
+		Command::MergeCallJsons => report::make_merge_call_jsons_pipeline(gem_bs, job),
 	}
 }
 
@@ -453,10 +453,9 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 			}	
 			match sched.get_task(gem_bs) {
 				Ok(job) => {
-					if let Some(qpipe) = handle_job(gem_bs, options, job.task_idx) {
-						jobs.push((job, idx));					
-						workers[idx as usize].tx.send(Some(qpipe)).expect("Error sending new command to worker thread");
-					} else { return Err("Empty command pipeline!".to_string()) };
+					let qpipe = handle_job(gem_bs, options, job.task_idx);
+					jobs.push((job, idx));					
+					workers[idx as usize].tx.send(Some(qpipe)).expect("Error sending new command to worker thread");
 				},
 				Err(SchedulerError::NoSlots) => {
 					debug!("No execution slots");

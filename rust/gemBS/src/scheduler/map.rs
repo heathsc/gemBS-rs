@@ -115,12 +115,8 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 
 	// Setup rest of arguments for mapper
 	let ftype = if let Some(DataValue::FileType(t)) = href.get(&Metadata::FileType) { Some(*t) } else { None };
-	let paired = if let Some(DataValue::Bool(x)) = options.get("paired") { *x } else {
-		match ftype {
-			Some(FileType::Paired) | Some(FileType::Interleaved) => true,
-			_ => false,
-		}
-	};
+	let paired = if let Some(DataValue::Bool(x)) = options.get("paired") { *x } else { matches!(ftype, Some(FileType::Paired) | Some(FileType::Interleaved)) };
+
 	mapper_args.push_str(format!("-I\x1e{}\x1e", index.path().display()).as_str());
 	if vfile.len() == 2 {
 		mapper_args.push_str(format!("--i1\x1e{}\x1e--i2\x1e{}\x1e", vfile[0].path().display(), vfile[1].path().display()).as_str());

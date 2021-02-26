@@ -15,7 +15,7 @@ use std::str::FromStr;
 use std::time::Instant;
 use std::os::unix::fs::PermissionsExt;
 
-use crate::common::defs::{Section, Metadata, DataValue, JobLen, MemSize, DbSnpFileType, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
+use crate::common::defs::{Section, Metadata, DataValue, JobLen, MemSize, Command, SIGTERM, SIGINT, SIGQUIT, SIGHUP, signal_msg};
 use crate::common::assets::{Asset, AssetList, AssetType, AssetStatus, GetAsset};
 use crate::common::tasks::{Task, TaskList, TaskStatus, RunningTask};
 use crate::common::utils::{FileLock, timed_wait_for_lock, get_phys_memory};
@@ -170,9 +170,6 @@ impl GemBS {
 	}	
 	pub fn get_config_memsize(&self, section: Section, name: &str) -> Option<MemSize> {
 		if let Some(DataValue::MemSize(x)) = self.get_config(section, name) { Some(*x) } else { None }
-	}	
-	pub fn get_config_dbsnp_file_type(&self, section: Section, name: &str) -> Option<DbSnpFileType> {
-		if let Some(DataValue::DbSnpFileType(x)) = self.get_config(section, name) { Some(*x) } else { None }
 	}	
 	pub fn get_sample_data_ref(&self) ->  &HashMap<String, HashMap<Metadata, DataValue>> {
 		if let GemBSData::SampleData(href) = &self.var[1] { &href }

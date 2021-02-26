@@ -6,13 +6,13 @@ use crate::common::defs::{Section, Command};
 use crate::common::{dry_run, utils};
 use crate::scheduler;
 
-fn collect_terminal_assets(gem_bs: &mut GemBS) -> Result<Vec<usize>, String> {
+fn collect_terminal_assets(gem_bs: &mut GemBS) -> Vec<usize> {
 	let mut flag = vec!(true; gem_bs.get_assets().len());	
 	// Mask out all assets that are requirements of other assets
 	for asset in gem_bs.get_assets().iter() { asset.parents().iter().for_each(|x| flag[*x] = false); }
 	// Make final list
 	let assets: Vec<_> = gem_bs.get_assets().iter().filter(|x| x.asset_type() == AssetType::Derived).map(|x| x.idx()).filter(|x| flag[*x]).collect();
-	Ok(assets)
+	assets
 }
 
 pub fn run_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
@@ -24,7 +24,7 @@ pub fn run_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
 	let task_path = gem_bs.get_task_file_path();
 	let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?; 
 	gem_bs.setup_assets_and_tasks(&flock)?;
-	let assets = collect_terminal_assets(gem_bs)?;
+	let assets = collect_terminal_assets(gem_bs);
 	let com_set = [Command::Index, Command::Map, Command::MergeBams, Command::MergeCallJsons, Command::Call, Command::MergeBcfs, Command::Extract,
 		Command::MD5SumMap, Command::MD5SumCall, Command::IndexBcf, Command::MapReport, Command::CallReport, Command::Report];
 	let task_list = gem_bs.get_required_tasks_from_asset_list(&assets, &com_set);
