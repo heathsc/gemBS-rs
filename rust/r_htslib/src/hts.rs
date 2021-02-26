@@ -298,6 +298,7 @@ extern "C" {
 	fn hts_tpool_init(n: c_int) -> *mut hts_tpool;
 	fn hts_tpool_destroy(p: *mut hts_tpool);
 	pub fn hts_set_log_level(level: htsLogLevel);
+	pub fn hts_get_log_level() -> htsLogLevel;
 }
 
 pub struct HtsFile {
