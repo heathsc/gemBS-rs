@@ -1,15 +1,15 @@
 #============================================================================
 # PROJECT: gemBS
 # FILE: Makefile
-# DATE: 01/01/2015
-# AUTHOR(S): Marcos Fernandez Callejo <mfernandez@cnag.crg.eu>
+# DATE: 27/02/2021
+# AUTHOR(S): Simon Heath <simon.heath@gmail.com>
 # DESCRIPTION: Top level makefile
 #============================================================================
 
 # Definitions
 ROOT_PATH=$(CURDIR)
 GEMBS_INSTALL_ROOT ?= /usr/local/lib/gemBS
-TMP_ROOT ?= $(abspath c_tools/tmp_root)
+TMP_ROOT ?= $(abspath tmp_root)
 
 # samtools and bcftools definitions
 SAMTOOLS_VERSION=1.11
@@ -20,13 +20,12 @@ BCFTOOLS_DIR=bcftools
 HTSLIB_DIR=htslib
 SAMTOOLS=$(SAMTOOLS_DIR)/samtools
 BCFTOOLS=$(BCFTOOLS_DIR)/bcftools
-SAMTOOLS_TAR=samtools.tar.gz
-BCFTOOLS_TAR=bcftools.tar.gz
-HTSLIB_TAR=htslib.tar.gz
-SAMTOOLS_URL=https://github.com/samtools/samtools/archive/$(SAMTOOLS_VERSION).tar.gz
-BCFTOOLS_URL=https://github.com/samtools/bcftools/archive/$(BCFTOOLS_VERSION).tar.gz
-HTSLIB_URL=https://github.com/samtools/htslib/archive/$(HTSLIB_VERSION).tar.gz
-
+SAMTOOLS_TAR=samtools.tar.bz2
+BCFTOOLS_TAR=bcftools.tar.bz2
+HTSLIB_TAR=htslib.tar.bz2
+SAMTOOLS_URL=https://github.com/samtools/samtools/releases/download/$(SAMTOOLS_VERSION)/samtools-$(SAMTOOLS_VERSION).tar.bz2
+BCFTOOLS_URL=https://github.com/samtools/bcftools/releases/download/$(BCFTOOLS_VERSION)/bcftools-$(BCFTOOLS_VERSION).tar.bz2
+HTSLIB_URL=https://github.com/samtools/htslib/releases/download/$(HTSLIB_VERSION)/htslib-$(HTSLIB_VERSION).tar.bz2
 HTSLIB_INSTALL=$(TMP_ROOT)/include/htslib/hts.h
 
 MACHTYPE:=$(shell uname -m)
@@ -85,19 +84,19 @@ $(BCFTOOLS_DIR)/config.h:
 	touch $(BCFTOOLS_DIR)/config.h
 
 $(HTSLIB_DIR):
-	wget -O $(HTSLIB_TAR) $(HTSLIB_URL) && tar -zxf $(HTSLIB_TAR) && rm -f $(HTSLIB_TAR)
+	wget -O $(HTSLIB_TAR) $(HTSLIB_URL) && tar -jxf $(HTSLIB_TAR) && rm -f $(HTSLIB_TAR)
 	mv htslib-$(HTSLIB_VERSION) $(HTSLIB_DIR)
-	(cd $(HTSLIB_DIR) && autoheader && autoconf)
+#	(cd $(HTSLIB_DIR) && autoheader && autoconf)
 
 $(SAMTOOLS_DIR):
-	wget -O $(SAMTOOLS_TAR) $(SAMTOOLS_URL) && tar -zxf $(SAMTOOLS_TAR) && rm -f $(SAMTOOLS_TAR)
+	wget -O $(SAMTOOLS_TAR) $(SAMTOOLS_URL) && tar -jxf $(SAMTOOLS_TAR) && rm -f $(SAMTOOLS_TAR)
 	mv samtools-$(SAMTOOLS_VERSION) $(SAMTOOLS_DIR)
-	(cd $(SAMTOOLS_DIR) && autoreconf)
+#	(cd $(SAMTOOLS_DIR) && autoreconf)
 
 $(BCFTOOLS_DIR): 
-	wget -O $(BCFTOOLS_TAR) $(BCFTOOLS_URL) && tar -zxf $(BCFTOOLS_TAR) && rm -f $(BCFTOOLS_TAR)
+	wget -O $(BCFTOOLS_TAR) $(BCFTOOLS_URL) && tar -jxf $(BCFTOOLS_TAR) && rm -f $(BCFTOOLS_TAR)
 	mv bcftools-$(BCFTOOLS_VERSION) $(BCFTOOLS_DIR)
-	(cd $(BCFTOOLS_DIR) && autoheader && autoconf)
+#	(cd $(BCFTOOLS_DIR) && autoheader && autoconf)
 
 clean:
 	@rm -f *~
