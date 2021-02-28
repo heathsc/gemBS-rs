@@ -21,4 +21,4 @@ GEMBS_INSTALL_ROOT=$(INSTALL_PREFIX)/lib/gemBS
 # Add support for submitting the pipeline directly to the Slurm
 # workflow manager
 #
-# SLURM_SUPPORT=yes
+SLURM_SUPPORT=yes
