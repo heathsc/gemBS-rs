@@ -12,7 +12,7 @@ Stage: build
     mkdir -p /usr/local/build; cd /usr/local/build
     git clone --recursive https://github.com/heathsc/gemBS-rs.git
     (cd gemBS-rs; PATH=$PATH:/root/.cargo/bin GEMBS_CONTAINER=1 make install)
-	 rm -rf /usr/local/build ~/.cargo
+	 cd;  rm -rf /usr/local/build ~/.cargo
     echo /usr/local/lib/gemBS/lib > /etc/ld.so.conf.d/gemBS.conf && ldconfig
 
 %runscript
