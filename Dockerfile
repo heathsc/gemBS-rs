@@ -1,8 +1,8 @@
-FROM ubuntu:xenial
+FROM ubuntu:16.04
 MAINTAINER Simon Heath (simon.heath@gmail.com)
-RUN apt-get update --fix-missing
+RUN apt-get update
 RUN apt-get install -y build-essential git autoconf wget lbzip2 pkg-config cmake
-RUN apt-get install -y zlib1g-dev libbz2-dev gsl-bin libgsl0-dev libexpat1-dev
+RUN apt-get install -y zlib1g-dev libbz2-dev libexpat1-dev
 RUN apt-get install -y libncurses5-dev liblzma-dev libssl-dev libcurl4-openssl-dev curl
 RUN apt-get install -y libfreetype6-dev libfontconfig1-dev
 RUN curl https://sh.rustup.rs -sSf > rust.sh && sh rust.sh -y
