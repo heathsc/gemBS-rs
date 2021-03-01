@@ -12,8 +12,13 @@ Stage: build
     mkdir -p /usr/local/build; cd /usr/local/build
     git clone --recursive https://github.com/heathsc/gemBS-rs.git
     (cd gemBS-rs; PATH=$PATH:/root/.cargo/bin GEMBS_CONTAINER=1 make install)
-	 cd;  rm -rf /usr/local/build ~/.cargo
     echo /usr/local/lib/gemBS/lib > /etc/ld.so.conf.d/gemBS.conf && ldconfig
+
+BootStrap: docker
+From: ubuntu:xenial
+
+%files from build
+    /usr/local/lib/gemBS
 
 %runscript
     exec gemBS $@
@@ -23,3 +28,11 @@ Stage: build
 
 %help
     gemBS singularity container
+ 
+%post
+    apt-get update
+    (mkdir /ext && cd /ext && mkdir disk1 disk2 disk3 disk4 disk5 disk6 disk7 disk8 disk9)
+    apt-get install -y lbzip2 zlib1g libexpat1
+    apt-get install -y libncurses5 liblzma5 libssl1.0.0 libcurl3
+    apt-get install -y libfreetype6 libfontconfig1 perl-modules-5.22
+    echo /usr/local/lib/gemBS/lib > /etc/ld.so.conf.d/gemBS.conf && ldconfig
