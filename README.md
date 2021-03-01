@@ -71,3 +71,23 @@ Then look at the file gemBS_config.mk and make any changes that are required.  W
 
 If the make and install process is successful, a shell script called gemBS will be created in the main gemBS-rs directory.  This file should be copied to a directory that is in your PATH so that gemBS can be invoked from anywhere.
 
+-----------------------
+Check your installation
+-----------------------
+
+For checking your installation follow this
+[worked example](http://statgen.cnag.cat/gemBS/UserGuide/_build/html/example.html).
+
+-------------
+Documentation
+-------------
+
+Documentation can be found at
+[gemBS](http://statgen.cnag.cat/gemBS/).
+
+----------
+Changelog:
+----------
+
+    4.0 First release of gemBS-rs (4th release of gemBS)
+
