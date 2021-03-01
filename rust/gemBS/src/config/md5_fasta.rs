@@ -106,7 +106,7 @@ impl Md5Contig {
 			// Read in sequence information from gref
 			let faidx_args = vec!("faidx", gref.as_ref().to_str().unwrap(), &self.name);
 			let samtools_path = gem_bs.get_exec_path("samtools");
-			println!("Creating cache for contig {} with md5 {}", self.name, self.md5);
+			info!("Creating cache for contig {} with md5 {}", self.name, self.md5);
 			let mut rdr = BufReader::new(compress::open_read_filter(&samtools_path, &faidx_args).
 				map_err(|e| format!("Couldn't get sequence data for contig {} from {}: {}", self.name, gref.as_ref().display(), e))?);
 			let mut read_header = false;
@@ -131,6 +131,8 @@ impl Md5Contig {
 					Err(e) => return Err(format!("Error reading from file {}: {}", gref.as_ref().display(), e)),
 				}
 			}
+			// Make cache directories if required
+			if let Some(d) = &fname.parent() { fs::create_dir_all(d).map_err(|e| format!("Couldn't create cache directories for {}: {}", &fname.display(), e))?; }
 			let mut wrt = compress::open_bufwriter(&fname).map_err(|e| format!("Couldn't open cache file {} for writing: {}", &fname.display(), e))?;
 			wrt.write_all(&buf).map_err(|e| format!("Error writing to cache file {}: {}", &fname.display(), e))?;			
 		}
