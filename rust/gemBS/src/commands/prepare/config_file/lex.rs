@@ -149,7 +149,7 @@ impl Lexer {
 		tab[b'\r' as usize] = LexRawToken::LineFeed;
 		tab[12] = LexRawToken::WhiteSpace; // Line Feed
 		tab[11] = LexRawToken::WhiteSpace; // Form Feed
-		tab[39] = LexRawToken::SingleQuote; // Singe quote
+		tab[39] = LexRawToken::SingleQuote; // Single quote
 		tab[b'$' as usize] = LexRawToken::Punct;
 		tab[b',' as usize] = LexRawToken::Comma;
 		tab[b'=' as usize] = LexRawToken::Equals;
