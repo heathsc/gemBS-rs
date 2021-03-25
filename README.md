@@ -90,4 +90,4 @@ Changelog:
 ----------
 
     4.0 First release of gemBS-rs (4th release of gemBS)
-
+    4.0.1 Correct bug preventing that caused non-stranded mapping to fail

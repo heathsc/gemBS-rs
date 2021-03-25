@@ -127,7 +127,7 @@ pub fn make_map_pipeline(gem_bs: &GemBS, options: &HashMap<&'static str, DataVal
 		pipeline.add_stage(&bam2fq, &args);
 	} else { mapper_args.push_str(format!("-i\x1e{}\x1e", vfile[0].path().display()).as_str()) }
 	if paired { mapper_args.push_str("--paired-end-alignment\x1e")}
-	if gem_bs.get_config_bool(Section::Mapping, "non_stranded") { mapper_args.push_str("--bisulfite-conversion non-stranded\x1e") }
+	if gem_bs.get_config_bool(Section::Mapping, "non_stranded") { mapper_args.push_str("--bisulfite-conversion\x1enon-stranded\x1e") }
 	else if gem_bs.get_config_bool(Section::Mapping, "reverse_conversion") { mapper_args.push_str("--bisulfite-conversion\x1einferred-G2A-C2T\x1e") }
 	else { mapper_args.push_str("--bisulfite-conversion\x1einferred-C2T-G2A\x1e") }
 	
