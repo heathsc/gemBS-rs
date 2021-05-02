@@ -111,7 +111,9 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 		}
 	}
 	drop(out);	
-	for x in procs.iter() { x.s.send(true).expect("Couldn't send closing message") }
+	for x in procs.iter() { 
+        if let Err(_) = x.s.send(true) { warn!("Couldn't send closing message") }
+    }
 	for x in procs.drain(..) { x.th.join().unwrap() }
 	Ok(())
 }
