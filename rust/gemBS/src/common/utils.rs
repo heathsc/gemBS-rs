@@ -323,7 +323,7 @@ pub fn check_signal(sig: Arc<AtomicUsize>) -> Result<(), String> {
 pub fn wait_for_lock(sig: Arc<AtomicUsize>, path: &Path) -> Result<FileLock<'_>, String> { timed_wait_for_lock(sig, path) }
 
 pub fn timed_wait_for_lock(sig: Arc<AtomicUsize>, path: &Path) -> Result<FileLock<'_>, String> {
-	let delay = time::Duration::from_millis(250);
+	let delay = time::Duration::from_millis(1000);
 	let now = time::SystemTime::now();
 	let mut signal = sig.swap(0, Ordering::Relaxed);
 	let mut message = false;
@@ -350,7 +350,7 @@ pub fn timed_wait_for_lock(sig: Arc<AtomicUsize>, path: &Path) -> Result<FileLoc
 			} else { return Err(format!("Received {} signal.  Closing down", signal_msg(s))); }
 		}
  		if let Ok(t) = now.elapsed() {
-			if t.as_secs() >= 300 { return Err("Timed out without obtaining lock".to_string()); }
+			if t.as_secs() >= 30000 { return Err("Timed out without obtaining lock".to_string()); }
 		}
 		thread::sleep(delay);
 	}	
