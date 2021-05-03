@@ -30,7 +30,8 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 	let mut brec = BcfRec::new()?;
 	let mut curr_ctg: Option<(usize, String, Option<DBSnpContig>)> = None;
 	let mut buffer: Vec<u8> = Vec::with_capacity(80);
-	let mut mdb = MallocDataBlock::<i32>::new();
+    let mut mdb = MallocDataBlock::<i32>::new();
+    let mut mc8 = MallocDataBlock::<i32>::new();
 	let mut procs = Vec::new();
 	if conf.output().compute_md5() {
 		let (s, r) = channel();
@@ -82,7 +83,7 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 		} else { false };
 		if pass { pass = brec.check_pass()};
 		if !pass { continue; }
-		if brec.get_genotypes(&hdr, &mut mdb).is_none() { continue }
+		if brec.get_genotypes(&hdr, &mut mdb).is_none() || brec.get_format_i32(&hdr, "MC8", &mut mc8).is_none() { continue }
 		let alls = {
 			let v = brec.alleles();
 			if v.len() > 4 || v.iter().any(|x| x.len() != 1) { continue; }
@@ -96,6 +97,25 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 			if i >= alls.len() { b'.' }
 			else { alls[i] }
 		};
+        let safe_frac = |a: i32, b: i32| { if a + b > 0 { (a as f64) / ((a + b) as f64) } else { 0.0 } };
+        let get_baf = |x1: i32, x2: i32| {
+            match (get_gt(x1), get_gt(x2)) {
+                (b'A', b'C') => safe_frac(mc8[1]+ mc8[5], mc8[0] + mc8[4]),
+                (b'A', b'G') => safe_frac(mc8[2], mc8[0]),
+                (b'A', b'T') => safe_frac(mc8[3]+ mc8[7], mc8[0] + mc8[4]),                    
+                (b'C', b'A') => safe_frac(mc8[0]+ mc8[4], mc8[1] + mc8[5]),
+                (b'C', b'G') => safe_frac(mc8[2]+ mc8[6], mc8[1] + mc8[5]),
+                (b'C', b'T') => safe_frac(mc8[3], mc8[1]),
+                (b'G', b'A') => safe_frac(mc8[0], mc8[2]),
+                (b'G', b'C') => safe_frac(mc8[1]+ mc8[5], mc8[2] + mc8[6]),
+                (b'G', b'T') => safe_frac(mc8[3]+ mc8[7], mc8[2] + mc8[6]),
+                (b'T', b'A') => safe_frac(mc8[0]+ mc8[4], mc8[3] + mc8[7]),
+                (b'T', b'C') => safe_frac(mc8[1], mc8[3]),
+                (b'T', b'G') => safe_frac(mc8[2]+ mc8[6], mc8[3] + mc8[7]),
+                _ => 0.0,
+            }
+            
+        };
 		if mdb.iter().any(|x| *x > 0) {
 			let ploidy = mdb.len() / ns;
 			if ploidy == 0 { continue }
@@ -104,7 +124,16 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 			write!(buffer, "{}\t{}\t{}", ctg_name, pos + 1, rs_id.unwrap())?;
 			for gt in mdb.chunks(ploidy) {
 				buffer.push(b'\t');
-				for i in gt { buffer.push(get_gt(*i)) }		
+				for i in gt { buffer.push(get_gt(*i)) }	
+                if ploidy == 2 {
+                    match (gt[0], gt[1]) {
+                        (0, 0) => write!(&mut buffer, "\t0.000")?,
+                        (c1, c2) if c1 == c2 => write!(&mut buffer, "\t1.000")?,
+                        (0, c2) => write!(&mut buffer, "\t{:.3}", get_baf(0, c2))?,
+                        (c1, 0) => write!(&mut buffer, "\t{:.3}", get_baf(0, c1))?,
+                        (c1, c2) => write!(&mut buffer, "\t{:.3}", get_baf(c1, c2))?,
+                    }    
+                } else { write!(&mut buffer, "\t.")? }
 			}
 			buffer.push(b'\n');
 			out.write_all(&buffer)?;
@@ -112,7 +141,7 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 	}
 	drop(out);	
 	for x in procs.iter() { 
-        if let Err(_) = x.s.send(true) { warn!("Couldn't send closing message") }
+        if x.s.send(true).is_err() { warn!("Couldn't send closing message") }
     }
 	for x in procs.drain(..) { x.th.join().unwrap() }
 	Ok(())
