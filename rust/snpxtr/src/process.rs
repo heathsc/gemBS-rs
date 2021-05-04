@@ -120,18 +120,18 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 		};
         let get_baf = |x1: i32, x2: i32| {
             match (get_gt(x1), get_gt(x2)) {
-                (b'A', b'C') => Baf::new(mc8[1] + mc8[5], mc8[0] + mc8[4] + mc8[7]),
+                (b'A', b'C') => Baf::new(mc8[1] + mc8[5] + mc8[7], mc8[0] + mc8[4]),
                 (b'A', b'G') => Baf::new(mc8[2], mc8[0]),
                 (b'A', b'T') => Baf::new(mc8[3] + mc8[7], mc8[0] + mc8[4]),                    
-                (b'C', b'A') => Baf::new(mc8[0] + mc8[4] + mc8[7], mc8[1] + mc8[5]),
+                (b'C', b'A') => Baf::new(mc8[0] + mc8[4], mc8[1] + mc8[5] + mc8[7]),
                 (b'C', b'G') => Baf::new(mc8[2] + mc8[4] + mc8[6], mc8[1] + mc8[5] + mc8[7]),
                 (b'C', b'T') => Baf::new(mc8[3], mc8[1]),
                 (b'G', b'A') => Baf::new(mc8[0], mc8[2]),
-                (b'G', b'C') => Baf::new(mc8[1]+ mc8[5] + mc8[7], mc8[2] + mc8[4] + mc8[6]),
-                (b'G', b'T') => Baf::new(mc8[3]+ mc8[7], mc8[2] + mc8[4] + mc8[6]),
-                (b'T', b'A') => Baf::new(mc8[0]+ mc8[4], mc8[3] + mc8[7]),
+                (b'G', b'C') => Baf::new(mc8[1] + mc8[5] + mc8[7], mc8[2] + mc8[4] + mc8[6]),
+                (b'G', b'T') => Baf::new(mc8[3] + mc8[7], mc8[2] + mc8[4] + mc8[6]),
+                (b'T', b'A') => Baf::new(mc8[0] + mc8[4], mc8[3] + mc8[7]),
                 (b'T', b'C') => Baf::new(mc8[1], mc8[3]),
-                (b'T', b'G') => Baf::new(mc8[2]+ mc8[4] + mc8[6], mc8[3] + mc8[7]),
+                (b'T', b'G') => Baf::new(mc8[2] + mc8[4] + mc8[6], mc8[3] + mc8[7]),
                 _ => Baf::new(0, 0),
             }          
         };
