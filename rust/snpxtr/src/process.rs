@@ -1,6 +1,7 @@
 use std::io::{self, Write};
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
+use std::fmt;
 
 use r_htslib::*;
 use crate::config::*;
@@ -11,6 +12,26 @@ use crate::tabix::tabix_thread;
 struct Md5TabixProc<T> {
 	s: Sender<bool>,
 	th: thread::JoinHandle<T>,
+}
+
+struct Baf {
+    a: i32,
+    b: i32,
+}
+
+impl Baf {
+    fn new(a: i32, b:i32) -> Self { Self{a, b} }
+}
+
+impl fmt::Display for Baf {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}\t{}\t", self.a, self.b)?;
+        if self.a + self.b > 0 { 
+            write!(f, "{:.3}", (self.a as f64) / ((self.a + self.b) as f64))
+        } else {
+            write!(f, "-")
+        }
+    }
 }
 
 pub fn process(mut conf: Config) -> io::Result<()> {
@@ -97,24 +118,32 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 			if i >= alls.len() { b'.' }
 			else { alls[i] }
 		};
-        let safe_frac = |a: i32, b: i32| { if a + b > 0 { (a as f64) / ((a + b) as f64) } else { 0.0 } };
         let get_baf = |x1: i32, x2: i32| {
             match (get_gt(x1), get_gt(x2)) {
-                (b'A', b'C') => safe_frac(mc8[1]+ mc8[5], mc8[0] + mc8[4]),
-                (b'A', b'G') => safe_frac(mc8[2], mc8[0]),
-                (b'A', b'T') => safe_frac(mc8[3]+ mc8[7], mc8[0] + mc8[4]),                    
-                (b'C', b'A') => safe_frac(mc8[0]+ mc8[4], mc8[1] + mc8[5]),
-                (b'C', b'G') => safe_frac(mc8[2]+ mc8[6], mc8[1] + mc8[5]),
-                (b'C', b'T') => safe_frac(mc8[3], mc8[1]),
-                (b'G', b'A') => safe_frac(mc8[0], mc8[2]),
-                (b'G', b'C') => safe_frac(mc8[1]+ mc8[5], mc8[2] + mc8[6]),
-                (b'G', b'T') => safe_frac(mc8[3]+ mc8[7], mc8[2] + mc8[6]),
-                (b'T', b'A') => safe_frac(mc8[0]+ mc8[4], mc8[3] + mc8[7]),
-                (b'T', b'C') => safe_frac(mc8[1], mc8[3]),
-                (b'T', b'G') => safe_frac(mc8[2]+ mc8[6], mc8[3] + mc8[7]),
-                _ => 0.0,
-            }
-            
+                (b'A', b'C') => Baf::new(mc8[1] + mc8[5], mc8[0] + mc8[4] + mc8[7]),
+                (b'A', b'G') => Baf::new(mc8[2], mc8[0]),
+                (b'A', b'T') => Baf::new(mc8[3] + mc8[7], mc8[0] + mc8[4]),                    
+                (b'C', b'A') => Baf::new(mc8[0] + mc8[4] + mc8[7], mc8[1] + mc8[5]),
+                (b'C', b'G') => Baf::new(mc8[2] + mc8[4] + mc8[6], mc8[1] + mc8[5] + mc8[7]),
+                (b'C', b'T') => Baf::new(mc8[3], mc8[1]),
+                (b'G', b'A') => Baf::new(mc8[0], mc8[2]),
+                (b'G', b'C') => Baf::new(mc8[1]+ mc8[5] + mc8[7], mc8[2] + mc8[4] + mc8[6]),
+                (b'G', b'T') => Baf::new(mc8[3]+ mc8[7], mc8[2] + mc8[4] + mc8[6]),
+                (b'T', b'A') => Baf::new(mc8[0]+ mc8[4], mc8[3] + mc8[7]),
+                (b'T', b'C') => Baf::new(mc8[1], mc8[3]),
+                (b'T', b'G') => Baf::new(mc8[2]+ mc8[4] + mc8[6], mc8[3] + mc8[7]),
+                _ => Baf::new(0, 0),
+            }          
+        };
+        let get_hom = |x: i32, rf: bool| {
+            let a = match get_gt(x) {
+                b'A' => mc8[0] + mc8[4],  
+                b'C' => mc8[1] + mc8[5] + mc8[7],  
+                b'G' => mc8[2] + mc8[4] + mc8[6],  
+                b'T' => mc8[3] + mc8[7],
+                _ => 0,  
+            };
+            if rf { Baf::new(0, a) } else { Baf::new(a, 0) }
         };
 		if mdb.iter().any(|x| *x > 0) {
 			let ploidy = mdb.len() / ns;
@@ -127,13 +156,13 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 				for i in gt { buffer.push(get_gt(*i)) }	
                 if ploidy == 2 {
                     match (gt[0], gt[1]) {
-                        (0, 0) => write!(&mut buffer, "\t0.000")?,
-                        (c1, c2) if c1 == c2 => write!(&mut buffer, "\t1.000")?,
-                        (0, c2) => write!(&mut buffer, "\t{:.3}", get_baf(0, c2))?,
-                        (c1, 0) => write!(&mut buffer, "\t{:.3}", get_baf(0, c1))?,
-                        (c1, c2) => write!(&mut buffer, "\t{:.3}", get_baf(c1, c2))?,
+                        (2, 2) => write!(&mut buffer, "\t{}", get_hom(2, true))?,
+                        (c1, c2) if c1 == c2 => write!(&mut buffer, "\t{}", get_hom(c1, false))?,
+                        (2, c2) => write!(&mut buffer, "\t{}", get_baf(0, c2))?,
+                        (c1, 2) => write!(&mut buffer, "\t{}", get_baf(0, c1))?,
+                        (c1, c2) => write!(&mut buffer, "\t{}", get_baf(c1, c2))?,
                     }    
-                } else { write!(&mut buffer, "\t.")? }
+                } else { write!(&mut buffer, "\t{}", Baf::new(0, 0))? }
 			}
 			buffer.push(b'\n');
 			out.write_all(&buffer)?;
