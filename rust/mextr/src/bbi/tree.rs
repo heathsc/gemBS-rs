@@ -112,6 +112,7 @@ impl <'a>CtgTree<'a> {
 		let item_size = (self.key_len + 8) as usize;
 		let mut off = pos + 4 * n + item_size * n1; // Offset of first node at next (lower) level
 		let start = &self.start_ix[level];
+        let start1 = &self.start_ix[level - 1];
 		for i in 0..n {
 			let a = start[i] as usize;
 			let b = start[i + 1] as usize;
@@ -122,7 +123,7 @@ impl <'a>CtgTree<'a> {
 				self.write_ctg_name(w, self.ctg_id_lookup(j, level - 1), &zeroes)?;
 				// Write child node offset
 				write_u64(w, off as u64)?;
-				off += 4 + item_size * (start[j + 1] - start[j]) as usize;
+				off += 4 + item_size * (start1[j + 1] - start1[j]) as usize;
 			} 
 		}
 		Ok(())
