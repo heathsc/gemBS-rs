@@ -209,10 +209,10 @@ fn get_gt_like(call: &GenotypeCall) -> Vec<f32> {
 	 
 	v.push(if rfix != 0 { get_z(rfix, rfix) } else { -99.999 }); 
 	if aix[0] > 0 {
-		if rfix > 0 { v.push(get_z(rfix, aix[0])) }
+        v.push(if rfix != 0 { get_z(rfix, aix[0]) } else { -99.999 }); 
 		v.push(get_z(aix[0], aix[0]));
 		if aix[1] > 0 {
-			if rfix > 0 { v.push(get_z(rfix, aix[1])) }
+            v.push(if rfix != 0 { get_z(rfix, aix[1]) } else { -99.999 }); 
 			v.push(get_z(aix[0], aix[1]));
 			v.push(get_z(aix[1], aix[1]));
 		}
