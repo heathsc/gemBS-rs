@@ -113,7 +113,6 @@ impl BsCallConfig {
 	pub fn get_conf_str(&self, key: &str) -> Option<&str> { self.conf_hash.get_str(key) }
 	pub fn get_conf_otype(&self) -> OType { self.conf_hash.get_otype() }
 	pub fn add_contigs(&mut self, ctgs: &mut[CtgInfo]) { self.contigs.extend_from_slice(ctgs); }
-	pub fn add_regions(&mut self, regions: &mut[CtgRegion]) { self.regions.extend_from_slice(regions); }
 	pub fn ctg_in_header(&self, idx: usize) -> bool { self.contigs[idx].in_header() }
 	pub fn ctg_vcf_id(&self, idx: usize) -> Option<usize> { self.contigs[idx].vcf_id() }
 	pub fn ctg_ref_id(&self, idx: usize) -> Option<usize> { self.contigs[idx].ref_id() }

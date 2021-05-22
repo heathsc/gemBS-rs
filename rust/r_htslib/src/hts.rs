@@ -183,20 +183,22 @@ pub struct hts_itr_t {
 	_unused: [u8;0],
 }
 impl hts_itr_t {
-	pub fn sam_itr_next<H: AsMut<htsFile>, B: AsMut<bam1_t>>(&mut self, mut fp: H, mut brec: B) -> SamReadResult {
+    pub unsafe fn sam_itr_next_unsafe<H: AsMut<htsFile>>(&mut self, mut fp: H, p: &mut bam1_t) -> c_int {
+        if self.multi() != 0 {
+            hts_itr_multi_next(fp.as_mut(), self, p as *mut bam1_t as *mut c_void)
+        } else {
+             hts_itr_next(if fp.as_mut().is_bgzf() != 0 { fp.as_mut().fp.bgzf } else { null_mut::<BGZF>() },
+             self, p as *mut bam1_t as *mut c_void, fp.as_mut() as *mut htsFile as *mut c_void)
+        }
+    }
+
+	pub fn sam_itr_next<H: AsMut<htsFile>, B: AsMut<bam1_t>>(&mut self, fp: H, mut brec: B) -> SamReadResult {
 		let p = brec.as_mut();
-		match unsafe {
-			if self.multi() != 0 {
-				hts_itr_multi_next(fp.as_mut(), self, p as *mut bam1_t as *mut c_void)
-			} else {
-				hts_itr_next(if fp.as_mut().is_bgzf() != 0 { fp.as_mut().fp.bgzf } else { null_mut::<BGZF>() },
-					self, p as *mut bam1_t as *mut c_void, fp.as_mut() as *mut htsFile as *mut c_void)
-			}
-		} {
+        match unsafe { self.sam_itr_next_unsafe(fp, p) } {
 			0..=c_int::MAX => SamReadResult::Ok,
 			-1 => SamReadResult::EOF,
 			_ => SamReadResult::Error,
-		}
+	    }
 	}
 	pub fn tbx_itr_next<H: AsMut<htsFile>, T: AsMut<tbx_t>>(&mut self, mut fp: H, mut tbx: T, kstr: &mut kstring_t) -> TbxReadResult {
 		match unsafe {
@@ -497,5 +499,5 @@ impl Drop for HtsItr {
 }
 
 impl HtsItr {
-	pub fn new(itr: *mut hts_itr_t) -> Option<Self> { NonNull::new(itr).map(|p| HtsItr{ inner: p, phantom: PhantomData}) }
+    pub fn new(itr: *mut hts_itr_t) -> Option<Self> { NonNull::new(itr).map(|p| HtsItr{ inner: p, phantom: PhantomData}) }
 }

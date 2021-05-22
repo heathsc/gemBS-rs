@@ -135,7 +135,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(BsCallConfig, BsCallFiles)>
 	
 	// Set up contigs and contig regions
 	let (ctgs, ctg_regions) = defs::setup_contigs(&chash, &in_file, &ref_idx)?;
-	in_file.set_region_itr(&ctg_regions)?;
+	in_file.set_region_itr(&ctg_regions);
 	let bs_cfg = BsCallConfig::new(chash, ctgs, ctg_regions);
 	let bs_files = BsCallFiles::new(in_file, out_file, ref_idx, dbsnp_index);
 
