@@ -523,6 +523,7 @@ pub fn schedule_jobs(gem_bs: &mut GemBS, options: &HashMap<&'static str, DataVal
 	}
 	// If a signal has been caught, we still want to wait for the jobs to complete if possible
 	// but we will abort if a second signal is caught.
+    sched.drop_lock();
 	let mut signal = gem_bs.swap_signal(0);
 	debug!("Job loop finished - cleaning up");
 	if !sched.is_empty() { debug!("Waiting for running jobs to finish") }
