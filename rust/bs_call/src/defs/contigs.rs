@@ -109,8 +109,12 @@ fn setup_regions_with_contig_bed(fname: &str, filter: bool, ctgs: &mut Vec<CtgIn
 								let len = sam_file.tid2len(tid);
 								let start = <usize>::from_str(v[1].trim());
 								let stop = <usize>::from_str(v[2].trim());
-								if let (Ok(x), Ok(y)) = (start, stop) {
-									if x >= y || y > len { return Err(new_err(format!("Error parsing region list file {} at line {}: coordinates out of range", fname, l))); } 
+								if let (Ok(x), Ok(mut y)) = (start, stop) {
+                                    if y > len {
+                                        warn!("End point of region from region list file {} at line {} beyond end of chromosome", fname, l);
+                                        y = len;
+                                    }
+                                    if x >= y { return Err(new_err(format!("Error parsing region list file {} at line {}: coordinates out of range", fname, l))); } 
 									ctgs[tid].in_header = true;
 									ctg_regions.push(CtgRegion::new(tid, x , y - 1));
 									trace!("Added region {}:{}-{}", name, x + 1, y);

@@ -159,7 +159,10 @@ pub fn read_data(bs_cfg: Arc<BsCallConfig>, stat_tx: mpsc::Sender<StatJob>, mut 
 					},
 					ReadState::Present(x) => {
 						if map.is_last() {
-							let rpair = reads[*x].as_mut().expect("Missing pair for read");
+							let rpair = match reads[*x].as_mut() {
+                                Some(rp) => rp,
+                                None => panic!("Read {} appears multiple times\n", id),  
+                            };
 							let (filter, rflag) = rpair.check_pair(&mut read, &cfg.conf_hash);
 							if filter {
 								fs_stats.add_read_level_count(rflag, brec.l_qseq() as usize);
