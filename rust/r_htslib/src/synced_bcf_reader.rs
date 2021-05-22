@@ -137,6 +137,9 @@ pub struct bcf_srs_t {
 	aux: *mut c_void,	
 }
 
+const REQUIRE_IDX:c_int = 1;
+const ALLOW_NO_IDX:c_int = 2;
+
 impl bcf_srs_t {
 	pub fn set_regions<S: AsRef<str>>(&mut self, regions: S, is_file: bool) -> io::Result<()> {
 		match unsafe{bcf_sr_set_regions(self, get_cstr(regions.as_ref()).as_ptr(), if is_file {1} else {0})} {
@@ -183,6 +186,8 @@ impl bcf_srs_t {
 	
 	pub fn regions(&mut self) -> Option<&mut bcf_sr_regions_t> { unsafe{ self.regions.as_mut() } }
 	
+    pub fn set_require_index(&mut self, flag: bool) { self.require_index = if flag { REQUIRE_IDX } else { ALLOW_NO_IDX } }
+    
 	// Sort regions (if they exist) by chromosome name
 	pub fn sort_regions(&mut self) {
 		if let Some(mut p) = NonNull::new(self.regions) {
