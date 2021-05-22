@@ -1,6 +1,6 @@
 [package]
 name = "bs_call"
-version = "3.0.0"
+version = "3.0.1"
 authors = ["Simon Heath <simon.heath@gmail.com>"]
 edition = "2018"
 
