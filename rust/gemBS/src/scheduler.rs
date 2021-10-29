@@ -205,6 +205,7 @@ impl<'a> Scheduler<'a> {
 			avail_tasks = false;
 			for ix in self.task_list.iter() {
 				let task = &gem_bs.get_tasks()[*ix];
+				debug!("Task {}: {:?}", task.id(), task.status());
 				if let Some(TaskStatus::Ready) = task.status() {
 					avail_tasks = true;
 					let (n, mem) = get_command_req(gem_bs, gem_bs.get_tasks()[*ix].command());
@@ -213,10 +214,11 @@ impl<'a> Scheduler<'a> {
 						max = n; 
 						task_idx = Some(*ix);
 					}
-				}
+				} 
 			}
 		}
 		if let Some(x) = task_idx { 
+		  debug!("Tasks available to run");
 			self.add_task(gem_bs, x)?;
 			let task = &gem_bs.get_tasks()[x];
 			let runlist = Rc::clone(&self.running);			
@@ -224,12 +226,15 @@ impl<'a> Scheduler<'a> {
 			self.drop_lock();
 			Ok(rj) 
 		} else {
+		  debug!("No tasks available to run");
 			self.drop_lock();	
 			if avail_tasks { 
+		    debug!("No slots");
 				self.state = SchedState::NoSlots;
 				Err(SchedulerError::NoSlots)
 			} else if !running_jobs { Err(SchedulerError::NoTasksReady) }
 			else {
+		    debug!("No tasks");
 				self.state = SchedState::Waiting(lmod_time);
 				Err(SchedulerError::WaitingForTasks)
 			}
