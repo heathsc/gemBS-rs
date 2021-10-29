@@ -112,7 +112,7 @@ fn output_bed_methyl_rec<W: Write>(files: &mut[W], chash: &ConfHash, hdr: &VcfHe
 					rec.pos, rec.pos + 1, RGB_TAB[(m * 10.0 + 0.5) as usize], cov, (100.0 * m) as usize, 
 					from_utf8(rf).unwrap(), from_utf8(call).unwrap(), gq);	
 
-				writeln!(f, "{}\t{}\t{}\t\t{}",	hdr.ctg_name(rec.rid as usize).unwrap(), rec.pos, rec.pos + 1, &sbuf)?;	
+				writeln!(f, "{}\t{}\t{}\t{}",	hdr.ctg_name(rec.rid as usize).unwrap(), rec.pos, rec.pos + 1, &sbuf)?;	
 
 				// Handle bbi files
 				//
