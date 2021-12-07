@@ -94,3 +94,5 @@ Changelog:
     4.0.2 Move to versions 1.12 of htslib/samtools/bcftools
     4.0.2 Change way we iterate over SAM/BAM/CRAM files to the same way used in samtools 
           view (the old way did not always work with cram files)
+    4.0.3 Fix problem with reading BCF files from older versions of
+          gemBS where the CX format string was null terminated

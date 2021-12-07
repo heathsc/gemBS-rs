@@ -28,6 +28,7 @@ pub mod tabix;
 pub const GT_IUPAC: &[u8] = "AMRWCSYGKT".as_bytes();
 pub const GT_MASK: [u8; 10] = [0x11, 0xb3, 0x55, 0x99, 0xa2, 0xf6, 0xaa, 0x54, 0xdc, 0x88];
 
+#[derive(Debug)]
 pub struct MethRec {
 	counts: [c_int; 8],	
 	gt_probs: [f64; 10],

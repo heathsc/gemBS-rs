@@ -136,7 +136,6 @@ pub fn output_bed_methyl(outfiles: &mut [HtsFile], rec_blk: &RecordBlock, prev: 
 	
 	let opts = OutputOpts::new(chash);
 	let prev_ctg = prev.map(|x| x.record().rid());
-
 	match rec_blk {
 		RecordBlock::Single(svec) => output_bed_methyl_rec(outfiles, chash, hdr, &opts, svec, prev_ctg), 
 		RecordBlock::Multi(_) => panic!("Multi sample files not compatible with bedMethyl"), 

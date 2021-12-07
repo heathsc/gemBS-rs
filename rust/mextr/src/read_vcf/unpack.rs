@@ -184,7 +184,7 @@ pub fn send_blk(udata: &mut UnpackData, channel_vec: &[Sender<(usize, Arc<Record
 
 pub fn unpack_vcf(brec: &mut BcfRec, hdr: &VcfHeader, udata: &mut UnpackData) {
 	let alls = brec.alleles();
-	// We only consider sites where at least one allele is C or G 
+	// We only consider sites where at least one allele is C or G
 	if !alls.iter().any(|a| a == &"C" || a == &"G") { return }
 	// Get site context from INFO field
 	if brec.get_info_u8(&hdr, "CX", &mut udata.mdb_cx).is_none() || udata.mdb_cx.len() != 5 { return }
@@ -192,11 +192,15 @@ pub fn unpack_vcf(brec: &mut BcfRec, hdr: &VcfHeader, udata: &mut UnpackData) {
 	let cx: [u8; 5] = (&udata.mdb_cx as &[u8]).try_into().unwrap();
 	// Get reference base coded as 1,2,3,4 for A,C,G,T or 0 for anything else 
 	let ref_base = BASE_MAP[cx[2] as usize];
-		
+
 	// Get format values
 	if brec.get_format_i32(&hdr, "MC8", &mut udata.mdb_mc8).is_none() || udata.mdb_mc8.len() != 8 * ns
-		|| brec.get_format_u8(&hdr, "CX", &mut udata.mdb_cx).is_none() || udata.mdb_cx.len() != 5 * ns
+		|| brec.get_format_u8(&hdr, "CX", &mut udata.mdb_cx).is_none()
 		|| brec.get_format_i32(&hdr, "MQ", &mut udata.mdb_mq).is_none() || udata.mdb_mq.len() != ns { return }
+
+	let cx_step = if udata.mdb_cx.len() == 5 * ns { 5 }
+	else if udata.mdb_cx.len() == 6 * ns { 6 }
+	else { return };
 	brec.get_format_i32(&hdr, "AMQ", &mut udata.mdb_aq).or_else(|| brec.get_format_i32(&hdr, "AQ", &mut udata.mdb_aq));
 		
 	// Replace missing values
@@ -208,7 +212,7 @@ pub fn unpack_vcf(brec: &mut BcfRec, hdr: &VcfHeader, udata: &mut UnpackData) {
 	let ne_aq = udata.mdb_aq.len() / ns;
 	mrec_vec.clear();
 	for ix in 0..ns {
-		let cx: [u8; 5] = (&udata.mdb_cx[ix * 5..(ix + 1) * 5] as &[u8]).try_into().unwrap();
+		let cx: [u8; 5] = (&udata.mdb_cx[ix * cx_step..(ix * cx_step) + 5] as &[u8]).try_into().unwrap();
 		let counts: [c_int; 8] = (&udata.mdb_mc8[ix * 8..(ix + 1) * 8] as &[c_int]).try_into().unwrap();
 		let aq = if ne_aq != 0 { handle_aq(&udata.mdb_aq[ix * ne_aq..(ix + 1) * ne_aq], &counts) } 
 		else { [udata.bq; 8] };			
