@@ -96,3 +96,4 @@ Changelog:
           view (the old way did not always work with cram files)
     4.0.3 Fix problem with reading BCF files from older versions of
           gemBS where the CX format string was null terminated
+    4.0.4 Add max_template_length option to gemBS (option passed on to bs_call)

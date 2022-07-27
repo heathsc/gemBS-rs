@@ -39,7 +39,7 @@ fn strand_and_context(rf: &[u8], call: &[u8]) -> Option<(char, [u8; 3], [u8; 3])
 			Some(('+', ref_cx, call_cx))
 		},
 		b'G' => {
-			for (ix, (a, b)) in rf[..3].iter().zip(call[..3].iter()).enumerate() { 
+			for (ix, (a, b)) in rf[..3].iter().zip(call[..3].iter()).enumerate() {
 				ref_cx[2 - ix] = TRANS_BASE[*a as usize];
 				call_cx[2 - ix] = TRANS_BASE[*b as usize];
 			}
