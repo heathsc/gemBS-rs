@@ -108,16 +108,17 @@ pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe
         	let mut m = Vec::new();
         	m.push(("left_trim", "left-trim", VarType::IntVec));
         	m.push(("right_trim", "right-trim", VarType::IntVec));
+        	m.push(("max_template_length", "max_template_length", VarType::IntVec));
         	m.push(("keep_unmatched", "keep-unmatched", VarType::Bool));
         	m.push(("keep_duplicates", "keep-duplicates", VarType::Bool));
         	m.push(("keep_improper_pairs", "keep-unmatched", VarType::Bool));
-        	m.push(("ignore_duplicate_flag", "ignore-duplicates", VarType::Bool));
-        	m.push(("benchmark_mode", "benchmark-mode", VarType::Bool));
-	       	m.push(("haploid", "haploid", VarType::Bool));
-	       	m.push(("reference_bias", "reference-bias", VarType::Float));
-	       	m.push(("mapq_threshold", "mapq-threshold", VarType::Int));
-	       	m.push(("qual_threshold", "bq-threshold", VarType::Int));
-	       	m.push(("dbsnp_index", "dbsnp", VarType::String));
+			m.push(("ignore_duplicate_flag", "ignore-duplicates", VarType::Bool));
+			m.push(("benchmark_mode", "benchmark-mode", VarType::Bool));
+			m.push(("haploid", "haploid", VarType::Bool));
+			m.push(("reference_bias", "reference-bias", VarType::Float));
+			m.push(("mapq_threshold", "mapq-threshold", VarType::Int));
+			m.push(("qual_threshold", "bq-threshold", VarType::Int));
+			m.push(("dbsnp_index", "dbsnp", VarType::String));
 			m
 		};
 	}

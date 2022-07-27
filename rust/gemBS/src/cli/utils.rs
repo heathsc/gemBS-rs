@@ -127,6 +127,7 @@ lazy_static! {
       	m.push(("phred_threshold", OptionType::Global("phred_threshold", VarType::Int)));
       	m.push(("left_trim", OptionType::Global("left_trim", VarType::IntVec)));
       	m.push(("right_trim", OptionType::Global("right_trim", VarType::IntVec)));
+      	m.push(("max_template_size", OptionType::Global("max_template_size", VarType::IntVec)));
       	m.push(("conversion", OptionType::Global("conversion", VarType::FloatVec)));
       	m.push(("auto_conversion", OptionType::Global("auto_conversion", VarType::Bool)));
     	m.push(("ref_bias", OptionType::Global("reference_bias", VarType::Float)));

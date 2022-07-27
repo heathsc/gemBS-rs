@@ -97,6 +97,7 @@ subcommands:
           - qual_threshold: {short: Q, long: qual-threshold, value_name: QUAL_THRESHOLD, takes_value: true, help: Threshold for base quality scores}
           - right_trim: {short: g, long: right-trim, takes_value: true, multiple: true, min_values: 1, max_values: 2, require_delimiter: true, value_name: "BASES [,BASES]", help: Bases to trim from right of read pair (give 2 values for read specific values) }
           - left_trim: {short: f, long: left-trim, takes_value: true, multiple: true, min_values: 1, max_values: 2, require_delimiter: true, value_name: "BASES, [,BASES]", help: Bases to trim from left of read pair (give 2 values for read specific values) }
+          - max_template_length: {short: L, long: max-template-length, takes_value: true, value_name: "LENGTH", help: Maximum template length for paired reads }
           - tmp_dir: {short: d, long: tmp-dir, value_name: PATH, takes_value: true, help: Temporary directory to perform sorting operations}
           - threads: {short: t, long: threads, value_name: THREADS, takes_value: true, help: Number of threads for calling pipeline}
           - call_threads: {long: call-threads, value_name: THREADS, takes_value: true, conflicts_with: threads, help: Number of threads for methylation caller}
