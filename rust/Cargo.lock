@@ -440,7 +440,7 @@ dependencies = [
 
 [[package]]
 name = "gem_bs"
-version = "4.0.3"
+version = "4.0.4"
 dependencies = [
  "clap",
  "csv",

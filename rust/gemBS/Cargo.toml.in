@@ -1,8 +1,8 @@
 [package]
 name = "gem_bs"
-version = "4.0.3"
+version = "4.0.4"
 authors = ["Simon Heath <simon.heath@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 log = "~0.4"

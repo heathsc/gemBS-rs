@@ -19,3 +19,5 @@ config.status
 c_tools/utils/Makefile
 c_tools/utils/configure
 c_tools/tmp_root
+.idea
+*.iml
