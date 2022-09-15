@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use std::fmt;
 
-use clap::ArgMatches;
+use clap::{ArgMatches, error::ErrorKind};
 
 #[derive(Debug, Clone, Copy)]
 pub struct LogLevel {
@@ -47,11 +47,7 @@ pub fn init_log(m: &ArgMatches) -> (LogLevel, bool) {
 	let quiet = verbose.is_none() || m.is_present("quiet");
 	let ts = m.value_of("timestamp").map(|v| {
         stderrlog::Timestamp::from_str(v).unwrap_or_else(|_| {
-            clap::Error {
-                message: "invalid value for 'timestamp'".into(),
-                kind: clap::ErrorKind::InvalidValue,
-                info: None,
-            }.exit()
+            clap::error::Error::raw(ErrorKind::InvalidValue, "invalid value for 'timestamp'").exit()
         })
     }).unwrap_or(stderrlog::Timestamp::Off);
 

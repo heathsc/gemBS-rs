@@ -9,5 +9,5 @@ edition = "2018"
 [dependencies]
 libc = "0.2"
 stderrlog = "~0.5"
-clap = "2.33"
+clap = "~3"
 lazy_static = "~1.4"
