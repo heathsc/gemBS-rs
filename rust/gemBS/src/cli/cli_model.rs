@@ -18,7 +18,7 @@ pub(super) fn cli_model() -> App<'static> {
                 .takes_value(true).value_name("GRANULARITY")
                 .possible_values(&["none", "sec", "ms", "us", "ns"])
                 .default_value("none")
-                .help("Prepend log entires with a timestamp")
+                .help("Prepend log entries with a timestamp")
         )
         .arg(
             Arg::new("loglevel")

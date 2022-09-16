@@ -539,9 +539,9 @@ checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
 
 [[package]]
 name = "mextr"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
- "clap 2.34.0",
+ "clap 3.2.21",
  "crossbeam-channel",
  "lazy_static",
  "libc",
@@ -806,9 +806,9 @@ dependencies = [
 
 [[package]]
 name = "snpxtr"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
- "clap 2.34.0",
+ "clap 3.2.21",
  "libc",
  "log",
  "md-5",

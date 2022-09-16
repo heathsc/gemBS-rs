@@ -1,4 +1,4 @@
-use clap::{crate_version, App, Arg, Command};
+use clap::{crate_version, App, Arg, ArgGroup, Command};
 
 pub(super) fn cli_model() -> App<'static> {
     Command::new("snpxtr")
@@ -19,7 +19,7 @@ pub(super) fn cli_model() -> App<'static> {
                 .value_name("GRANULARITY")
                 .possible_values(&["none", "sec", "ms", "us", "ns"])
                 .default_value("none")
-                .help("Prepend log entires with a timestamp"),
+                .help("Prepend log entries with a timestamp"),
         )
         .arg(
             Arg::new("loglevel")
@@ -81,6 +81,11 @@ pub(super) fn cli_model() -> App<'static> {
                 .takes_value(true)
                 .value_name("PATH")
                 .help("Restrict to regions from file"),
+        )
+        .group(
+            ArgGroup::new("region_def")
+                .args(&["region_list", "regions_file"])
+                .required(true),
         )
         .arg(
             Arg::new("compress")
