@@ -1,6 +1,6 @@
 [package]
 name = "mextr"
-version = "2.0.0"
+version = "2.1.0"
 authors = ["Simon Heath <simon.heath@gmail.com>"]
 edition = "2018"
 publish = ["non"]
@@ -10,7 +10,7 @@ publish = ["non"]
 [dependencies]
 log = "~0.4"
 stderrlog = "~0.5"
-clap = {version = "2.3.3", features = ["yaml"]}
+clap = {version = "~3", features = ["cargo"]}
 num_cpus = "1.13.0"
 zstd = "0.5"
 libc = "0.2"
