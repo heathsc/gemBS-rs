@@ -2,13 +2,13 @@ use std::io;
 
 mod cli_utils;
 use utils::log_level::init_log;
-use clap::App;
 mod options;
+mod cli_model;
+
 use crate::config::{Config, DbInput};
 
 pub fn process_cli() -> io::Result<(Config, Box<[DbInput]>)> {
-	let yaml = load_yaml!("cli/cli.yml");
-    let app = App::from_yaml(yaml).version(crate_version!());
+    let app = cli_model::cli_model();
 	
 	// Setup logging
 	let m = app.get_matches();	
