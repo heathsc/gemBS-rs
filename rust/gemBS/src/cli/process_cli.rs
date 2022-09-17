@@ -52,11 +52,11 @@ fn gen_cli() -> App<'static> {
     }
 }
 
-fn generate_completions(m: &ArgMatches) -> Result<(), String> {
-    let gen = m
-        .get_one::<Shell>("shell")
-        .copied()
-        .ok_or("Unknown shell")?;
+fn generate_completions(_m: &ArgMatches) -> Result<(), String> {
+    Err("Completions currently not working".to_string())
+    /*    let gen = m
+        .value_of_t::<Shell>("shell")
+        .map_err(|_| "Unknown shell".to_string())?;
     let mut cmd = cli_model();
     eprintln!("Generating completion file for {}...", gen);
     let ofile = m.value_of("output").expect("Default output option missing");
@@ -70,7 +70,7 @@ fn generate_completions(m: &ArgMatches) -> Result<(), String> {
             "Couldn't create shell completion file {}: {}",
             ofile, e
         )),
-    }
+    } */
 }
 
 pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
