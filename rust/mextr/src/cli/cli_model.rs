@@ -118,7 +118,7 @@ pub(super) fn cli_model() -> App<'static> {
                 .long("conversion")
                 .takes_value(true)
                 .value_name("FLOAT,FLOAT")
-                .default_value("0.01,0.05")
+                .default_values(&["0.01", "0.05"])
                 .multiple_values(true)
                 .number_of_values(2)
                 .use_value_delimiter(true)
@@ -206,7 +206,7 @@ pub(super) fn cli_model() -> App<'static> {
         )
         .arg(
             Arg::new("md5")
-                .short('m')
+                .short('D')
                 .long("md5")
                 .help("Generate md5 digest for output file"),
         )
@@ -225,7 +225,7 @@ pub(super) fn cli_model() -> App<'static> {
         )
         .arg(
             Arg::new("timestamp")
-                .short('t')
+                .short('X')
                 .long("timestamp")
                 .takes_value(true)
                 .value_name("GRANULARITY")
@@ -235,7 +235,7 @@ pub(super) fn cli_model() -> App<'static> {
         )
         .arg(
             Arg::new("loglevel")
-                .short('l')
+                .short('v')
                 .long("loglevel")
                 .takes_value(true)
                 .value_name("LOGLEVEL")

@@ -13,7 +13,7 @@ pub(super) fn cli_model() -> App<'static> {
         )
         .arg(
             Arg::new("timestamp")
-                .short('t')
+                .short('T')
                 .long("timestamp")
                 .takes_value(true)
                 .value_name("GRANULARITY")
@@ -23,7 +23,7 @@ pub(super) fn cli_model() -> App<'static> {
         )
         .arg(
             Arg::new("loglevel")
-                .short('l')
+                .short('v')
                 .long("loglevel")
                 .takes_value(true)
                 .value_name("LOGLEVEL")
