@@ -89,11 +89,12 @@ Documentation can be found at
 Changelog:
 ----------
 
-    4.0 First release of gemBS-rs (4th release of gemBS)
-    4.0.1 Correct bug preventing that caused non-stranded mapping to fail
-    4.0.2 Move to versions 1.12 of htslib/samtools/bcftools
-    4.0.2 Change way we iterate over SAM/BAM/CRAM files to the same way used in samtools 
-          view (the old way did not always work with cram files)
+    4.1.0 Switch to clap v3
+    4.0.4 Add max_template_length option to gemBS (option passed on to bs_call)
     4.0.3 Fix problem with reading BCF files from older versions of
           gemBS where the CX format string was null terminated
-    4.0.4 Add max_template_length option to gemBS (option passed on to bs_call)
+    4.0.2 Change way we iterate over SAM/BAM/CRAM files to the same way used in samtools 
+          view (the old way did not always work with cram files)
+    4.0.2 Move to versions 1.12 of htslib/samtools/bcftools
+    4.0.1 Correct bug preventing that caused non-stranded mapping to fail
+    4.0 First release of gemBS-rs (4th release of gemBS)
