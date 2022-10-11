@@ -108,7 +108,7 @@ pub(super) fn cli_model() -> App<'static> {
                 )
                 .group(
                     ArgGroup::new("metadata")
-                        .args(&["cvs_metadata, json_metadata"])
+                        .args(&["cvs_metadata", "json_metadata"])
                         .required(true)
                 )
         )
