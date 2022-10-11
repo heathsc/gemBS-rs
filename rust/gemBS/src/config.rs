@@ -515,11 +515,7 @@ impl GemBS {
         }
         let mut sample = Vec::new();
         for (bc, name) in bc_set.iter() {
-            let n = if let Some(x) = name {
-                Some((*x).to_owned())
-            } else {
-                None
-            };
+            let n = name.as_ref().map(|x| (*x).to_owned());
             sample.push(((*bc).clone(), n));
         }
         sample
