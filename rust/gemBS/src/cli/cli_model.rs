@@ -377,7 +377,7 @@ pub(super) fn cli_model() -> App<'static> {
                 )
                 .group(
                     ArgGroup::new("md5")
-                        .args(&["dataset", "md5", "no_md5"])
+                        .args(&["md5", "no_md5"])
                 )
         )
         .subcommand(
