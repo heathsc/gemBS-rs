@@ -154,29 +154,27 @@ fn get_conversion_rate(gem_bs: &GemBS, barcode: &str) -> (f64, f64) {
 }
 
 pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
-    lazy_static! {
-        static ref OPT_LIST: Vec<(&'static str, &'static str, VarType)> = {
-            let mut m = Vec::new();
-            m.push(("left_trim", "left-trim", VarType::IntVec));
-            m.push(("right_trim", "right-trim", VarType::IntVec));
-            m.push((
-                "max_template_length",
-                "max-template-length",
-                VarType::IntVec,
-            ));
-            m.push(("keep_unmatched", "keep-unmatched", VarType::Bool));
-            m.push(("keep_duplicates", "keep-duplicates", VarType::Bool));
-            m.push(("keep_improper_pairs", "keep-unmatched", VarType::Bool));
-            m.push(("ignore_duplicate_flag", "ignore-duplicates", VarType::Bool));
-            m.push(("benchmark_mode", "benchmark-mode", VarType::Bool));
-            m.push(("haploid", "haploid", VarType::Bool));
-            m.push(("reference_bias", "reference-bias", VarType::Float));
-            m.push(("mapq_threshold", "mapq-threshold", VarType::Int));
-            m.push(("qual_threshold", "bq-threshold", VarType::Int));
-            m.push(("dbsnp_index", "dbsnp", VarType::String));
-            m
-        };
-    }
+    
+    const OPT_LIST: &[(&str, &str, VarType)] = &[
+        ("left_trim", "left-trim", VarType::IntVec),
+        ("right_trim", "right-trim", VarType::IntVec),
+        (
+            "max_template_length",
+            "max-template-length",
+            VarType::IntVec,
+        ),
+        ("keep_unmatched", "keep-unmatched", VarType::Bool),
+        ("keep_duplicates", "keep-duplicates", VarType::Bool),
+        ("keep_improper_pairs", "keep-unmatched", VarType::Bool),
+        ("ignore_duplicate_flag", "ignore-duplicates", VarType::Bool),
+        ("benchmark_mode", "benchmark-mode", VarType::Bool),
+        ("haploid", "haploid", VarType::Bool),
+        ("reference_bias", "reference-bias", VarType::Float),
+        ("mapq_threshold", "mapq-threshold", VarType::Int),
+        ("qual_threshold", "bq-threshold", VarType::Int),
+        ("dbsnp_index", "dbsnp", VarType::String),
+    ];
+    
     let threads = gem_bs.get_config_int(Section::Calling, "threads");
     let call_threads = gem_bs
         .get_config_int(Section::Calling, "call_threads")
@@ -216,7 +214,7 @@ pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
         args.push_str(format!("--threads\x1e{}\x1e", t).as_str());
     }
     args.push_str(format!("--conversion\x1e{},{}\x1e", under, over).as_str());
-    super::add_command_opts(gem_bs, &mut args, Section::Calling, &OPT_LIST);
+    super::add_command_opts(gem_bs, &mut args, Section::Calling, OPT_LIST);
     args.push_str(&gem_bs.get_asset(in_bam).unwrap().path().to_string_lossy());
 
     if let Some(x) = task.log() {

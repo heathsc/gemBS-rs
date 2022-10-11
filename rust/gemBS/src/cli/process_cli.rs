@@ -1,11 +1,11 @@
 use clap::{App, ArgGroup, ArgMatches};
+use std::env;
 use std::path::Path;
-use std::{env, fs};
 use utils::log_level::init_log;
 
 #[cfg(feature = "slurm")]
 use clap::Arg;
-use clap_complete::{generate, Shell};
+// use clap_complete::{generate, Shell};
 
 use crate::commands;
 use crate::common::defs::{DataValue, Section};

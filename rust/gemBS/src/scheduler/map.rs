@@ -123,28 +123,24 @@ pub fn make_map_pipeline(
     options: &HashMap<&'static str, DataValue>,
     job: usize,
 ) -> QPipe {
-    lazy_static! {
-        static ref OPT_LIST: Vec<(&'static str, &'static str, VarType)> = {
-            let mut m = Vec::new();
-            m.push((
-                "underconversion_sequence",
-                "underconversion-sequence",
-                VarType::String,
-            ));
-            m.push((
-                "overconversion_sequence",
-                "overconversion-sequence",
-                VarType::String,
-            ));
-            m.push(("benchmark_mode", "benchmark-mode", VarType::Bool));
-            m.push((
-                "max_template_length",
-                "max-template-length",
-                VarType::IntVec,
-            ));
-            m
-        };
-    }
+    const OPT_LIST: &[(&str, &str, VarType)] = &[
+        (
+            "underconversion_sequence",
+            "underconversion-sequence",
+            VarType::String,
+        ),
+        (
+            "overconversion_sequence",
+            "overconversion-sequence",
+            VarType::String,
+        ),
+        ("benchmark_mode", "benchmark-mode", VarType::Bool),
+        (
+            "max_template_length",
+            "max-template-length",
+            VarType::IntVec,
+        ),
+    ];
     let threads = gem_bs.get_config_int(Section::Mapping, "threads");
     let mapping_threads = gem_bs
         .get_config_int(Section::Mapping, "mapping_threads")
@@ -245,7 +241,7 @@ pub fn make_map_pipeline(
         mapper_args.push_str("--bisulfite-conversion\x1einferred-C2T-G2A\x1e")
     }
 
-    super::add_command_opts(gem_bs, &mut mapper_args, Section::Mapping, &OPT_LIST);
+    super::add_command_opts(gem_bs, &mut mapper_args, Section::Mapping, OPT_LIST);
 
     mapper_args
         .push_str(format!("--report-file\x1e{}\x1e", outs[2].unwrap().path().display()).as_str());
