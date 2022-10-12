@@ -10,7 +10,7 @@ publish = ["non"]
 [dependencies]
 log = "~0.4"
 stderrlog = "~0.5"
-clap = {version = "~3", features = ["cargo"]}
+clap = {version = "~4", features = ["cargo"]}
 num_cpus = "1.13.0"
 zstd = "0.5"
 libc = "0.2"

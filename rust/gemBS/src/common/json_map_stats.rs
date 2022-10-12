@@ -289,7 +289,7 @@ impl From<BaseCountStats<Count>> for BaseCountStats<Counts> {
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Paired {
-    read_group: Option<String>,
+    // read_group: Option<String>,
     reads: Reads<Counts>,
     #[serde(rename = "NumReadsBS")]
     num_reads_bs: Option<NumReadsBS<Counts>>,
@@ -347,7 +347,7 @@ impl Paired {
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Single {
-    read_group: Option<String>,
+    // read_group: Option<String>,
     reads: Reads<Count>,
     #[serde(rename = "NumReadsBS")]
     num_reads_bs: Option<NumReadsBS<Count>>,
@@ -529,14 +529,14 @@ impl MapJson {
     }
     fn single_to_unknown(self) -> Self {
         if let MapJson::Single(s) = self {
-            let read_group = s.read_group;
+            // let read_group = s.read_group;
             let reads: Reads<Counts> = s.reads.into();
             let num_reads_bs: Option<NumReadsBS<Counts>> = s.num_reads_bs.map(|nr| nr.into());
             let base_counts: BaseCountStats<Counts> = s.base_counts.into();
             let hist_read_len = [s.hist_read_len[0].clone(), HashMap::new()];
             let hist_mismatch = [s.hist_mismatch[0].clone(), HashMap::new()];
             MapJson::Unknown(Paired {
-                read_group,
+                // read_group,
                 reads,
                 num_reads_bs,
                 correct_pairs: 0,

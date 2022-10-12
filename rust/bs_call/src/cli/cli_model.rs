@@ -1,6 +1,9 @@
-use clap::{crate_version, App, Arg, Command};
+use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 
-pub(super) fn cli_model() -> App<'static> {
+use utils::log_level::LogLevel;
+use crate::config::OType;
+
+pub(super) fn cli_model() -> Command {
     Command::new("bs_call")
         .version(crate_version!())
         .author("Simon Heath <simon.heath@gmail.com>")
@@ -8,24 +11,28 @@ pub(super) fn cli_model() -> App<'static> {
         .next_help_heading("filtering")
         .arg(
             Arg::new("keep_duplicates")
+                .action(ArgAction::SetTrue)
                 .short('d')
                 .long("keep-duplicates")
                 .help("Don't merge duplicate reads"),
         )
         .arg(
             Arg::new("keep_supplementary")
+                .action(ArgAction::SetTrue)
                 .short('S')
                 .long("keep-supplementary")
                 .help("Don't discard supplementary (split) alignments"),
         )
         .arg(
             Arg::new("ignore_duplicates")
+                .action(ArgAction::SetTrue)
                 .short('e')
                 .long("ignore-duplicates")
                 .help("Ignore duplicate record flag in SAM record"),
         )
         .arg(
             Arg::new("keep_unmatched")
+                .action(ArgAction::SetTrue)
                 .short('k')
                 .long("keep-unmatched")
                 .help("Don't discard reads that don't form proper pairs"),
@@ -34,26 +41,27 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("right_trim")
                 .short('R')
                 .long("right-trim")
-                .takes_value(true)
                 .value_name("INT")
-                .multiple_values(true)
-                .require_value_delimiter(true)
-                .max_values(2)
+                .value_parser(value_parser!(usize))
+                .value_delimiter(',')
+                .num_args(1..=2)
+                .action(ArgAction::Append)
                 .help("Bases to trim from right of read pair (give 2 values for read specific values)"),
         )
         .arg(
             Arg::new("left_trim")
                 .short('L')
                 .long("left-trim")
-                .takes_value(true)
                 .value_name("INT")
-                .multiple_values(true)
-                .require_value_delimiter(true)
-                .max_values(2)
+                .value_parser(value_parser!(usize))
+                .value_delimiter(',')
+                .action(ArgAction::Append)
+                .num_args(1..=2)
                 .help("Bases to trim from left of read pair (give 2 values for read specific values)"),
         )
         .arg(
             Arg::new("blank_trim")
+                .action(ArgAction::SetTrue)
                 .short('B')
                 .long("blank-trim")
                 .help("Don't use trimmed bases for genotype extimation"),
@@ -62,7 +70,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("mapq_threshold")
                 .short('q')
                 .long("mapq-threshold")
-                .takes_value(true)
+                .value_parser(value_parser!(usize))
                 .value_name("INT")
                 .default_value("20")
                 .help("Minimum threshold for read MAPQ values"),
@@ -71,7 +79,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("bq_threshold")
                 .short('Q')
                 .long("bq-threshold")
-                .takes_value(true)
+                .value_parser(value_parser!(usize))
                 .value_name("INT")
                 .default_value("13")
                 .help("Minimum threshold for base qualities"),
@@ -80,7 +88,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("max_template_length")
                 .short('l')
                 .long("max-template-length")
-                .takes_value(true)
+                .value_parser(value_parser!(usize))
                 .value_name("INT")
                 .default_value("1000")
                 .help("Maximum threshold for paired read template length"),
@@ -89,7 +97,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("contig_bed")
                 .short('C')
                 .long("contig-bed")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("BED file with contigs to be processed"),
         )
@@ -97,7 +105,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("contig_include")
                 .short('s')
                 .long("contig-include")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("File with list of contigs to be included"),
         )
@@ -105,7 +113,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("contig_exclude")
                 .short('x')
                 .long("contig-exclude")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("File with list of contigs to be excluded"),
         )
@@ -113,6 +121,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("filter_contigs")
                 .short('F')
                 .long("filter_contigs")
+                .action(ArgAction::SetTrue)
                 .help("Only include in the outupt header contigs that are present in the contig_bed file")
                 .requires("contig_bed")
         )
@@ -121,7 +130,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("reference_bias")
                 .short('R')
                 .long("reference-bias")
-                .takes_value(true)
+                .value_parser(value_parser!(f64))
                 .value_name("FLOAT")
                 .default_value("2.0")
                 .help("Set weight on reference homozygote"),
@@ -130,11 +139,11 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("conversion")
                 .short('c')
                 .long("conversion")
-                .takes_value(true)
                 .value_name("FLOAT")
-                .multiple_values(true)
-                .max_values(2)
-                .require_value_delimiter(true)
+                .value_parser(value_parser!(f64))
+                .num_args(1..=2)
+                .value_delimiter(',')
+                .action(ArgAction::Append)
                 .default_values(&["0.01","0.05"])
                 .help("Set under and over conversion rates"),
         )
@@ -142,6 +151,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("haploid")
                 .short('1')
                 .long("haploid")
+                .action(ArgAction::SetTrue)
                 .help("Force genotype calls to be haploid")
         )
         .next_help_heading("output")
@@ -149,7 +159,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("output")
                 .short('o')
                 .long("output")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("Set output file name"),
         )
@@ -157,9 +167,8 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("output_type")
                 .short('O')
                 .long("output-type")
-                .takes_value(true)
                 .value_name("TYPE")
-                .possible_values(&["b", "u", "z", "v"])
+                .value_parser(value_parser!(OType))
                 .ignore_case(true)
                 .help("Set output type - b: compressed BCF (default); u: uncompressed BCF; v: uncompressed VCF, z: compressed VCF"),
         )
@@ -167,7 +176,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("report_file")
                 .short('j')
                 .long("report-file")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("File name for Output JSON with calling statistics"),
         )
@@ -175,19 +184,21 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("sample")
                 .short('n')
                 .long("sample")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("STRING")
                 .help("Set sample name"),
         )
         .arg(
             Arg::new("all_positions")
                 .short('A')
+                .action(ArgAction::SetTrue)
                 .long("all-positions")
                 .help("Output all covered positions")
         )
         .arg(
             Arg::new("benchmark_mode")
                 .short('b')
+                .action(ArgAction::SetTrue)
                 .long("benchmark-mode")
                 .help("Benchmark mode (omits date / time / version numbers from output)")
         )
@@ -196,7 +207,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("reference")
                 .short('r')
                 .long("reference")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .required(true)
                 .help("Path to genomic reference (FASTA)"),
@@ -205,7 +216,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("dbsnp")
                 .short('D')
                 .long("dbsnp")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("Path to dbsnp_index processed index file (to add known SNP names)"),
         )
@@ -213,6 +224,7 @@ pub(super) fn cli_model() -> App<'static> {
         .arg(
             Arg::new("quiet")
                 .short('q')
+                .action(ArgAction::SetTrue)
                 .long("quiet")
                 .help("Silence all output"),
         )
@@ -220,9 +232,8 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("timestamp")
                 .short('T')
                 .long("timestamp")
-                .takes_value(true)
+                .value_parser(value_parser!(stderrlog::Timestamp))
                 .value_name("GRANULARITY")
-                .possible_values(&["none", "sec", "ms", "us", "ns"])
                 .default_value("none")
                 .help("Prepend log entries with a timestamp"),
         )
@@ -230,10 +241,8 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("loglevel")
                 .short('v')
                 .long("loglevel")
-                .takes_value(true)
                 .value_name("LOGLEVEL")
-                .possible_values(&["none", "error", "warn", "info", "debug", "trace"])
-                .ignore_case(true)
+                .value_parser(value_parser!(LogLevel))
                 .default_value("warn")
                 .help("Set log level"),
         )
@@ -241,15 +250,15 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("threads")
                 .short('t')
                 .long("threads")
-                .takes_value(true)
+                .value_parser(value_parser!(usize))
                 .value_name("INT")
                 .help("Set number of threads"),
         )
         .arg(
             Arg::new("input")
-                .takes_value(true)
                 .value_name("PATH")
-                .multiple_values(false)
+                .value_parser(value_parser!(String))
+                .action(ArgAction::Append)
                 .help("Input SAM/BAM/CRAM file"),
         )
 }

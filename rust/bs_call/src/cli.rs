@@ -10,10 +10,10 @@ use utils::log_level::init_log;
 
 pub fn process_cli() -> io::Result<(BsCallConfig, BsCallFiles)> {
     let app = cli_model::cli_model();
-    let mut vbuf: Vec<u8> = Vec::new();
-    app.write_version(&mut vbuf)
-        .expect("Error getting version from clap");
-    let version = std::str::from_utf8(&vbuf).expect("Version string not utf8");
+    let version = app
+        .get_version()
+        .expect("Problem getting verion")
+        .to_owned();
 
     // Setup logging
     let m = app.get_matches();

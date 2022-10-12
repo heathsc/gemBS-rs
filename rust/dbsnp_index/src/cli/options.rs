@@ -77,11 +77,11 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[DbInput]>)> {
 	let description = get_arg_string(m, "description");
 	let input_type = get_arg_itype(m, "input_type")?;
 	let maf_limit = get_arg_f64(m, "maf_limit")?;
-	let chrom_alias = match m.value_of("chrom_alias") {
+	let chrom_alias = match m.get_one::<String>("chrom_alias") {
 		Some(s) => Some(read_alias_file(s)?),
 		None => None,
 	};
-	let selected = match m.value_of("selected") {
+	let selected = match m.get_one::<String>("selected") {
 		Some(s) => read_select_file(s)?,
 		None => HashSet::new(),
 	};
@@ -90,7 +90,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(Config, Box<[DbInput]>)> {
 		hts_set_log_level(htsLogLevel::HTS_LOG_OFF);
 		t
 	};
-	let files: Vec<DbInput> = match m.values_of("input") {
+	let files: Vec<DbInput> = match m.get_many::<String>("input") {
 		Some(v) => { 
 			// Sort input files by file size in reverse order so that larger files are processed first
 			let mut tf: Vec<(DbInput, i64)> = Vec::with_capacity(v.len());

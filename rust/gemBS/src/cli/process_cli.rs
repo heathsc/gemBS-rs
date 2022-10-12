@@ -1,11 +1,10 @@
-use clap::{App, ArgGroup, ArgMatches};
-use std::env;
-use std::path::Path;
+use clap::{ArgAction, ArgGroup, ArgMatches};
+use std::{env, fs, path::PathBuf};
 use utils::log_level::init_log;
 
 #[cfg(feature = "slurm")]
-use clap::Arg;
-// use clap_complete::{generate, Shell};
+use clap::{Arg, Command};
+use clap_complete::{generate, Shell};
 
 use crate::commands;
 use crate::common::defs::{DataValue, Section};
@@ -13,35 +12,37 @@ use crate::config::GemBS;
 use cli_model::cli_model;
 
 use crate::cli::cli_model;
+use clap::value_parser;
 
-fn gen_cli() -> App<'static> {
+fn gen_cli() -> Command {
     #[cfg(feature = "slurm")]
     {
         let container: Option<&'static str> = option_env!("GEMBS_CONTAINER");
         if container.is_none() {
             cli_model()
                 .arg(
-                    Arg::with_name("slurm_script")
+                    Arg::new("slurm_script")
                         .short('s')
                         .long("slurm-script")
-                        .takes_value(true)
-                        .value_name("SCRIPT_FILE")
+                        .value_name("FILE")
+                        .value_parser(value_parser!(String))
                         .help("Generate PERL script to submit commands to slurm for execution"),
                 )
                 .arg(
-                    Arg::with_name("slurm")
+                    Arg::new("slurm")
                         .short('S')
                         .long("slurm")
+                        .action(ArgAction::SetTrue)
                         .help("Submit commands to slurm for execution"),
                 )
-                .group(ArgGroup::with_name("slurm_opts").args(&["slurm", "slurm_script"]))
+                .group(ArgGroup::new("slurm_opts").args(&["slurm", "slurm_script"]))
         } else {
             cli_model().arg(
-                Arg::with_name("slurm_script")
+                Arg::new("slurm_script")
                     .short('s')
                     .long("slurm-script")
-                    .takes_value(true)
-                    .value_name("SCRIPT_FILE")
+                    .value_parser(value_parser!(String))
+                    .value_name("FILE")
                     .help("Generate PERL script to submit commands to slurm for execution"),
             )
         }
@@ -52,14 +53,14 @@ fn gen_cli() -> App<'static> {
     }
 }
 
-fn generate_completions(_m: &ArgMatches) -> Result<(), String> {
-    Err("Completions currently not working".to_string())
-    /*    let gen = m
-        .value_of_t::<Shell>("shell")
-        .map_err(|_| "Unknown shell".to_string())?;
+fn generate_completions(m: &ArgMatches) -> Result<(), String> {
+    //    Err("Completions currently not working".to_string())
+    let gen = *m.get_one::<Shell>("shell").expect("Missing shell");
     let mut cmd = cli_model();
     eprintln!("Generating completion file for {}...", gen);
-    let ofile = m.value_of("output").expect("Default output option missing");
+    let ofile = m
+        .get_one::<String>("output")
+        .expect("Default output option missing");
 
     match fs::File::create(&ofile) {
         Ok(mut file) => {
@@ -70,7 +71,7 @@ fn generate_completions(_m: &ArgMatches) -> Result<(), String> {
             "Couldn't create shell completion file {}: {}",
             ofile, e
         )),
-    } */
+    }
 }
 
 pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
@@ -79,48 +80,37 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 
     let (verbose, _) = init_log(&m);
     gem_bs.set_verbose(verbose);
-    if let Some(f) = m.value_of("dir") {
-        let wd = Path::new(f);
-        env::set_current_dir(&wd)
-            .map_err(|e| format!("Can not switch working directory to {}: {}", f, e))?;
-        debug!("Moved working directory to {}", f);
+    if let Some(wd) = m.get_one::<PathBuf>("dir") {
+        env::set_current_dir(wd).map_err(|e| {
+            format!(
+                "Can not switch working directory to {}: {}",
+                wd.display(),
+                e
+            )
+        })?;
+        debug!("Moved working directory to {}", wd.display());
     }
-    if let Some(s) = m.value_of("config_file") {
+    if let Some(s) = m.get_one::<String>("config_file") {
         gem_bs.set_config(
             Section::Default,
             "config_file",
-            DataValue::String(s.to_string()),
+            DataValue::String(s.clone()),
         );
     }
-    if let Some(s) = m.value_of("gembs_root") {
-        gem_bs.set_config(
-            Section::Default,
-            "gembs_root",
-            DataValue::String(s.to_string()),
-        );
+    if let Some(s) = m.get_one::<String>("gembs_root") {
+        gem_bs.set_config(Section::Default, "gembs_root", DataValue::String(s.clone()));
     }
-    if m.is_present("keep_logs") {
-        gem_bs.set_keep_logs(true)
-    }
-    if m.is_present("ignore_times") {
-        gem_bs.set_ignore_times(true);
-    }
-    if m.is_present("ignore_status") {
-        gem_bs.set_ignore_status(true);
-    }
-    if m.is_present("all") {
-        gem_bs.set_all(true);
-    }
-    if m.is_present("dry_run") {
-        gem_bs.set_dry_run(true);
-    }
-    if m.is_present("slurm") {
-        gem_bs.set_slurm(true);
-    }
-    if let Some(s) = m.value_of("json") {
+    gem_bs.set_keep_logs(m.get_flag("keep_logs"));
+    gem_bs.set_ignore_times(m.get_flag("ignore_times"));
+    gem_bs.set_ignore_status(m.get_flag("ignore_status"));
+    gem_bs.set_all(m.get_flag("all"));
+    gem_bs.set_dry_run(m.get_flag("dry_run"));
+    gem_bs.set_slurm(m.get_flag("slurm"));
+
+    if let Some(s) = m.get_one::<String>("json") {
         gem_bs.set_json_out(s);
     }
-    if let Some(s) = m.value_of("slurm_script") {
+    if let Some(s) = m.get_one::<String>("slurm_script") {
         gem_bs.set_slurm_script(s);
     }
 

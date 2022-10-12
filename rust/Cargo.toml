@@ -3,4 +3,4 @@ members = ["gemBS", "read_filter", "bs_call", "dbsnp_index", "snpxtr", "mextr"]
 
 [profile.release]
 lto = "thin"
-panic = 'abort'
+# panic = 'abort'

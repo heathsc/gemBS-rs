@@ -1,6 +1,8 @@
-use clap::{crate_version, App, Arg, ArgGroup, Command};
+use clap::{crate_version, Arg, ArgAction, ArgGroup, Command};
 
-pub(super) fn cli_model() -> App<'static> {
+use utils::log_level::LogLevel;
+
+pub(super) fn cli_model() -> Command {
     Command::new("snpxtr")
         .version(crate_version!())
         .author("Simon Heath <simon.heath@gmail.com>")
@@ -9,15 +11,15 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("quiet")
                 .short('q')
                 .long("quiet")
+                .action(ArgAction::SetTrue)
                 .help("Silence all output"),
         )
         .arg(
             Arg::new("timestamp")
                 .short('T')
                 .long("timestamp")
-                .takes_value(true)
                 .value_name("GRANULARITY")
-                .possible_values(&["none", "sec", "ms", "us", "ns"])
+                .value_parser(value_parser!(stderrlog::Timestamp))
                 .default_value("none")
                 .help("Prepend log entries with a timestamp"),
         )
@@ -25,10 +27,8 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("loglevel")
                 .short('v')
                 .long("loglevel")
-                .takes_value(true)
                 .value_name("LOGLEVEL")
-                .possible_values(&["none", "error", "warn", "info", "debug", "trace"])
-                .ignore_case(true)
+                .value_parser(value_parser!(LogLevel))
                 .default_value("warn")
                 .help("Set log level"),
         )
@@ -36,7 +36,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("threads")
                 .short('@')
                 .long("threads")
-                .takes_value(true)
+                .value_parser(value_parser!(usize))
                 .value_name("INT")
                 .help("Set number of threads"),
         )
@@ -44,7 +44,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("output")
                 .short('o')
                 .long("output")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("Set output file name [default: stdout]"),
         )
@@ -52,7 +52,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("selected")
                 .short('s')
                 .long("selected")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("File with list of selected SNPs [default: all SNPs are selected]"),
         )
@@ -60,7 +60,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("dbsnp")
                 .short('D')
                 .long("dbsnp")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("dbSNP index file (used to add external ids if not present in input file"),
         )
@@ -68,9 +68,9 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("region_list")
                 .short('r')
                 .long("regions")
-                .takes_value(true)
-                .multiple_values(true)
-                .require_value_delimiter(true)
+                .value_delimiter(',')
+                .value_parser(value_parser!(String))
+                .action(ArgAction::Append)
                 .value_name("REGION [,REGION...]")
                 .help("Restrict to comma separated list of regions"),
         )
@@ -78,7 +78,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("regions_file")
                 .short('R')
                 .long("region-file")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("Restrict to regions from file"),
         )
@@ -90,11 +90,13 @@ pub(super) fn cli_model() -> App<'static> {
         .arg(
             Arg::new("compress")
                 .short('z')
+                .action(ArgAction::SetTrue)
                 .long("compress")
                 .help("Compress output file with bgzip"),
         )
         .arg(
             Arg::new("md5")
+                .action(ArgAction::SetTrue)
                 .short('m')
                 .long("md5")
                 .help("Generate md5 digest for output file"),
@@ -102,22 +104,22 @@ pub(super) fn cli_model() -> App<'static> {
         .arg(
             Arg::new("tabix")
                 .short('x')
+                .action(ArgAction::SetTrue)
                 .long("tabix")
                 .help("Generate tabix (tbx) index for output file"),
         )
         .arg(
             Arg::new("input")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
-                .multiple_values(false)
                 .help("Input VCF/BCF file"),
         )
         .arg(
             Arg::new("regions")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("REGIONS")
-                .multiple_values(true)
-                .require_value_delimiter(true)
+                .value_delimiter(',')
+                .action(ArgAction::Append)
                 .help("Chromosome regions (comma separated)"),
         )
 }

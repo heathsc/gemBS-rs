@@ -1,6 +1,8 @@
-use clap::{crate_version, App, Arg, ArgGroup, Command};
+use clap::{crate_version, value_parser, Arg, ArgAction, ArgGroup, Command};
 
-pub(super) fn cli_model() -> App<'static> {
+use utils::log_level::LogLevel;
+
+pub(super) fn cli_model() -> Command {
     Command::new("mextr")
         .version(crate_version!())
         .author("Simon Heath <simon.heath@gmail.com>")
@@ -10,7 +12,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("prop")
                 .short('p')
                 .long("prop")
-                .takes_value(true)
+                .value_parser(value_parser!(f64))
                 .value_name("FLOAT")
                 .default_value("0.0")
                 .help("Minimum proportion of sites/CpGs that must pass filters"),
@@ -19,7 +21,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("number")
                 .short('N')
                 .long("prop")
-                .takes_value(true)
+                .value_parser(value_parser!(usize))
                 .value_name("INT")
                 .default_value("1")
                 .help("Minimum number of sites/CpGs that must pass filters"),
@@ -28,7 +30,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("inform")
                 .short('I')
                 .long("inform")
-                .takes_value(true)
+                .value_parser(value_parser!(usize))
                 .value_name("INT")
                 .default_value("1")
                 .help("Minimum number of informative reads for a site/CpG"),
@@ -37,7 +39,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("threshold")
                 .short('T')
                 .long("threshold")
-                .takes_value(true)
+                .value_parser(value_parser!(usize))
                 .value_name("INT")
                 .default_value("20")
                 .help("Minimum genotype PHRED score for a site/CpG"),
@@ -46,7 +48,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("bq_threshold")
                 .short('Q')
                 .long("bq-threshold")
-                .takes_value(true)
+                .value_parser(value_parser!(usize))
                 .value_name("INT")
                 .default_value("20")
                 .help("Minimum base quality score for genotype calling"),
@@ -55,9 +57,8 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("select")
                 .short('s')
                 .long("select")
-                .takes_value(true)
                 .value_name("MODE")
-                .possible_values(&["hom", "het"])
+                .value_parser(["hom", "het"])
                 .default_value("hom")
                 .ignore_case(true)
                 .help("Minimum number of sites/CpGs that must pass filters"),
@@ -66,7 +67,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("min_nc")
                 .short('M')
                 .long("min-nc")
-                .takes_value(true)
+                .value_parser(value_parser!(usize))
                 .value_name("INT")
                 .default_value("1")
                 .help("Minimum number of non-converted bases for non CpG site"),
@@ -74,18 +75,18 @@ pub(super) fn cli_model() -> App<'static> {
         .arg(
             Arg::new("report_file")
                 .short('S')
-                .long("report-filecpgfile")
-                .takes_value(true)
+                .long("report-file")
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
-                .help("File with list of SNPs to be selected [default: select all passing sites]"),
+                .help("File name for Output JSON with calling statistics"),
         )
         .arg(
             Arg::new("region_list")
                 .short('r')
                 .long("regions")
-                .takes_value(true)
-                .multiple_values(true)
-                .require_value_delimiter(true)
+                .value_parser(value_parser!(String))
+                .action(ArgAction::Append)
+                .value_delimiter(',')
                 .value_name("REGION [,REGION...]")
                 .help("Restrict to comma separated list of regions"),
         )
@@ -93,7 +94,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("regions_file")
                 .short('R')
                 .long("region-file")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("Restrict to regions from file"),
         )
@@ -107,7 +108,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("reference_bias")
                 .short('B')
                 .long("reference-bias")
-                .takes_value(true)
+                .value_parser(value_parser!(f64))
                 .value_name("FLOAT")
                 .default_value("2.0")
                 .help("Reference bias for genotype calling"),
@@ -116,22 +117,24 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("conversion")
                 .short('c')
                 .long("conversion")
-                .takes_value(true)
+                .value_parser(value_parser!(f64))
+                .action(ArgAction::Append)
+                .num_args(1..=2)
                 .value_name("FLOAT,FLOAT")
                 .default_values(&["0.01", "0.05"])
-                .multiple_values(true)
-                .number_of_values(2)
-                .use_value_delimiter(true)
+                .value_delimiter(',')
                 .help("Reference bias for genotype calling"),
         )
         .arg(
             Arg::new("common_gt")
+                .action(ArgAction::SetTrue)
                 .short('g')
                 .long("common-gt")
                 .help("Assume common genotypes across all samples"),
         )
         .arg(
             Arg::new("haploid")
+                .action(ArgAction::SetTrue)
                 .short('h')
                 .long("haploid")
                 .help("Force genotype calls to be haploid"),
@@ -141,7 +144,7 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("cpgfile")
                 .short('o')
                 .long("cpgfile")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("File name for CpG file"),
         )
@@ -149,13 +152,14 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("noncpgfile")
                 .short('n')
                 .long("noncpgfile")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("File name for non CpG file"),
         )
         .arg(
             Arg::new("no_header")
                 .short('H')
+                .action(ArgAction::SetTrue)
                 .long("no-header")
                 .help("Do not output header line for gemBS bed files"),
         )
@@ -163,9 +167,8 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("mode")
                 .short('m')
                 .long("mode")
-                .takes_value(true)
                 .value_name("MODE")
-                .possible_values(&["combined", "strand-specific"])
+                .value_parser(["combined", "strand-specific"])
                 .ignore_case(true)
                 .default_value("combined")
                 .help("Output mode for CpGs (gemBS bed)"),
@@ -174,9 +177,8 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("bw_mode")
                 .short('w')
                 .long("bw-mode")
-                .takes_value(true)
                 .value_name("MODE")
-                .possible_values(&["combined", "strand-specific"])
+                .value_parser(["combined", "strand-specific"])
                 .ignore_case(true)
                 .default_value("combined")
                 .help("Output mode for bigWig files"),
@@ -186,7 +188,7 @@ pub(super) fn cli_model() -> App<'static> {
                 .short('b')
                 .long("bedmethyl")
                 .alias("bed-methyl")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("STRING")
                 .help("File base name for bedmethyl files (not compatible with multisample VCFs/BCFs)"),
         )
@@ -194,25 +196,28 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("bed_track_line")
                 .short('t')
                 .long("bed-track-line")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("STRING")
                 .help("Track line for bedMethyl files [default: info taken from input file]"),
         )
         .arg(
             Arg::new("compress")
                 .short('z')
+                .action(ArgAction::SetTrue)
                 .long("compress")
                 .help("Compress output file with bgzip"),
         )
         .arg(
             Arg::new("md5")
                 .short('D')
+                .action(ArgAction::SetTrue)
                 .long("md5")
                 .help("Generate md5 digest for output file"),
         )
         .arg(
             Arg::new("tabix")
                 .short('x')
+                .action(ArgAction::SetTrue)
                 .long("tabix")
                 .help("Generate tabix (tbx) index for output file"),
         )
@@ -220,6 +225,7 @@ pub(super) fn cli_model() -> App<'static> {
         .arg(
             Arg::new("quiet")
                 .short('q')
+                .action(ArgAction::SetTrue)
                 .long("quiet")
                 .help("Silence all output"),
         )
@@ -227,9 +233,8 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("timestamp")
                 .short('X')
                 .long("timestamp")
-                .takes_value(true)
+                .value_parser(value_parser!(stderrlog::Timestamp))
                 .value_name("GRANULARITY")
-                .possible_values(&["none", "sec", "ms", "us", "ns"])
                 .default_value("none")
                 .help("Prepend log entries with a timestamp"),
         )
@@ -237,9 +242,8 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("loglevel")
                 .short('v')
                 .long("loglevel")
-                .takes_value(true)
                 .value_name("LOGLEVEL")
-                .possible_values(&["none", "error", "warn", "info", "debug", "trace"])
+                .value_parser(value_parser!(LogLevel))
                 .ignore_case(true)
                 .default_value("warn")
                 .help("Set log level"),
@@ -248,23 +252,22 @@ pub(super) fn cli_model() -> App<'static> {
             Arg::new("threads")
                 .short('@')
                 .long("threads")
-                .takes_value(true)
+                .value_parser(value_parser!(usize))
                 .value_name("INT")
                 .help("Set number of threads"),
         )
         .arg(
             Arg::new("input")
-                .takes_value(true)
+                .value_parser(value_parser!(String))
                 .value_name("PATH")
-                .multiple_values(false)
                 .help("Input VCF/BCF file"),
         )
         .arg(
             Arg::new("regions")
-                .takes_value(true)
                 .value_name("REGIONS")
-                .multiple_values(true)
-                .require_value_delimiter(true)
+                .value_parser(value_parser!(String))
+                .action(ArgAction::Append)
+                .value_delimiter(',')
                 .help("Chromosome regions (comma separated)"),
         )
 }

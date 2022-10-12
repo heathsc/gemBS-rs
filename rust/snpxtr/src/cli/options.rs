@@ -1,4 +1,4 @@
-use clap::{ArgMatches, ErrorKind};
+use clap::ArgMatches;
 use std::collections::HashSet;
 use std::io;
 
@@ -33,20 +33,20 @@ fn read_select_file(s: &str) -> io::Result<HashSet<String>> {
 
 pub fn handle_options(m: &ArgMatches) -> io::Result<Config> {
     let mut output_opt = OutputOpt::new();
-    match m.value_of("output") {
+    match m.get_one::<String>("output") {
         Some(s) => output_opt.set_filename(s),
         None => &mut output_opt,
     }
-    .set_compress(m.is_present("compress"))
-    .set_compute_md5(m.is_present("md5"))
-    .set_compute_tbx(m.is_present("tabix"))
+    .set_compress(m.get_flag("compress"))
+    .set_compute_md5(m.get_flag("md5"))
+    .set_compute_tbx(m.get_flag("tabix"))
     .fix_opts();
     let mut sr = BcfSrs::new()?;
-    let infile = m.value_of("input").expect("No input filename"); // This should not be allowed by Clap
+    let infile = m.get_one::<String>("input").expect("No input filename"); // This should not be allowed by Clap
     let regions = {
         if let Some(mut v) = m
-            .values_of("regions")
-            .or_else(|| m.values_of("region_list"))
+            .get_many::<String>("regions")
+            .or_else(|| m.get_many::<String>("region_list"))
         {
             let s = v.next().unwrap().to_owned();
             Some((
@@ -57,7 +57,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<Config> {
                 }),
                 false,
             ))
-        } else if let Some(s) = m.value_of("regions_file") {
+        } else if let Some(s) = m.get_one::<String>("regions_file") {
             Some((s.to_owned(), true))
         } else {
             None
@@ -66,16 +66,16 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<Config> {
     if let Some((reg, flag)) = regions {
         sr.set_regions(&reg, flag)?
     }
-    let nt = match value_t!(m, "threads", usize) {
-        Ok(x) => {
+    let nt = match m.get_one::<usize>("threads").copied() {
+        Some(x) => {
             if x > 0 {
                 sr.set_threads(x)?
             }
             Some(x)
         }
-        Err(e) if e.kind == ErrorKind::ArgumentNotFound => None,
-        Err(e) => return Err(new_err(format!("Error parsing option: {}", e))),
+        None => None,
     };
+
     sr.add_reader(infile)?;
     let ns = sr.get_reader_hdr(0)?.nsamples();
     if ns == 0 {
@@ -86,11 +86,11 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<Config> {
     if let Some(n) = nt {
         conf.set_threads(n);
     }
-    if let Some(s) = m.value_of("dbsnp") {
+    if let Some(s) = m.get_one::<String>("dbsnp") {
         let dbsnp_index = dbsnp::DBSnpIndex::new(s)?;
         conf.set_dbsnp_file(dbsnp::DBSnpFile::open(dbsnp_index)?);
     }
-    if let Some(s) = m.value_of("selected") {
+    if let Some(s) = m.get_one::<String>("selected") {
         conf.set_selected_hash(read_select_file(s)?);
     }
 
