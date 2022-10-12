@@ -80,6 +80,7 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
 
     let (verbose, _) = init_log(&m);
     gem_bs.set_verbose(verbose);
+    trace!("Starting up");
     if let Some(wd) = m.get_one::<PathBuf>("dir") {
         env::set_current_dir(wd).map_err(|e| {
             format!(

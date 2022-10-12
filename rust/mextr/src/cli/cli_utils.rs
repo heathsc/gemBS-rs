@@ -7,7 +7,7 @@ pub fn get_option(m: &ArgMatches, opt: &str, default: ConfVar) -> io::Result<Con
     match default {
         ConfVar::Bool(_) => {
             if m.contains_id(opt) {
-                Ok(ConfVar::Bool(true))
+                Ok(ConfVar::Bool(m.get_flag(opt)))
             } else {
                 Ok(default)
             }

@@ -53,7 +53,7 @@ pub fn init_log(m: &ArgMatches) -> (LogLevel, bool) {
         .get_one::<LogLevel>("loglevel")
         .copied()
         .unwrap_or_else(|| LogLevel::from_str("info").expect("Could not set loglevel info"));
-    let quiet = verbose.is_none() || m.contains_id("quiet");
+    let quiet = verbose.is_none() || m.get_flag("quiet");
     let ts = m
         .get_one::<stderrlog::Timestamp>("timestamp")
         .copied()
