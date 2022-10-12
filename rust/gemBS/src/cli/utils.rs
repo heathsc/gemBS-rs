@@ -14,8 +14,8 @@ pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
             .get_many::<isize>(opt)
             .map(|v| DataValue::IntVec(v.copied().collect())),
         VarType::Bool => {
-            if m.contains_id(opt) {
-                Some(DataValue::Bool(m.get_flag(opt)))
+            if m.contains_id(opt) && m.get_flag(opt) {
+                Some(DataValue::Bool(true))
             } else {
                 None
             }
