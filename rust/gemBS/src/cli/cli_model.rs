@@ -361,7 +361,7 @@ pub(super) fn cli_model() -> Command {
                         .help("Map as regular (non-bisulfite) data")
                 )
                 .group(
-                    ArgGroup::new("mapping")
+                    ArgGroup::new("mapping_types")
                         .args(&["bs", "non_bs"])
                 )
                 .next_help_heading("sorting options")

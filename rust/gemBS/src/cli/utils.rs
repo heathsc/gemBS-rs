@@ -15,6 +15,7 @@ pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
             .map(|v| DataValue::IntVec(v.copied().collect())),
         VarType::Bool => {
             if m.contains_id(opt) {
+                println!("Present");
                 Some(DataValue::Bool(m.get_flag(opt)))
             } else {
                 None
