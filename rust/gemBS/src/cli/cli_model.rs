@@ -425,7 +425,7 @@ pub(super) fn cli_model() -> Command {
                         .help("Remove individual BAMs after merging")
                 )
                 .group(
-                    ArgGroup::new("remove")
+                    ArgGroup::new("remove_group")
                         .args(&["remove", "no_merge"])
                 )
                 .group(
@@ -433,7 +433,7 @@ pub(super) fn cli_model() -> Command {
                         .args(&["merge", "no_merge"])
                 )
                 .group(
-                    ArgGroup::new("md5")
+                    ArgGroup::new("md5_group")
                         .args(&["md5", "no_md5"])
                 )
         )
@@ -595,7 +595,7 @@ pub(super) fn cli_model() -> Command {
                         .help("Estimate conversion rates from mapping data")
                 )
                 .group(
-                    ArgGroup::new("conversion")
+                    ArgGroup::new("conversion_group")
                         .args(&["conversion", "auto_conversion"])
                 )
                 .arg(
@@ -626,7 +626,7 @@ pub(super) fn cli_model() -> Command {
                         .help("Do not automatically calculate md5 sums")
                 )
                 .group(
-                    ArgGroup::new("md5")
+                    ArgGroup::new("md5_group")
                         .args(&["md5", "no_md5"])
                 )
                 .arg(
@@ -642,7 +642,7 @@ pub(super) fn cli_model() -> Command {
                         .help("Do not automatically calculate index final BCF")
                 )
                 .group(
-                    ArgGroup::new("index")
+                    ArgGroup::new("index_group")
                         .args(&["index", "no_index"])
                 )
                 .arg(
@@ -652,7 +652,7 @@ pub(super) fn cli_model() -> Command {
                         .help("Remove individual BCFs after merging")
                 )
                 .group(
-                    ArgGroup::new("remove")
+                    ArgGroup::new("remove_group")
                         .args(&["remove", "no_merge"])
                 )
                 .arg(
@@ -668,7 +668,7 @@ pub(super) fn cli_model() -> Command {
                         .help("Do not automatically merge BCFs")
                 )
                 .group(
-                    ArgGroup::new("merge")
+                    ArgGroup::new("merge_group")
                         .args(&["merge", "no_merge"])
                 )
                 .arg(
