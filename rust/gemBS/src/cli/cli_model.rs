@@ -197,7 +197,6 @@ pub(super) fn cli_model() -> Command {
                         .long("dbsnp-type")
                         .value_name("TYPE")
                         .value_parser(value_parser!(DbSnpFileType))
-                        .ignore_case(true)
                         .default_value("auto")
                         .help("Type of dbSNP input files")
                 )
@@ -329,7 +328,6 @@ pub(super) fn cli_model() -> Command {
                         .short('F').long("file-type")
                         .value_name("FILE_TYPE")
                         .value_parser(value_parser!(FileType))
-                        .ignore_case(true)
                         .help("Type of data file(s)")
                 )
                 .arg(

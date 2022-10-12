@@ -13,7 +13,7 @@ pub fn get_option(m: &ArgMatches, opt: &str, tt: VarType) -> Option<DataValue> {
         VarType::IntVec => m
             .get_many::<isize>(opt)
             .map(|v| DataValue::IntVec(v.copied().collect())),
-        VarType::Bool => Some(DataValue::Bool(m.get_flag(opt))),
+        VarType::Bool => Some(DataValue::Bool(m.contains_id(opt))),
         VarType::Float => m.get_one::<f64>(opt).copied().map(DataValue::Float),
         VarType::String => m.get_one::<String>(opt).cloned().map(DataValue::String),
         VarType::FileType => m.get_one::<FileType>(opt).copied().map(DataValue::FileType),
