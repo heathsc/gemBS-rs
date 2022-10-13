@@ -93,7 +93,7 @@ pub(super) fn cli_model() -> Command {
         .arg(
             Arg::new("regions_file")
                 .short('R')
-                .long("region-file")
+                .long("regions-file")
                 .value_parser(value_parser!(String))
                 .value_name("PATH")
                 .help("Restrict to regions from file"),
@@ -101,7 +101,6 @@ pub(super) fn cli_model() -> Command {
         .group(
             ArgGroup::new("region_def")
                 .args(&["region_list", "regions_file"])
-                .required(true),
         )
         .next_help_heading("genotype recalling")
         .arg(
@@ -260,6 +259,7 @@ pub(super) fn cli_model() -> Command {
             Arg::new("input")
                 .value_parser(value_parser!(String))
                 .value_name("PATH")
+                .required(true)
                 .help("Input VCF/BCF file"),
         )
         .arg(
