@@ -239,7 +239,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
     let mn = mn.max((prop * (ns as f64) + 0.5) as usize);
     chash.set("number", ConfVar::Int(mn));
 
-    setup_bed_methyl_structs(&mut chash, hdr, infile, m.get_flag("bed_methyl"))?;
+    setup_bed_methyl_structs(&mut chash, hdr, infile, m.contains_id("bed_methyl"))?;
 
     Ok((chash, sr))
 }

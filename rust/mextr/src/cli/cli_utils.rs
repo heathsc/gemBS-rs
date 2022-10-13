@@ -73,10 +73,10 @@ pub fn get_f64(m: &ArgMatches, opt: &str, low: f64, high: f64) -> io::Result<Opt
         if z >= low && z <= high {
             Ok(Some(z))
         } else {
-            return Err(new_err(format!(
+            Err(new_err(format!(
                 "Float argument {} for option {} not between {} and {}",
                 z, opt, low, high
-            )));
+            )))
         }
     } else {
         Ok(None)
