@@ -82,11 +82,7 @@ pub(super) fn cli_model() -> Command {
                 .value_name("PATH")
                 .help("Restrict to regions from file"),
         )
-        .group(
-            ArgGroup::new("region_def")
-                .args(&["region_list", "regions_file"])
-                .required(true),
-        )
+        .group(ArgGroup::new("region_def").args(&["region_list", "regions_file"]))
         .arg(
             Arg::new("compress")
                 .short('z')
