@@ -123,7 +123,6 @@ pub(super) fn cli_model() -> Command {
                 .arg(
                     Arg::new("populate")
                         .short('p').long("populate-cache")
-                        .value_name("FILE")
                         .action(ArgAction::SetTrue)
                         .help("Populate local reference cache if required (for CRAM)")
                 )
@@ -141,7 +140,6 @@ pub(super) fn cli_model() -> Command {
                     Arg::new("make_bs_index")
                         .short('b').long("bs-index")
                         .action(ArgAction::SetTrue)
-                        .value_parser(value_parser!(isize))
                         .help("Generate bisulfite index")
                 )
                 .arg(

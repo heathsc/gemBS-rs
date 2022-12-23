@@ -122,7 +122,7 @@ pub(super) fn cli_model() -> Command {
                 .value_name("FLOAT,FLOAT")
                 .default_values(&["0.01", "0.05"])
                 .value_delimiter(',')
-                .help("Reference bias for genotype calling"),
+                .help("Under and over conversion rates"),
         )
         .arg(
             Arg::new("common_gt")

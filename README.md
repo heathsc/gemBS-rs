@@ -89,6 +89,7 @@ Documentation can be found at
 Changelog:
 ----------
 
+    4.1.1 Fix bug in cli for index sub command
     4.1.0 Switch to clap v3
     4.0.4 Add max_template_length option to gemBS (option passed on to bs_call)
     4.0.3 Fix problem with reading BCF files from older versions of
