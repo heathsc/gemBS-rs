@@ -21,7 +21,7 @@ glob = "0.3.0"
 hostname = "^0.3"
 custom_error = "1.7.1"
 plotters-bitmap = "~0.3"
-plotters = {version = "~0.3", default_features = false, features = ["bitmap_encoder", "line_series"]}
+plotters = {version = "~0.3", default_features = false, features = ["bitmap_encoder", "line_series", "ttf"]}
 regex = "1"
 md-5 = "0.9.1"
 utils = { path = "../utils" }

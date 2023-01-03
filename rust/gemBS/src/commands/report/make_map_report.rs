@@ -364,6 +364,8 @@ fn create_mapq_hist(path: &Path, json: &MapJson) -> Result<(), Box<dyn std::erro
     let root = BitMapBackend::new(path, (1024, 640)).into_drawing_area();
     root.fill(&WHITE)?;
 
+    debug!("Making MapQ hist: {}", path.display());
+
     let mut chart = ChartBuilder::on(&root)
         .x_label_area_size(35)
         .y_label_area_size(60)
@@ -386,10 +388,12 @@ fn create_mapq_hist(path: &Path, json: &MapJson) -> Result<(), Box<dyn std::erro
             BLUE.mix(0.4).filled(),
         )
     }))?;
+    debug!("Finished MapQ hist: {}", path.display());
     Ok(())
 }
 
 fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::error::Error>> {
+    debug!("Making isize hist: {}", path.display());
     let tlen = paired.template_len();
     // Get the bottom 99% of read lengths
     // Put length histogram in a vector
@@ -438,6 +442,7 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
         tl.iter().map(|(x, y)| (*x, *y)),
         Into::<ShapeStyle>::into(&RED).stroke_width(3),
     ))?;
+    debug!("Finished isize hist: {}", path.display());
     Ok(())
 }
 fn create_sample_body(
