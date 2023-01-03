@@ -408,17 +408,17 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
     let mut max = 0;
     let thresh = (total as f64) * 0.99;
     let mut t = None;
-    for (ix, y) in &tl {
+    for (i, (ix, y)) in tl.iter().enumerate() {
         tmp += y;
         if *y > max {
             max = *y
         }
         if (tmp as f64) >= thresh {
-            t = Some(ix);
+            t = Some((i, ix));
             break;
         }
     }
-    let lim = t.expect("No template lengths found");
+    let (n, lim) = t.expect("No template lengths found");
     let root = BitMapBackend::new(path, (1024, 640)).into_drawing_area();
     root.fill(&WHITE)?;
 
@@ -439,7 +439,7 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
         .draw()?;
 
     chart.draw_series(LineSeries::new(
-        tl.iter().map(|(x, y)| (*x, *y)),
+        tl[0..=n].iter().map(|(x, y)| (*x, *y)),
         Into::<ShapeStyle>::into(&RED).stroke_width(3),
     ))?;
     debug!("Finished isize hist: {}", path.display());
@@ -602,13 +602,13 @@ fn read_map_json(json_path: &Path) -> Result<MapJson, String> {
     let file = fs::File::open(json_path)
         .map_err(|e| format!("Couldn't open {}: {}", json_path.to_string_lossy(), e))?;
     let reader = Box::new(BufReader::new(file));
-    Ok(MapJson::from_reader(reader).map_err(|e| {
+    MapJson::from_reader(reader).map_err(|e| {
         format!(
             "Couldn't parse JSON file {}: {}",
             json_path.to_string_lossy(),
             e
         )
-    })?)
+    })
 }
 
 fn make_latex_sec(
@@ -935,7 +935,7 @@ pub fn make_map_report(
     // Set up worker threads
     // Maximum parallel jobs that we could do if there were enough cores is the nmber of datasets
     let n_dsets = svec.iter().fold(0, |sum, x| sum + x.json_files.len());
-    let n_workers = if n_cores > n_dsets { n_dsets } else { n_cores };
+    let n_workers = n_cores.min(n_dsets);
     let (ctr_tx, ctr_rx) = mpsc::channel();
     let mut avail = Vec::new();
     let mut workers = Vec::new();
