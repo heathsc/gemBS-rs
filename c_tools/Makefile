@@ -12,9 +12,9 @@ GEMBS_INSTALL_ROOT ?= /usr/local/lib/gemBS
 TMP_ROOT ?= $(abspath tmp_root)
 
 # samtools and bcftools definitions
-SAMTOOLS_VERSION=1.16.1
-BCFTOOLS_VERSION=1.16
-HTSLIB_VERSION=1.16
+SAMTOOLS_VERSION=1.17
+BCFTOOLS_VERSION=1.17
+HTSLIB_VERSION=1.17
 SAMTOOLS_DIR=samtools
 BCFTOOLS_DIR=bcftools
 HTSLIB_DIR=htslib
