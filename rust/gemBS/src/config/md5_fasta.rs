@@ -252,7 +252,8 @@ pub fn md5_fasta<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(gem_bs: &GemBS,
 		if let Some(mut c) = current_ctg.take() {
 			c.md5.set(&md5_hasher.finalize_reset())?;
 			c.process_ctg(&cache_path, &min_contig_size, &mut md5_data).map_err(|e| format!("{}", e))?;
-		}	
+			if let Some(buf) = &mut md5_data.cache_buf { buf.clear() }
+		}
 		debug!("File processed in {}ms", now.elapsed().as_millis());
 		// Only apply contig size limit to first file (main reference file)
 		min_contig_size = None;
