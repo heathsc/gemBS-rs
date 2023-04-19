@@ -88,7 +88,9 @@ Documentation can be found at
 ----------
 Changelog:
 ----------
-
+    4.1.3 Fix bug with generation of gemBS reference.  Fix bug with
+          command lines options and slurm. Switch to samtools/htslib/bcftools 1.17
+    4.1.2 Switch to clap v4.  Switch to samtools/htslib/bcftools 1.16
     4.1.1 Fix bug in cli for index sub command
     4.1.0 Switch to clap v3
     4.0.4 Add max_template_length option to gemBS (option passed on to bs_call)
