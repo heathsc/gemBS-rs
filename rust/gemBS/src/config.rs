@@ -97,22 +97,22 @@ impl GemBS {
     }
     pub fn mask_signals(&self) {
         let _ = signal_hook::flag::register_usize(
-            signal_hook::SIGTERM,
+            signal_hook::consts::SIGTERM,
             Arc::clone(&self.signal),
             SIGTERM,
         );
         let _ = signal_hook::flag::register_usize(
-            signal_hook::SIGINT,
+            signal_hook::consts::SIGINT,
             Arc::clone(&self.signal),
             SIGINT,
         );
         let _ = signal_hook::flag::register_usize(
-            signal_hook::SIGQUIT,
+            signal_hook::consts::SIGQUIT,
             Arc::clone(&self.signal),
             SIGQUIT,
         );
         let _ = signal_hook::flag::register_usize(
-            signal_hook::SIGHUP,
+            signal_hook::consts::SIGHUP,
             Arc::clone(&self.signal),
             SIGHUP,
         );

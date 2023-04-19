@@ -14,14 +14,15 @@ pub fn get_arg_string(task: &Task, options: &HashMap<&'static str, DataValue>) -
 	let mut arg_string = task.args().to_owned();
 	for (opt, val) in options {
 		if !(*opt).starts_with('_') {
+			let option = opt.replace("_" , "-");
 			let s = match val {
-				DataValue::Int(x) => format!(" --{} {}", *opt, x),
-				DataValue::Float(x) => format!(" --{} {}", *opt, x),
-				DataValue::String(x) => format!(" --{} {}", *opt, x),
-				DataValue::FileType(x) => format!(" --{} {}", *opt, x),
-				DataValue::Bool(_) => format!(" --{}", *opt),
-				DataValue::StringVec(v) => v.iter().fold(format!(" --{}", *opt), |mut s, x| { s.push_str(format!(" {}", x).as_str()); s}),
-				DataValue::FloatVec(v) => v.iter().fold(format!(" --{}", *opt), |mut s, x| { s.push_str(format!(" {}", x).as_str()); s}),
+				DataValue::Int(x) => format!(" --{} {}", option, x),
+				DataValue::Float(x) => format!(" --{} {}", option, x),
+				DataValue::String(x) => format!(" --{} {}", option, x),
+				DataValue::FileType(x) => format!(" --{} {}", option, x),
+				DataValue::Bool(_) => format!(" --{}", option),
+				DataValue::StringVec(v) => v.iter().fold(format!(" --{}", option), |mut s, x| { s.push_str(format!(" {}", x).as_str()); s}),
+				DataValue::FloatVec(v) => v.iter().fold(format!(" --{}", option), |mut s, x| { s.push_str(format!(" {}", x).as_str()); s}),
 				_ => String::new(),
 			};
 			if !s.is_empty() { arg_string.push_str(&s); }

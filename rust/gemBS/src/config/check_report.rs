@@ -109,6 +109,7 @@ pub fn check_call_report(gem_bs: &mut GemBS) -> Result<(), String> {
 pub fn check_report(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Report, name ) { x } else { "gemBS_reports" } };
 	let rdir = PathBuf::from_str(get_dir("report_dir")).map_err(|e| format!("{}", e))?;
+	debug!("Report dir: {}", rdir.display());
 	let project = gem_bs.get_config_str(Section::Report, "project");
 	let cores = Some(1);
 	let memory = gem_bs.get_config_memsize(Section::Report, "memory");

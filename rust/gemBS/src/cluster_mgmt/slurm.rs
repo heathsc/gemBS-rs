@@ -54,10 +54,10 @@ fn write_sbatch_script<T: fmt::Write>(wrt: &mut T, jv: &SlurmJob, tl: &TaskList,
 	writeln!(wrt, "#!/bin/sh")?;
 	let job_array = jv.task_vec.len() > 1;
 	if job_array {
-	writeln!(wrt, "coms=( \\")?;
-	for ix in jv.task_vec.iter() {
+		writeln!(wrt, "coms=( \\")?;
+		for ix in jv.task_vec.iter() {
 			let task = &tl[*ix];
-			writeln!(wrt,"\"{} {}\" \\",task.command(), dry_run::get_arg_string(task, options))?;			
+			writeln!(wrt, "\"{} {}\" \\", task.command(), dry_run::get_arg_string(task, options))?;
 		}
 		writeln!(wrt, ")")?;
 		writeln!(wrt, "echo gemBS --loglevel {} ${{coms[$SLURM_ARRAY_TASK_ID]}}", verbose)?;

@@ -325,10 +325,10 @@ impl fmt::Display for Command {
 	}
 }
 
-pub const SIGTERM: usize = signal_hook::SIGTERM as usize;
-pub const SIGINT: usize = signal_hook::SIGINT as usize;
-pub const SIGQUIT: usize = signal_hook::SIGQUIT as usize;		
-pub const SIGHUP: usize = signal_hook::SIGHUP as usize;
+pub const SIGTERM: usize = signal_hook::consts::SIGTERM as usize;
+pub const SIGINT: usize = signal_hook::consts::SIGINT as usize;
+pub const SIGQUIT: usize = signal_hook::consts::SIGQUIT as usize;
+pub const SIGHUP: usize = signal_hook::consts::SIGHUP as usize;
 
 pub const CONTIG_POOL_SIZE: usize = 25_000_000;
 

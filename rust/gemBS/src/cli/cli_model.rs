@@ -224,7 +224,7 @@ pub(super) fn cli_model() -> Command {
                     Arg::new("memory")
                         .short('m').long("memory")
                         .value_name("INT")
-                        .value_parser(value_parser!(isize))
+                        .value_parser(value_parser!(MemSize))
                         .help("Memory required [default: all available memory]")
                 )
                 .arg(
@@ -857,8 +857,7 @@ pub(super) fn cli_model() -> Command {
                         .value_parser(value_parser!(String))
                         .short('r').long("report-dir")
                         .value_name("PATH")
-                        .default_value("gemBS_reports")
-                        .help("Root directory for reports")
+                        .help("Root directory for reports [default: gemBS_reports]")
                 )
                 .arg(
                     Arg::new("paper_size")
