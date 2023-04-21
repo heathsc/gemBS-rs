@@ -392,6 +392,44 @@ fn create_mapq_hist(path: &Path, json: &MapJson) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
+/// This is a workaround for a bug in the plotters crate where if we send it too many points the plotter.
+/// will go into an endless loop.  We get around this by making an iterator that will sub-sample points if required.
+const MAX_PLOT_SIZE: usize = 1500;
+
+struct IdxIter<'a> {
+    slice: &'a [(usize, usize)],
+    remaining_space: usize,
+}
+
+impl<'a> IdxIter<'a> {
+    fn new(slice: &'a [(usize, usize)]) -> Self {
+        Self {
+            slice,
+            remaining_space: MAX_PLOT_SIZE,
+        }
+    }
+}
+impl<'a> Iterator for IdxIter<'a> {
+    type Item = (usize, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining_space == 0 || self.slice.is_empty() {
+            None
+        } else {
+            let n = self.slice.len();
+            let x = self.slice[0];
+            let a = if n <= self.remaining_space {
+                1
+            } else {
+                ((n as f64) / (self.remaining_space as f64)).round() as usize
+            };
+            self.slice = &self.slice[a..];
+            self.remaining_space -= 1;
+            Some(x)
+        }
+    }
+}
+
 fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::error::Error>> {
     debug!("Making isize hist: {}", path.display());
     let tlen = paired.template_len();
@@ -408,9 +446,8 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
     let mut tmp = 0;
     let mut tmp0 = 0;
     let mut max = 0;
-    let thresh0 = (total as f64) * 0.025;
-    let thresh1 = (total as f64) * 0.975;
-    let mut n = 0;
+    let thresh0 = (total as f64) * 0.005;
+    let thresh1 = (total as f64) * 0.995;
     let mut t = (None, None);
     debug!("Getting limits for isize hist: {}", path.display());
     for (i, (ix, y)) in tl.iter().enumerate() {
@@ -422,19 +459,22 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
             t.0 = Some((i, ix));
             tmp0 = tmp;
         }
-        if t.0.is_some() {
-            n += 1;
-        }
-        // The check n<1500 is because if we send too many points to the plotter it hangs so this is a kludge
-        // until the bug in plotters is fixed
-        if (tmp as f64) >= thresh1  || n > 1500 {
+        if (tmp as f64) >= thresh1 {
             t.1 = Some((i, ix));
             break;
         }
     }
     let (x0, lim0) = t.0.expect("No template lengths found");
     let (x1, lim1) = t.1.expect("Problem establishing template length range");
-    debug!("Preparing isize plot: n = {}, lim0 = {}, lim1 = {}, max = {}, covered = {}: {}", n, *lim0, *lim1, max, ((tmp - tmp0) as f64) / (total as f64), path.display());
+    debug!(
+        "Preparing isize plot: n = {}, lim0 = {}, lim1 = {}, max = {}, covered = {}: {}",
+        x1 + 1 - x0,
+        *lim0,
+        *lim1,
+        max,
+        ((tmp - tmp0) as f64) / (total as f64),
+        path.display()
+    );
     let root = BitMapBackend::new(path, (1024, 640)).into_drawing_area();
     root.fill(&WHITE)?;
     debug!("Preparing isize chart axes: {}", path.display());
@@ -456,8 +496,9 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
         .draw()?;
 
     debug!("Drawing isize chart: {}", path.display());
+
     chart.draw_series(LineSeries::new(
-        tl[x0..=x1].iter().map(|(x, y)| (*x, *y)),
+        IdxIter::new(&tl[x0..=x1]),
         Into::<ShapeStyle>::into(&RED).stroke_width(3),
     ))?;
     debug!("Finished isize hist: {}", path.display());
