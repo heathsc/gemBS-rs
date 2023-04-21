@@ -88,6 +88,8 @@ Documentation can be found at
 ----------
 Changelog:
 ----------
+    4.1.4 Workaround for bug in plotters crate which could cause the
+          generation of insertion size historgrams to hang
     4.1.3 Fix bug with generation of gemBS reference.  Fix bug with
           command lines options and slurm. Switch to samtools/htslib/bcftools 1.17
     4.1.2 Switch to clap v4.  Switch to samtools/htslib/bcftools 1.16

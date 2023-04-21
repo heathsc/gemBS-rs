@@ -403,32 +403,49 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
         total += y;
         tl.push((<usize>::from_str(ix).map_err(|e| format!("{}", e))?, *y));
     }
+    debug!("Sorting isize vector: {}", path.display());
     tl.sort_by(|a, b| a.0.cmp(&b.0));
     let mut tmp = 0;
+    let mut tmp0 = 0;
     let mut max = 0;
-    let thresh = (total as f64) * 0.99;
-    let mut t = None;
+    let thresh0 = (total as f64) * 0.025;
+    let thresh1 = (total as f64) * 0.975;
+    let mut n = 0;
+    let mut t = (None, None);
+    debug!("Getting limits for isize hist: {}", path.display());
     for (i, (ix, y)) in tl.iter().enumerate() {
         tmp += y;
         if *y > max {
             max = *y
         }
-        if (tmp as f64) >= thresh {
-            t = Some((i, ix));
+        if (tmp as f64) <= thresh0 {
+            t.0 = Some((i, ix));
+            tmp0 = tmp;
+        }
+        if t.0.is_some() {
+            n += 1;
+        }
+        // The check n<1500 is because if we send too many points to the plotter it hangs so this is a kludge
+        // until the bug in plotters is fixed
+        if (tmp as f64) >= thresh1  || n > 1500 {
+            t.1 = Some((i, ix));
             break;
         }
     }
-    let (n, lim) = t.expect("No template lengths found");
+    let (x0, lim0) = t.0.expect("No template lengths found");
+    let (x1, lim1) = t.1.expect("Problem establishing template length range");
+    debug!("Preparing isize plot: n = {}, lim0 = {}, lim1 = {}, max = {}, covered = {}: {}", n, *lim0, *lim1, max, ((tmp - tmp0) as f64) / (total as f64), path.display());
     let root = BitMapBackend::new(path, (1024, 640)).into_drawing_area();
     root.fill(&WHITE)?;
-
+    debug!("Preparing isize chart axes: {}", path.display());
     let mut chart = ChartBuilder::on(&root)
         .x_label_area_size(35)
         .y_label_area_size(60)
         .margin(5)
         .caption("Insert Size Distribution", ("sans-serif", 22.0).into_font())
-        .build_cartesian_2d(0..*lim, 0..max)?;
+        .build_cartesian_2d(*lim0..*lim1, 0..max)?;
 
+    debug!("Preparing isize chart data: {}", path.display());
     chart
         .configure_mesh()
         .light_line_style(&WHITE.mix(0.3))
@@ -438,8 +455,9 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
         .axis_desc_style(("sans-serif", 15).into_font())
         .draw()?;
 
+    debug!("Drawing isize chart: {}", path.display());
     chart.draw_series(LineSeries::new(
-        tl[0..=n].iter().map(|(x, y)| (*x, *y)),
+        tl[x0..=x1].iter().map(|(x, y)| (*x, *y)),
         Into::<ShapeStyle>::into(&RED).stroke_width(3),
     ))?;
     debug!("Finished isize hist: {}", path.display());
