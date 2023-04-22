@@ -8,7 +8,6 @@ export GEMBS_INSTALL_ROOT TMP_ROOT
 
 ifeq ($(INSTALL_TEXLIVE),yes)
   TARGETS += texlive
-  TEX_PATH_COM = PATH=$(wildcard $(GEMBS_INSTALL_ROOT)/texlive/bin/*):$$PATH ' '
 endif
 
 bin_dir = $(GEMBS_INSTALL_ROOT)/bin
@@ -26,7 +25,7 @@ all: $(TARGETS) gemBS
 
 gemBS: gemBS_config.mk
 	echo "#!/bin/sh" > $@
-	echo '$(TEX_PATH_COM)LD_LIBRARY_PATH=$(lib_dir):$$LD_LIBRARY_PATH $(bin_dir)/gemBS $$@' >> $@
+	echo 'LD_LIBRARY_PATH=$(lib_dir):$$LD_LIBRARY_PATH $(bin_dir)/gemBS $$@' >> $@
 	chmod 755 $@
 	$(info **************************************************************************************************)
 	$(info copy shell script ${@} to a directory in your PATH (i.e., /usr/local/bin or ${HOME}/bin))

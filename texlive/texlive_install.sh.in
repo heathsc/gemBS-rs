@@ -1,5 +1,5 @@
 PKGS="latex-bin latexmk ec colortbl titlesec latex-tools-dev xcolor \
-geometry hyperref pdftexcmds infwarerr kvoptions epstopdf-pkg"
+geometry hyperref pdftexcmds etoolbox infwarerr kvoptions epstopdf-pkg"
 
 wget http://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz
 tar zxf install-tl-unx.tar.gz && rm install-tl-unx.tar.gz
@@ -8,4 +8,4 @@ cd install-tl-*
 cd ..
 rm -rf install-tl-*
 @GEMBS_INSTALL_ROOT/texlive/bin/*/tlmgr install $PKGS
-# @GEMBS_INSTALL_ROOT/texlive/bin/*/tlmgr path add
+@GEMBS_INSTALL_ROOT/texlive/bin/*/tlmgr path add
