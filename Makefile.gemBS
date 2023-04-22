@@ -27,9 +27,9 @@ gemBS: gemBS_config.mk
 	echo "#!/bin/sh" > $@
 	echo 'LD_LIBRARY_PATH=$(lib_dir):$$LD_LIBRARY_PATH $(bin_dir)/gemBS $$@' >> $@
 	chmod 755 $@
-	$(info **************************************************************************************************)
-	$(info copy shell script ${@} to a directory in your PATH (i.e., /usr/local/bin or ${HOME}/bin))
-	$(info **************************************************************************************************)
+#	$(info **************************************************************************************************)
+#	$(info copy shell script ${@} to a directory in your PATH (i.e., /usr/local/bin or ${HOME}/bin))
+#	$(info **************************************************************************************************)
 
 install: all installdirs
 	cp rust/bin/* $(bin_dir)
@@ -42,6 +42,7 @@ install: all installdirs
 	cp etc/css/style.css $(css_dir)
 	cp etc/config_scripts/*.conf $(cfg_dir)
 	strip $(bin_dir)/*
+	cp gemBS $(INSTALL_PREFIX)/bin/
 
 texlive: .texlive
 
