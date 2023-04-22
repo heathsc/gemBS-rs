@@ -1,14 +1,15 @@
 include gemBS_config.mk
 
 TARGETS = subdirs
-ifeq ($(INSTALL_TEXLIVE),yes)
-  TARGETS += texlive
-endif
-
 GEMBS_INSTALL_ROOT ?= /usr/local/lib/gemBS
 TMP_ROOT=$(abspath c_tools/tmp_root)
 
 export GEMBS_INSTALL_ROOT TMP_ROOT
+
+ifeq ($(INSTALL_TEXLIVE),yes)
+  TARGETS += texlive
+  TEX_PATH_COM = $(GEMBS_INSTALL_ROOT)/texlive/bin/*/tlmgr path add  
+endif
 
 bin_dir = $(GEMBS_INSTALL_ROOT)/bin
 etc_dir = $(GEMBS_INSTALL_ROOT)/etc
@@ -25,6 +26,7 @@ all: $(TARGETS) gemBS
 
 gemBS: gemBS_config.mk
 	echo "#!/bin/sh" > $@
+	echo $(TEX_PATH_COM) >> $@
 	echo 'LD_LIBRARY_PATH=$(lib_dir):$$LD_LIBRARY_PATH $(bin_dir)/gemBS $$@' >> $@
 	chmod 755 $@
 	$(info **************************************************************************************************)
