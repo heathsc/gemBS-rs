@@ -88,6 +88,7 @@ Documentation can be found at
 ----------
 Changelog:
 ----------
+    4.1.5 Ensure that all user supplied options are passed on to slurm scripts
     4.1.4 Workaround for bug in plotters crate which could cause the
           generation of insertion size historgrams to hang
     4.1.3 Fix bug with generation of gemBS reference.  Fix bug with

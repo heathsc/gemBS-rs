@@ -61,7 +61,7 @@ fn make_gem_index(gem_bs: &GemBS, job: usize, bisulfite: bool) -> QPipe {
 
 fn make_dbsnp_index(
     gem_bs: &GemBS,
-    _options: &HashMap<&'static str, DataValue>,
+    _options: &HashMap<&'static str, (DataValue, bool)>,
     job: usize,
 ) -> QPipe {
     let index = gem_bs
@@ -126,7 +126,7 @@ fn make_dbsnp_index(
 
 pub fn make_index_pipeline(
     gem_bs: &GemBS,
-    options: &HashMap<&'static str, DataValue>,
+    options: &HashMap<&'static str, (DataValue, bool)>,
     job: usize,
 ) -> QPipe {
     // First check what type of index we are meant to be building

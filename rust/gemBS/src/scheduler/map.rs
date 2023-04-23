@@ -120,7 +120,7 @@ fn get_read_groups(dataset: &str, href: &HashMap<Metadata, DataValue>) -> String
 
 pub fn make_map_pipeline(
     gem_bs: &GemBS,
-    options: &HashMap<&'static str, DataValue>,
+    options: &HashMap<&'static str, (DataValue, bool)>,
     job: usize,
 ) -> QPipe {
     const OPT_LIST: &[(&str, &str, VarType)] = &[
@@ -199,7 +199,7 @@ pub fn make_map_pipeline(
     } else {
         None
     };
-    let paired = if let Some(DataValue::Bool(x)) = options.get("paired") {
+    let paired = if let Some((DataValue::Bool(x), _)) = options.get("paired") {
         *x
     } else {
         matches!(ftype, Some(FileType::Paired) | Some(FileType::Interleaved))
@@ -303,7 +303,7 @@ pub fn make_map_pipeline(
 
 pub fn make_merge_bams_pipeline(
     gem_bs: &GemBS,
-    options: &HashMap<&'static str, DataValue>,
+    options: &HashMap<&'static str, (DataValue, bool)>,
     job: usize,
 ) -> QPipe {
     let threads = gem_bs.get_config_int(Section::Mapping, "threads");
@@ -338,7 +338,7 @@ pub fn make_merge_bams_pipeline(
         args.push_str(format!("--reference\x1e{}\x1e", gembs_ref.path().display()).as_str());
     }
     args.push_str(format!("-f\x1e{}\x1e", output.path().display()).as_str());
-    let remove_bams = if let Some(DataValue::Bool(x)) = options.get("remove") {
+    let remove_bams = if let Some((DataValue::Bool(x), _)) = options.get("remove") {
         *x
     } else {
         gem_bs.get_config_bool(Section::Mapping, "remove_individual_bams")

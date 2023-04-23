@@ -154,7 +154,6 @@ fn get_conversion_rate(gem_bs: &GemBS, barcode: &str) -> (f64, f64) {
 }
 
 pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
-    
     const OPT_LIST: &[(&str, &str, VarType)] = &[
         ("left_trim", "left-trim", VarType::IntVec),
         ("right_trim", "right-trim", VarType::IntVec),
@@ -174,7 +173,7 @@ pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
         ("qual_threshold", "bq-threshold", VarType::Int),
         ("dbsnp_index", "dbsnp", VarType::String),
     ];
-    
+
     let threads = gem_bs.get_config_int(Section::Calling, "threads");
     let call_threads = gem_bs
         .get_config_int(Section::Calling, "call_threads")
@@ -243,7 +242,7 @@ pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
 
 pub fn make_merge_bcfs_pipeline(
     gem_bs: &GemBS,
-    options: &HashMap<&'static str, DataValue>,
+    options: &HashMap<&'static str, (DataValue, bool)>,
     job: usize,
 ) -> QPipe {
     let threads = gem_bs.get_config_int(Section::Calling, "threads");
@@ -275,7 +274,7 @@ pub fn make_merge_bcfs_pipeline(
         args.push_str(format!("--threads\x1e{}\x1e", t).as_str());
     }
 
-    let remove_bcfs = if let Some(DataValue::Bool(x)) = options.get("remove") {
+    let remove_bcfs = if let Some((DataValue::Bool(x), _)) = options.get("remove") {
         *x
     } else {
         gem_bs.get_config_bool(Section::Calling, "remove_individual_bcfs")

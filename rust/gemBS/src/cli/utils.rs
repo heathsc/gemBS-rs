@@ -44,26 +44,26 @@ pub fn handle_options(
     m: &ArgMatches,
     gem_bs: &mut GemBS,
     section: Section,
-) -> HashMap<&'static str, DataValue> {
+) -> HashMap<&'static str, (DataValue, bool)> {
     let mut options = HashMap::new();
     for (opt, val) in OPT_ASSOC.iter() {
         match val {
             OptionType::Global(s, vt) => {
                 if let Some(x) = get_option(m, opt, *vt) {
-                    options.insert(*opt, x.clone());
+                    options.insert(*opt, (x.clone(), false));
                     gem_bs.set_config(section, s, x);
                 }
             }
             OptionType::Local(vt) => {
                 if let Some(x) = get_option(m, opt, *vt) {
                     debug!("Setting local option {} to {:?}", opt, x);
-                    options.insert(*opt, x);
+                    options.insert(*opt, (x, false));
                 }
             }
             OptionType::Special(s, vt) => {
                 if let Some(x) = get_option(m, opt, *vt) {
                     debug!("Setting special option {} to {:?}", opt, x);
-                    options.insert(s, x);
+                    options.insert(s, (x, false));
                 }
             }
         }
@@ -127,24 +127,24 @@ pub static OPT_ASSOC: &[(&str, OptionType)] = &[
     ("jobs", OptionType::Global("jobs", VarType::Int)),
     ("non_bs", OptionType::Local(VarType::Bool)),
     ("bs", OptionType::Local(VarType::Bool)),
-    ("merge", OptionType::Special("_merge", VarType::Bool)),
-    ("no_merge", OptionType::Special("_no_merge", VarType::Bool)),
-    ("md5", OptionType::Special("_md5", VarType::Bool)),
-    ("no_md5", OptionType::Special("_no_md5", VarType::Bool)),
-    ("index", OptionType::Special("_index", VarType::Bool)),
-    ("no_index", OptionType::Special("_no_index", VarType::Bool)),
+    ("merge", OptionType::Special("merge", VarType::Bool)),
+    ("no_merge", OptionType::Special("no_merge", VarType::Bool)),
+    ("md5", OptionType::Special("md5", VarType::Bool)),
+    ("no_md5", OptionType::Special("no_md5", VarType::Bool)),
+    ("index", OptionType::Special("index", VarType::Bool)),
+    ("no_index", OptionType::Special("no_index", VarType::Bool)),
     ("merge", OptionType::Local(VarType::Bool)),
     ("remove", OptionType::Local(VarType::Bool)),
     ("paired", OptionType::Local(VarType::Bool)),
     ("file_type", OptionType::Local(VarType::FileType)),
-    ("sample", OptionType::Special("_sample", VarType::StringVec)),
+    ("sample", OptionType::Special("sample", VarType::StringVec)),
     (
         "barcode",
-        OptionType::Special("_barcode", VarType::StringVec),
+        OptionType::Special("barcode", VarType::StringVec),
     ),
     (
         "dataset",
-        OptionType::Special("_dataset", VarType::StringVec),
+        OptionType::Special("dataset", VarType::StringVec),
     ),
     (
         "dbsnp_index",
@@ -152,9 +152,9 @@ pub static OPT_ASSOC: &[(&str, OptionType)] = &[
     ),
     (
         "list_pools",
-        OptionType::Special("_list_pools", VarType::Int),
+        OptionType::Special("list_pools", VarType::Int),
     ),
-    ("pool", OptionType::Special("_pool", VarType::StringVec)),
+    ("pool", OptionType::Special("pool", VarType::StringVec)),
     ("haploid", OptionType::Global("haploid", VarType::Bool)),
     (
         "keep_duplicates",
@@ -266,9 +266,9 @@ pub static OPT_ASSOC: &[(&str, OptionType)] = &[
         "paper_size",
         OptionType::Global("paper_size", VarType::PageSize),
     ),
-    ("mapping", OptionType::Special("_mapping", VarType::Bool)),
-    ("calling", OptionType::Special("_calling", VarType::Bool)),
-    ("pdf", OptionType::Special("_pdf", VarType::Bool)),
-    ("confirm", OptionType::Special("_confirm", VarType::Bool)),
-    ("force", OptionType::Special("_force", VarType::Bool)),
+    ("mapping", OptionType::Special("mapping", VarType::Bool)),
+    ("calling", OptionType::Special("calling", VarType::Bool)),
+    ("pdf", OptionType::Special("pdf", VarType::Bool)),
+    ("confirm", OptionType::Special("confirm", VarType::Bool)),
+    ("force", OptionType::Special("force", VarType::Bool)),
 ];

@@ -9,12 +9,12 @@ use std::collections::{HashMap, HashSet};
 
 fn get_required_asset_list(
     gem_bs: &GemBS,
-    options: &HashMap<&'static str, DataValue>,
+    options: &HashMap<&'static str, (DataValue, bool)>,
 ) -> Result<HashSet<usize>, String> {
     let make_cram = gem_bs.get_config_bool(Section::Mapping, "make_cram");
     let suffix = if make_cram { "cram" } else { "bam" };
     let mut asset_ids = HashSet::new();
-    if let Some(DataValue::StringVec(dvec)) = options.get("_dataset") {
+    if let Some((DataValue::StringVec(dvec), _)) = options.get("dataset") {
         for dataset in dvec.iter() {
             if let Some(asset) = gem_bs
                 .get_asset(format!("{}.bam", dataset).as_str())
@@ -35,7 +35,7 @@ fn get_required_asset_list(
                 return Err(format!("Unknown dataset {}", dataset));
             }
         }
-    } else if let Some(DataValue::StringVec(bvec)) = options.get("_barcode") {
+    } else if let Some((DataValue::StringVec(bvec), _)) = options.get("barcode") {
         for barcode in bvec.iter() {
             let mut id = format!("{}.{}", barcode, suffix);
             if let Some(asset) = gem_bs.get_asset(id.as_str()) {
@@ -51,7 +51,7 @@ fn get_required_asset_list(
                     .idx(),
             );
         }
-    } else if let Some(DataValue::StringVec(svec)) = options.get("_sample") {
+    } else if let Some((DataValue::StringVec(svec), _)) = options.get("sample") {
         for sample in svec.iter() {
             let mut asset = None;
             for hr in gem_bs.get_sample_data_ref().values() {
@@ -90,24 +90,24 @@ fn get_required_asset_list(
 
 fn gen_map_command(
     gem_bs: &mut GemBS,
-    options: &HashMap<&'static str, DataValue>,
+    options: &HashMap<&'static str, (DataValue, bool)>,
 ) -> Result<(), String> {
     let task_path = gem_bs.get_task_file_path();
     let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?;
     gem_bs.setup_assets_and_tasks(&flock)?;
     let mut assets = get_required_asset_list(gem_bs, &options)?;
     let mut coms = HashSet::new();
-    if !options.contains_key("_no_md5") {
+    if !options.contains_key("no_md5") {
         super::md5sum::get_assets_md5_map(gem_bs, &options, &mut assets, &mut coms)?;
     }
     if gem_bs.all() {
         [Command::Index, Command::Map].iter().for_each(|x| {
             coms.insert(*x);
         })
-    } else if !(options.contains_key("_merge") || options.contains_key("_md5")) {
+    } else if !(options.contains_key("merge") || options.contains_key("md5")) {
         coms.insert(Command::Map);
     }
-    if !options.contains_key("_no_merge") {
+    if !options.contains_key("no_merge") {
         coms.insert(Command::MergeBams);
     }
     let asset_ids: Vec<_> = assets.iter().copied().collect();
@@ -125,15 +125,15 @@ pub fn map_command(m: &ArgMatches, gem_bs: &mut GemBS) -> Result<(), String> {
     gem_bs.read_config()?;
 
     let mut options = handle_options(m, gem_bs, Section::Mapping);
-    if options.contains_key("_no_merge") {
-        options.insert("_no_md5", DataValue::Bool(true));
+    if options.contains_key("no_merge") {
+        options.insert("no_md5", (DataValue::Bool(true), true));
     }
-    if options.contains_key("_dataset") {
-        options.insert("_no_md5", DataValue::Bool(true));
-        options.insert("_no_merge", DataValue::Bool(true));
+    if options.contains_key("dataset") {
+        options.insert("no_md5", (DataValue::Bool(true), true));
+        options.insert("no_merge", (DataValue::Bool(true), true));
     }
-    if options.contains_key("_md5") {
-        options.insert("_no_merge", DataValue::Bool(true));
+    if options.contains_key("md5") {
+        options.insert("no_merge", (DataValue::Bool(true), true));
     }
     gen_map_command(gem_bs, &options)
 }

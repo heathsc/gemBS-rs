@@ -1,326 +1,443 @@
-use std::path::Path;
-use std::fs;
-use std::str::FromStr;
 use std::collections::{HashMap, HashSet};
-use std::fmt;
 use std::ffi::OsStr;
+use std::fmt;
+use std::fs;
+use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use std::io::Write;
 use std::{thread, time};
-use std::os::unix::fs::PermissionsExt;
 
-use regex::Regex;
 use lazy_static::lazy_static;
+use regex::Regex;
 
-use crate::config::GemBS;
-use crate::common::defs::{DataValue, JobLen, MemSize, Command};
+use crate::common::defs::{Command, DataValue, JobLen, MemSize};
 use crate::common::dry_run;
-use crate::common::utils::Pipeline;
 use crate::common::tasks::TaskList;
+use crate::common::utils::Pipeline;
+use crate::config::GemBS;
 use utils::log_level::LogLevel;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct SlurmDep {
-	job_ix: usize,
-	task_ix: usize,
+    job_ix: usize,
+    task_ix: usize,
 }
 
 impl fmt::Display for SlurmDep {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "[{},{}]", self.job_ix, self.task_ix) }	
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[{},{}]", self.job_ix, self.task_ix)
+    }
 }
 
 #[derive(PartialEq, Eq, Hash)]
 struct JobNode {
-	cores: usize,
-	mem: MemSize,
-	time: JobLen,
-	depend: Vec<SlurmDep>, // Index in vector of SlurmJobs	
+    cores: usize,
+    mem: MemSize,
+    time: JobLen,
+    depend: Vec<SlurmDep>, // Index in vector of SlurmJobs
 }
 
 struct SlurmJob {
-	task_vec: Vec<usize>, // Index in task_list
-	node: Rc<JobNode>,
+    task_vec: Vec<usize>, // Index in task_list
+    node: Rc<JobNode>,
 }
 
 impl SlurmJob {
-	fn new(node: Rc<JobNode>) -> Self {
-		SlurmJob{task_vec: Vec::new(), node}
-	}
+    fn new(node: Rc<JobNode>) -> Self {
+        SlurmJob {
+            task_vec: Vec::new(),
+            node,
+        }
+    }
 }
 
-fn write_sbatch_script<T: fmt::Write>(wrt: &mut T, jv: &SlurmJob, tl: &TaskList,  options: &HashMap<&'static str, DataValue>, verbose: LogLevel) -> fmt::Result {
-	writeln!(wrt, "#!/bin/sh")?;
-	let job_array = jv.task_vec.len() > 1;
-	if job_array {
-		writeln!(wrt, "coms=( \\")?;
-		for ix in jv.task_vec.iter() {
-			let task = &tl[*ix];
-			writeln!(wrt, "\"{} {}\" \\", task.command(), dry_run::get_arg_string(task, options))?;
-		}
-		writeln!(wrt, ")")?;
-		writeln!(wrt, "echo gemBS --loglevel {} ${{coms[$SLURM_ARRAY_TASK_ID]}}", verbose)?;
-		writeln!(wrt, "gemBS --loglevel {} ${{coms[$SLURM_ARRAY_TASK_ID]}}", verbose)?;
-	} else {
-		let task = &tl[jv.task_vec[0]];
-		writeln!(wrt,"gemBS {} {}",task.command(), dry_run::get_arg_string(task, options))?;			
-	}
-	Ok(())
+fn write_sbatch_script<T: fmt::Write>(
+    wrt: &mut T,
+    jv: &SlurmJob,
+    tl: &TaskList,
+    options: &HashMap<&'static str, (DataValue, bool)>,
+    verbose: LogLevel,
+) -> fmt::Result {
+    writeln!(wrt, "#!/bin/sh")?;
+    let job_array = jv.task_vec.len() > 1;
+    if job_array {
+        writeln!(wrt, "coms=( \\")?;
+        for ix in jv.task_vec.iter() {
+            let task = &tl[*ix];
+            writeln!(
+                wrt,
+                "\"{} {}\" \\",
+                task.command(),
+                dry_run::get_arg_string(task, options)
+            )?;
+        }
+        writeln!(wrt, ")")?;
+        writeln!(
+            wrt,
+            "echo gemBS --loglevel {} ${{coms[$SLURM_ARRAY_TASK_ID]}}",
+            verbose
+        )?;
+        writeln!(
+            wrt,
+            "gemBS --loglevel {} ${{coms[$SLURM_ARRAY_TASK_ID]}}",
+            verbose
+        )?;
+    } else {
+        let task = &tl[jv.task_vec[0]];
+        writeln!(
+            wrt,
+            "gemBS {} {}",
+            task.command(),
+            dry_run::get_arg_string(task, options)
+        )?;
+    }
+    Ok(())
 }
 
 fn write_sbatch_rm_script<T: fmt::Write>(wrt: &mut T, logfiles: &[String]) -> fmt::Result {
-	writeln!(wrt, "#!/bin/sh")?;
-	write!(wrt, "for f in")?;
-	for f in logfiles.iter() {
-		write!(wrt," \\\n {}", f)?;
-	}
-	writeln!(wrt,"\ndo\n rm -f slurm_logs/slurm_gemBS-${{f}}.out\ndone\necho Pipeline terminated successfully")
+    writeln!(wrt, "#!/bin/sh")?;
+    write!(wrt, "for f in")?;
+    for f in logfiles.iter() {
+        write!(wrt, " \\\n {}", f)?;
+    }
+    writeln!(wrt,"\ndo\n rm -f slurm_logs/slurm_gemBS-${{f}}.out\ndone\necho Pipeline terminated successfully")
 }
 
-fn run_sbatch<I, S>(sig: Arc<AtomicUsize>, script: String, args: I) -> Result<usize, String> 
+fn run_sbatch<I, S>(sig: Arc<AtomicUsize>, script: String, args: I) -> Result<usize, String>
 where
-	I: IntoIterator<Item = S>,
+    I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-	lazy_static! {
+    lazy_static! {
         static ref RE: Regex = Regex::new(r"^Submitted batch job (\d+)").unwrap();
-	}
-	let mut pipeline = Pipeline::new();		
-	let sbatch_path = Path::new("sbatch");
-	pipeline.add_stage(&sbatch_path, Some(args)).in_string(script).out_string().run(sig)?;
+    }
+    let mut pipeline = Pipeline::new();
+    let sbatch_path = Path::new("sbatch");
+    pipeline
+        .add_stage(&sbatch_path, Some(args))
+        .in_string(script)
+        .out_string()
+        .run(sig)?;
 
-	// We add a short delay here to avoid overloading the slurm process 
-	thread::sleep(time::Duration::from_millis(250));
-	
-	let content = pipeline.out_string_ref().expect("No output from sbatch pipeline");
-	if let Some(cap) = RE.captures(content) {
-		if let Ok(x) = <usize>::from_str(cap.get(1).unwrap().as_str()) { return Ok(x); }
-	}
-	Err(format!("Could not parse output from sbatch: {}", content))
+    // We add a short delay here to avoid overloading the slurm process
+    thread::sleep(time::Duration::from_millis(250));
+
+    let content = pipeline
+        .out_string_ref()
+        .expect("No output from sbatch pipeline");
+    if let Some(cap) = RE.captures(content) {
+        if let Ok(x) = <usize>::from_str(cap.get(1).unwrap().as_str()) {
+            return Ok(x);
+        }
+    }
+    Err(format!("Could not parse output from sbatch: {}", content))
 }
 
 fn write_script_file_prelude(file: &mut fs::File) -> std::io::Result<()> {
-	writeln!(file, "#!/usr/bin/perl\n\n# SLURM job submission script generated by gemBS\n")?;
-	writeln!(file, "use strict;\nuse warnings;\nrequire File::Temp;\nuse File::Temp qw/ :seekable /;\nuse IO::Handle;\nuse Time::HiRes qw/ usleep /;")?;
-	writeln!(file, "sub sbatch($$) {{\n  my ($args, $scr) = @_;\n  my $fh = File::Temp->new();\n  my $fname = $fh->filename;")?;
-	writeln!(file, "  print $fh $scr;\n  $fh->flush();\n  open(my $sb, \"-|\", \"sbatch $args $fname\") or die \"Couldn't start sbatch: $!\";")?;
-	writeln!(file, "  if (<$sb> =~ /^Submitted batch job (\\d+)/) {{\n    usleep(250000);\n    return $1;\n  }}\n  die \"Error running sbatch\\n\";\n}}\n")?;
-	writeln!(file, "sub handle_dep1($$) {{\n  my ($dref, $sl_id) = @_;\n  my $s = \"\";\n  for my $d(@$dref) {{")?;
-	writeln!(file, "     $s.=\":\".$$sl_id[$d];\n  }}\n  $s;\n}}\n")?;
-	writeln!(file, "sub handle_dep2($$) {{\n  my ($dref, $sl_id) = @_;\n  my $s = \"\";\n  for my $d(@$dref) {{")?;
-	writeln!(file, "     $s.=\":\".$$sl_id[$$d[0]].\"_\".$$d[1];\n  }}\n  $s;\n}}\n")?;
-	writeln!(file, "my @slurm_id = ();\nmy ($script, $sbatch_args);\nmkdir \"slurm_logs\";\n")
+    writeln!(
+        file,
+        "#!/usr/bin/perl\n\n# SLURM job submission script generated by gemBS\n"
+    )?;
+    writeln!(file, "use strict;\nuse warnings;\nrequire File::Temp;\nuse File::Temp qw/ :seekable /;\nuse IO::Handle;\nuse Time::HiRes qw/ usleep /;")?;
+    writeln!(file, "sub sbatch($$) {{\n  my ($args, $scr) = @_;\n  my $fh = File::Temp->new();\n  my $fname = $fh->filename;")?;
+    writeln!(file, "  print $fh $scr;\n  $fh->flush();\n  open(my $sb, \"-|\", \"sbatch $args $fname\") or die \"Couldn't start sbatch: $!\";")?;
+    writeln!(file, "  if (<$sb> =~ /^Submitted batch job (\\d+)/) {{\n    usleep(250000);\n    return $1;\n  }}\n  die \"Error running sbatch\\n\";\n}}\n")?;
+    writeln!(file, "sub handle_dep1($$) {{\n  my ($dref, $sl_id) = @_;\n  my $s = \"\";\n  for my $d(@$dref) {{")?;
+    writeln!(file, "     $s.=\":\".$$sl_id[$d];\n  }}\n  $s;\n}}\n")?;
+    writeln!(file, "sub handle_dep2($$) {{\n  my ($dref, $sl_id) = @_;\n  my $s = \"\";\n  for my $d(@$dref) {{")?;
+    writeln!(
+        file,
+        "     $s.=\":\".$$sl_id[$$d[0]].\"_\".$$d[1];\n  }}\n  $s;\n}}\n"
+    )?;
+    writeln!(
+        file,
+        "my @slurm_id = ();\nmy ($script, $sbatch_args);\nmkdir \"slurm_logs\";\n"
+    )
 }
 
-fn write_dep_array_handler<T: fmt::Display>(file: &mut fs::File, d: &[T], name: &str, fn_name: &str) -> std::io::Result<()> {
-	if !d.is_empty() {
-		write!(file, "  my @{} = ", name)?;
-		let mut sep = '(';
-		for x in d.iter() {
-			write!(file, "{}{}", sep, x)?;
-			sep = ',';
-		}
-		writeln!(file, ");\n  $dep_str.={}(\\@{}, \\@slurm_id);", fn_name, name)?;
-	}
-	Ok(())
+fn write_dep_array_handler<T: fmt::Display>(
+    file: &mut fs::File,
+    d: &[T],
+    name: &str,
+    fn_name: &str,
+) -> std::io::Result<()> {
+    if !d.is_empty() {
+        write!(file, "  my @{} = ", name)?;
+        let mut sep = '(';
+        for x in d.iter() {
+            write!(file, "{}{}", sep, x)?;
+            sep = ',';
+        }
+        writeln!(
+            file,
+            ");\n  $dep_str.={}(\\@{}, \\@slurm_id);",
+            fn_name, name
+        )?;
+    }
+    Ok(())
 }
 
-fn write_array_as_str<T: fmt::Display>(file: &mut fs::File, d: &[T], desc: &str) -> std::io::Result<()> {
-	if !d.is_empty() {
-		write!(file, "{}", desc)?;
-		let mut sep = '\"';
-		for x in d.iter() {
-			write!(file, "{}{}", sep, x)?;
-			sep = ' ';
-		}
-		writeln!(file, "\";")?;
-	}
-	Ok(())
+fn write_array_as_str<T: fmt::Display>(
+    file: &mut fs::File,
+    d: &[T],
+    desc: &str,
+) -> std::io::Result<()> {
+    if !d.is_empty() {
+        write!(file, "{}", desc)?;
+        let mut sep = '\"';
+        for x in d.iter() {
+            write!(file, "{}{}", sep, x)?;
+            sep = ' ';
+        }
+        writeln!(file, "\";")?;
+    }
+    Ok(())
 }
 
 // Prepare job graph and submit to slurm
-pub fn handle_slurm(gem_bs: &GemBS, options: &HashMap<&'static str, DataValue>, task_list: &[usize]) -> Result<(), String> {
-	let _ = fs::create_dir("slurm_logs");
-	let mut job_vec: Vec<SlurmJob> = Vec::new();
-	let mut slurm_id = Vec::new();
-	let mut job_hash: HashMap<Rc<JobNode>, usize> = HashMap::new();
-	let mut task_hash: HashMap<usize, SlurmDep> = HashMap::new();
-	let ferr = |e| {format!("{}", e)};
-	let mut file = if let Some(s) = gem_bs.slurm_script() {
-		match fs::File::create(Path::new(s)) {
-			Ok(f) => {
-		 		let metadata = f.metadata().map_err(ferr)?;
-    			let mut perm = metadata.permissions();
-				perm.set_mode(0o755);
-				f.set_permissions(perm).map_err(ferr)?;
-				Some(f)
-			},
-			Err(e) => return Err(format!("Couldn't open script file {} for output: {}", s, e)),
-		}
-	} else { None };
-	
-	if let Some(ref mut f) = file { write_script_file_prelude(f).map_err(|e| format!("Error writing perl file header: {}", e))?; }
-	for ix in task_list.iter().filter(|i| gem_bs.get_tasks()[**i].command() != Command::MergeCallJsons) {
-		let task = &gem_bs.get_tasks()[*ix];
-		let depend = {
-			let mut t = Vec::new();
-			for i in task.parents().iter() {
-				match task_hash.get(i) {
-					Some(x) => t.push(*x),
-					None => {
-						let ptask = &gem_bs.get_tasks()[*i];
-						if ptask.command() == Command::MergeCallJsons {
-							for j in ptask.parents().iter() {
-								if let Some(x) = task_hash.get(j) { t.push(*x) }
-							}
-						}
-					},
-				}
-			}
-			t
-		};
-		let cores = task.cores().unwrap_or(1);
-		let mem = task.memory().unwrap_or_else(|| MemSize::from(0x400000000)); // 1G
-		let time = task.time().unwrap_or_else(|| JobLen::from(3600)); // 1hr
-		let node = JobNode{cores, mem, time, depend};
-		let job_ix = if let Some(i) = job_hash.get(&node) {
-			job_vec[*i].task_vec.push(*ix);
-			SlurmDep{job_ix: *i, task_ix: job_vec[*i].task_vec.len() - 1}
-		} else {
-			let node_rc = Rc::new(node);
-			let mut job = SlurmJob::new(node_rc.clone());
-			job.task_vec.push(*ix);
-			let x = job_vec.len();
-			job_vec.push(job);
-			job_hash.insert(node_rc.clone(), x);
-			SlurmDep{job_ix: x, task_ix: 0}
-		};
-		task_hash.insert(*ix, job_ix);
-	}
-	let verbose = gem_bs.verbose();
-	let mut dep_hash = HashSet::new();
-	
-	for jv in job_vec.iter() {
-		let mut script = String::new(); 
-		write_sbatch_script(&mut script, jv, gem_bs.get_tasks(), options, verbose).map_err(|e| format!("Error writing sbatch script: {}", e))?;
-		let mut sbatch_args = Vec::new();
-		let mut hs = HashSet::new();
-		let mut desc = String::from("gemBS");
-		for ix in jv.task_vec.iter() {
-			let task = &gem_bs.get_tasks()[*ix];
-			if hs.insert(task.command()) {
-				desc.push_str(format!("_{:#}",task.command()).as_str());
-			}
-		}
-		sbatch_args.push(format!("--job-name={}", desc));
-		sbatch_args.push(format!("--cpus-per-task={}", jv.node.cores));
-		sbatch_args.push(format!("--mem={:#}", jv.node.mem));
-		sbatch_args.push(format!("--time={}", jv.node.time));
-		sbatch_args.push("--no-requeue".to_string());
-		if jv.task_vec.len() > 1 { 
-			sbatch_args.push(format!("--array=0-{}", jv.task_vec.len() - 1)); 
-			sbatch_args.push("--output=slurm_logs/slurm_gemBS-%A_%a.out".to_string());
-		} else { sbatch_args.push("--output=slurm_logs/slurm_gemBS-%j.out".to_string()); }
-		if let Some(ref mut f) = file {
-			writeln!(f, "print \"Submitting job: {}\\n\";", desc).map_err(ferr)?;
-			write_array_as_str(f, &sbatch_args, "$sbatch_args = ").map_err(ferr)?;
-			if !jv.node.depend.is_empty() {
-				let mut dep1 = Vec::new();
-				let mut dep2 = Vec::new();
-				for ix in jv.node.depend.iter() {
-					let jv1 = &job_vec[ix.job_ix];
-					if jv1.task_vec.len() > 1 { dep2.push(ix); }
-					else { dep1.push(ix.job_ix); }
-					dep_hash.insert(ix);
-				}
-				writeln!(f, "{{\n  my $dep_str = \" --dependency=afterok\";").map_err(ferr)?;
-				write_dep_array_handler(f, &dep1, "dep1", "handle_dep1").map_err(ferr)?;
-				write_dep_array_handler(f, &dep2, "dep2", "handle_dep2").map_err(ferr)?;
-				writeln!(f, "  $sbatch_args.=$dep_str;\n}}").map_err(ferr)?;
-			}
-			writeln!(f, "$script = <<'EOF';\n{}EOF", script).map_err(ferr)?;
-			writeln!(f, "push @slurm_id, sbatch($sbatch_args, $script);\n").map_err(ferr)?;	
-		} else {
-			if !jv.node.depend.is_empty() {
-				let mut t = String::from("--dependency=afterok");
-				for ix in jv.node.depend.iter() {
-					let jv1 = &job_vec[ix.job_ix];
-					let slurm_job_id = slurm_id[ix.job_ix];
-					let job_id = if jv1.task_vec.len() > 1 {
-						format!(":{}_{}", slurm_job_id, ix.task_ix)
-					} else {
-						format!(":{}", slurm_job_id)
-					};
-					t.push_str(job_id.as_str());
-					dep_hash.insert(ix);
-				}
-				sbatch_args.push(t);
-			}
-			slurm_id.push(run_sbatch(gem_bs.get_signal_clone(), script, &sbatch_args)?);
-		}
-	}
-	let mut logfiles = Vec::new();
-	let mut deps = String::new();
-	if let Some(ref mut f) = file {
-		let mut dep1 = Vec::new();
-		let mut dep2 = Vec::new();
-		for (ix, jv) in job_vec.iter().enumerate() {
-			let len = jv.task_vec.len();
-			if len == 1 {
-				let sdep = SlurmDep{job_ix: ix, task_ix: 0};
-				if ! dep_hash.contains(&sdep) { dep1.push(ix) }
-				logfiles.push(format!("ID_{}", ix));
-			} else {
-				for i in 0..len {
-					let sdep = SlurmDep{job_ix: ix, task_ix: i};
-					if ! dep_hash.contains(&sdep) { dep2.push(sdep) }
-					logfiles.push(format!("ID_{}_{}", ix, i));
-				}
-			}
-		}
-		writeln!(f, "my $dep_str = \"\";").map_err(ferr)?;
-		if !(dep1.is_empty() && dep2.is_empty()) {
-			writeln!(f, "{{\n  $dep_str = \" --dependency=afterok\";").map_err(ferr)?;
-			write_dep_array_handler(f, &dep1, "dep1", "handle_dep1").map_err(ferr)?;
-			write_dep_array_handler(f, &dep2, "dep2", "handle_dep2").map_err(ferr)?;
-			writeln!(f, "}}").map_err(ferr)?;
-		} 
-	} else {
-		for (ix, jv) in job_vec.iter().enumerate() {
-			let len = jv.task_vec.len();
-			let job_id = slurm_id[ix];
-			if len == 1 {
-				let sdep = SlurmDep{job_ix: ix, task_ix: 0};
-				if ! dep_hash.contains(&sdep) { deps.push_str(format!(":{}", job_id).as_str()); }
-				logfiles.push(format!("{}", job_id));
-			} else {
-				for i in 0..len {
-					let sdep = SlurmDep{job_ix: ix, task_ix: i};
-					if ! dep_hash.contains(&sdep) { deps.push_str(format!(":{}_{}", job_id, i).as_str()); }
-					logfiles.push(format!("{}_{}", job_id, i));
-				}
-			}
-		}
-	}
-	if ! logfiles.is_empty() {
-		let mut script = String::new();
-		write_sbatch_rm_script(&mut script, &logfiles).map_err(|e| format!("Error writing sbatch script: {}", e))?;
-		let mut sbatch_args = vec!("--job-name=gemBS_clean_logfiles", "--cpus-per-task=1", "--time=10", "--no-requeue", "--output=slurm_logs/slurm_gemBS_pipeline.out");
-		if let Some(ref mut f) = file {
-			writeln!(f, "print \"Submitting job: clean_logfiles\\n\";").map_err(ferr)?;
-			write_array_as_str(f, &sbatch_args, "$sbatch_args = ").map_err(ferr)?;
-			writeln!(f, "$sbatch_args .= $dep_str;").map_err(ferr)?;	
-			writeln!(f, "$script = <<'EOF';\n{}EOF", script).map_err(ferr)?;
-			writeln!(f, "$script=~s/ID_(\\d+)/$slurm_id[$1]/g;").map_err(ferr)?;
-			writeln!(f, "push @slurm_id, sbatch($sbatch_args, $script);").map_err(ferr)?;				
-		} else {		
-			if ! deps.is_empty() { 
-				deps = format!("--dependency=afterok{}", deps); 
-				sbatch_args.push(deps.as_str());
-			}
-			slurm_id.push(run_sbatch(gem_bs.get_signal_clone(), script, &sbatch_args)?);
-		}
-	}
-	Ok(())
+pub fn handle_slurm(
+    gem_bs: &GemBS,
+    options: &HashMap<&'static str, (DataValue, bool)>,
+    task_list: &[usize],
+) -> Result<(), String> {
+    let _ = fs::create_dir("slurm_logs");
+    let mut job_vec: Vec<SlurmJob> = Vec::new();
+    let mut slurm_id = Vec::new();
+    let mut job_hash: HashMap<Rc<JobNode>, usize> = HashMap::new();
+    let mut task_hash: HashMap<usize, SlurmDep> = HashMap::new();
+    let ferr = |e| format!("{}", e);
+    let mut file = if let Some(s) = gem_bs.slurm_script() {
+        match fs::File::create(Path::new(s)) {
+            Ok(f) => {
+                let metadata = f.metadata().map_err(ferr)?;
+                let mut perm = metadata.permissions();
+                perm.set_mode(0o755);
+                f.set_permissions(perm).map_err(ferr)?;
+                Some(f)
+            }
+            Err(e) => return Err(format!("Couldn't open script file {} for output: {}", s, e)),
+        }
+    } else {
+        None
+    };
+
+    if let Some(ref mut f) = file {
+        write_script_file_prelude(f)
+            .map_err(|e| format!("Error writing perl file header: {}", e))?;
+    }
+    for ix in task_list
+        .iter()
+        .filter(|i| gem_bs.get_tasks()[**i].command() != Command::MergeCallJsons)
+    {
+        let task = &gem_bs.get_tasks()[*ix];
+        let depend = {
+            let mut t = Vec::new();
+            for i in task.parents().iter() {
+                match task_hash.get(i) {
+                    Some(x) => t.push(*x),
+                    None => {
+                        let ptask = &gem_bs.get_tasks()[*i];
+                        if ptask.command() == Command::MergeCallJsons {
+                            for j in ptask.parents().iter() {
+                                if let Some(x) = task_hash.get(j) {
+                                    t.push(*x)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            t
+        };
+        let cores = task.cores().unwrap_or(1);
+        let mem = task.memory().unwrap_or_else(|| MemSize::from(0x400000000)); // 1G
+        let time = task.time().unwrap_or_else(|| JobLen::from(3600)); // 1hr
+        let node = JobNode {
+            cores,
+            mem,
+            time,
+            depend,
+        };
+        let job_ix = if let Some(i) = job_hash.get(&node) {
+            job_vec[*i].task_vec.push(*ix);
+            SlurmDep {
+                job_ix: *i,
+                task_ix: job_vec[*i].task_vec.len() - 1,
+            }
+        } else {
+            let node_rc = Rc::new(node);
+            let mut job = SlurmJob::new(node_rc.clone());
+            job.task_vec.push(*ix);
+            let x = job_vec.len();
+            job_vec.push(job);
+            job_hash.insert(node_rc.clone(), x);
+            SlurmDep {
+                job_ix: x,
+                task_ix: 0,
+            }
+        };
+        task_hash.insert(*ix, job_ix);
+    }
+    let verbose = gem_bs.verbose();
+    let mut dep_hash = HashSet::new();
+
+    for jv in job_vec.iter() {
+        let mut script = String::new();
+        write_sbatch_script(&mut script, jv, gem_bs.get_tasks(), options, verbose)
+            .map_err(|e| format!("Error writing sbatch script: {}", e))?;
+        let mut sbatch_args = Vec::new();
+        let mut hs = HashSet::new();
+        let mut desc = String::from("gemBS");
+        for ix in jv.task_vec.iter() {
+            let task = &gem_bs.get_tasks()[*ix];
+            if hs.insert(task.command()) {
+                desc.push_str(format!("_{:#}", task.command()).as_str());
+            }
+        }
+        sbatch_args.push(format!("--job-name={}", desc));
+        sbatch_args.push(format!("--cpus-per-task={}", jv.node.cores));
+        sbatch_args.push(format!("--mem={:#}", jv.node.mem));
+        sbatch_args.push(format!("--time={}", jv.node.time));
+        sbatch_args.push("--no-requeue".to_string());
+        if jv.task_vec.len() > 1 {
+            sbatch_args.push(format!("--array=0-{}", jv.task_vec.len() - 1));
+            sbatch_args.push("--output=slurm_logs/slurm_gemBS-%A_%a.out".to_string());
+        } else {
+            sbatch_args.push("--output=slurm_logs/slurm_gemBS-%j.out".to_string());
+        }
+        if let Some(ref mut f) = file {
+            writeln!(f, "print \"Submitting job: {}\\n\";", desc).map_err(ferr)?;
+            write_array_as_str(f, &sbatch_args, "$sbatch_args = ").map_err(ferr)?;
+            if !jv.node.depend.is_empty() {
+                let mut dep1 = Vec::new();
+                let mut dep2 = Vec::new();
+                for ix in jv.node.depend.iter() {
+                    let jv1 = &job_vec[ix.job_ix];
+                    if jv1.task_vec.len() > 1 {
+                        dep2.push(ix);
+                    } else {
+                        dep1.push(ix.job_ix);
+                    }
+                    dep_hash.insert(ix);
+                }
+                writeln!(f, "{{\n  my $dep_str = \" --dependency=afterok\";").map_err(ferr)?;
+                write_dep_array_handler(f, &dep1, "dep1", "handle_dep1").map_err(ferr)?;
+                write_dep_array_handler(f, &dep2, "dep2", "handle_dep2").map_err(ferr)?;
+                writeln!(f, "  $sbatch_args.=$dep_str;\n}}").map_err(ferr)?;
+            }
+            writeln!(f, "$script = <<'EOF';\n{}EOF", script).map_err(ferr)?;
+            writeln!(f, "push @slurm_id, sbatch($sbatch_args, $script);\n").map_err(ferr)?;
+        } else {
+            if !jv.node.depend.is_empty() {
+                let mut t = String::from("--dependency=afterok");
+                for ix in jv.node.depend.iter() {
+                    let jv1 = &job_vec[ix.job_ix];
+                    let slurm_job_id = slurm_id[ix.job_ix];
+                    let job_id = if jv1.task_vec.len() > 1 {
+                        format!(":{}_{}", slurm_job_id, ix.task_ix)
+                    } else {
+                        format!(":{}", slurm_job_id)
+                    };
+                    t.push_str(job_id.as_str());
+                    dep_hash.insert(ix);
+                }
+                sbatch_args.push(t);
+            }
+            slurm_id.push(run_sbatch(gem_bs.get_signal_clone(), script, &sbatch_args)?);
+        }
+    }
+    let mut logfiles = Vec::new();
+    let mut deps = String::new();
+    if let Some(ref mut f) = file {
+        let mut dep1 = Vec::new();
+        let mut dep2 = Vec::new();
+        for (ix, jv) in job_vec.iter().enumerate() {
+            let len = jv.task_vec.len();
+            if len == 1 {
+                let sdep = SlurmDep {
+                    job_ix: ix,
+                    task_ix: 0,
+                };
+                if !dep_hash.contains(&sdep) {
+                    dep1.push(ix)
+                }
+                logfiles.push(format!("ID_{}", ix));
+            } else {
+                for i in 0..len {
+                    let sdep = SlurmDep {
+                        job_ix: ix,
+                        task_ix: i,
+                    };
+                    if !dep_hash.contains(&sdep) {
+                        dep2.push(sdep)
+                    }
+                    logfiles.push(format!("ID_{}_{}", ix, i));
+                }
+            }
+        }
+        writeln!(f, "my $dep_str = \"\";").map_err(ferr)?;
+        if !(dep1.is_empty() && dep2.is_empty()) {
+            writeln!(f, "{{\n  $dep_str = \" --dependency=afterok\";").map_err(ferr)?;
+            write_dep_array_handler(f, &dep1, "dep1", "handle_dep1").map_err(ferr)?;
+            write_dep_array_handler(f, &dep2, "dep2", "handle_dep2").map_err(ferr)?;
+            writeln!(f, "}}").map_err(ferr)?;
+        }
+    } else {
+        for (ix, jv) in job_vec.iter().enumerate() {
+            let len = jv.task_vec.len();
+            let job_id = slurm_id[ix];
+            if len == 1 {
+                let sdep = SlurmDep {
+                    job_ix: ix,
+                    task_ix: 0,
+                };
+                if !dep_hash.contains(&sdep) {
+                    deps.push_str(format!(":{}", job_id).as_str());
+                }
+                logfiles.push(format!("{}", job_id));
+            } else {
+                for i in 0..len {
+                    let sdep = SlurmDep {
+                        job_ix: ix,
+                        task_ix: i,
+                    };
+                    if !dep_hash.contains(&sdep) {
+                        deps.push_str(format!(":{}_{}", job_id, i).as_str());
+                    }
+                    logfiles.push(format!("{}_{}", job_id, i));
+                }
+            }
+        }
+    }
+    if !logfiles.is_empty() {
+        let mut script = String::new();
+        write_sbatch_rm_script(&mut script, &logfiles)
+            .map_err(|e| format!("Error writing sbatch script: {}", e))?;
+        let mut sbatch_args = vec![
+            "--job-name=gemBS_clean_logfiles",
+            "--cpus-per-task=1",
+            "--time=10",
+            "--no-requeue",
+            "--output=slurm_logs/slurm_gemBS_pipeline.out",
+        ];
+        if let Some(ref mut f) = file {
+            writeln!(f, "print \"Submitting job: clean_logfiles\\n\";").map_err(ferr)?;
+            write_array_as_str(f, &sbatch_args, "$sbatch_args = ").map_err(ferr)?;
+            writeln!(f, "$sbatch_args .= $dep_str;").map_err(ferr)?;
+            writeln!(f, "$script = <<'EOF';\n{}EOF", script).map_err(ferr)?;
+            writeln!(f, "$script=~s/ID_(\\d+)/$slurm_id[$1]/g;").map_err(ferr)?;
+            writeln!(f, "push @slurm_id, sbatch($sbatch_args, $script);").map_err(ferr)?;
+        } else {
+            if !deps.is_empty() {
+                deps = format!("--dependency=afterok{}", deps);
+                sbatch_args.push(deps.as_str());
+            }
+            slurm_id.push(run_sbatch(gem_bs.get_signal_clone(), script, &sbatch_args)?);
+        }
+    }
+    Ok(())
 }
