@@ -392,43 +392,10 @@ fn create_mapq_hist(path: &Path, json: &MapJson) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-/// This is a workaround for a bug in the plotters crate where if we send it too many points the plotter.
-/// will go into an endless loop.  We get around this by making an iterator that will sub-sample points if required.
-const MAX_PLOT_SIZE: usize = 1500;
-
-struct IdxIter<'a> {
-    slice: &'a [(usize, usize)],
-    remaining_space: usize,
-}
-
-impl<'a> IdxIter<'a> {
-    fn new(slice: &'a [(usize, usize)]) -> Self {
-        Self {
-            slice,
-            remaining_space: MAX_PLOT_SIZE,
-        }
-    }
-}
-impl<'a> Iterator for IdxIter<'a> {
-    type Item = (usize, usize);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.remaining_space == 0 || self.slice.is_empty() {
-            None
-        } else {
-            let n = self.slice.len();
-            let x = self.slice[0];
-            let a = if n <= self.remaining_space {
-                1
-            } else {
-                ((n as f64) / (self.remaining_space as f64)).round() as usize
-            };
-            self.slice = &self.slice[a..];
-            self.remaining_space -= 1;
-            Some(x)
-        }
-    }
-}
+/// Work around for a bug in plotters - it will hang if the number of points is too large and/oor
+/// the range is too large.  Restricting ourselves to a max insert size of 1000 (which is
+/// with current sample prep kits) avoids these issues
+const MAX_INSERT_SIZE: usize = 1000;
 
 fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::error::Error>> {
     debug!("Making isize hist: {}", path.display());
@@ -438,10 +405,17 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
     let mut tl = Vec::new();
     let mut total = 0;
     for (ix, y) in tlen.iter() {
-        total += y;
-        tl.push((<usize>::from_str(ix).map_err(|e| format!("{}", e))?, *y));
+        let x = <usize>::from_str(ix).map_err(|e| format!("{}", e))?;
+        if x <= MAX_INSERT_SIZE {
+            total += y;
+            tl.push((x, *y));
+        }
     }
-    debug!("Sorting isize vector: {}", path.display());
+    debug!(
+        "Sorting isize vector (size {}): {}",
+        tl.len(),
+        path.display()
+    );
     tl.sort_by(|a, b| a.0.cmp(&b.0));
     let mut tmp = 0;
     let mut tmp0 = 0;
@@ -498,7 +472,7 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
     debug!("Drawing isize chart: {}", path.display());
 
     chart.draw_series(LineSeries::new(
-        IdxIter::new(&tl[x0..=x1]),
+        tl[x0..=x1].iter().map(|(x, y)| (*x, *y)),
         Into::<ShapeStyle>::into(&RED).stroke_width(3),
     ))?;
     debug!("Finished isize hist: {}", path.display());
