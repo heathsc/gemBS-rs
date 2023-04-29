@@ -61,9 +61,11 @@
         \rule{\textwidth}{1pt} \\[0.8 cm]
 
          \begin{tabular*}{\textwidth}{l@{} l@{}}
-           \emph{Project:\quad } &  \projectname \\ 
-           \emph{Sample(s):\quad } &
-			  \parbox{0.8\linewidth}{\raggedright\samples} \\
+           \emph{Project:\quad } &  \projectname \\
+			  \ifdefined\samples
+             \emph{Sample(s):\quad } &
+			    \parbox{0.8\linewidth}{\raggedright\samples} \\
+			  \fi
 			  \ifdefined\finishdate
              \emph{Date of report: \quad } & \finishdate \\
 			  \fi

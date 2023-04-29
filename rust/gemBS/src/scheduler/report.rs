@@ -7,7 +7,7 @@ use super::{QPipe, QPipeCom};
 use crate::common::assets::GetAsset;
 use crate::common::defs::{Command, DataValue, Metadata, Section};
 use crate::common::json_call_stats::CallJson;
-use crate::common::latex_utils::PageSize;
+use crate::common::latex_utils::{latex_escape_str, PageSize};
 use crate::common::utils::check_signal;
 use crate::config::GemBS;
 use utils::compress;
@@ -155,6 +155,90 @@ pub fn make_call_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
     pipeline
 }
 
+#[derive(Debug)]
+pub struct ReportOptions {
+    pub page_size: PageSize,
+    pub pdf: bool,
+    pub extras_path: PathBuf,
+    pub comment: Option<String>,
+    pub project: Option<String>,
+    pub collaborator_name: Option<String>,
+    pub collaborator_email: Option<String>,
+    pub analyst_name: Option<String>,
+    pub analyst_team: Option<String>,
+    pub analyst_email: Option<String>,
+    pub latex_template: Option<String>,
+    pub extra_latex_files: Option<Vec<String>>,
+    pub analysis_start_date: Option<String>,
+    pub analysis_end_date: Option<String>,
+    pub samples: Vec<(String, Option<String>)>,
+}
+
+impl ReportOptions {
+    fn from_gem_bs(gem_bs: &GemBS) -> Self {
+        let page_size = if let Some(DataValue::PageSize(s)) =
+            gem_bs.get_config(Section::Report, "paper_size")
+        {
+            *s
+        } else {
+            PageSize::A4
+        };
+        let pdf = gem_bs.get_config_bool(Section::Report, "pdf");
+        let comment = gem_bs
+            .get_config_str(Section::Report, "comment")
+            .map(|x| latex_escape_str(x));
+        let project = gem_bs
+            .get_config_str(Section::Report, "project")
+            .map(|x| latex_escape_str(x));
+        let collaborator_name = gem_bs
+            .get_config_str(Section::Report, "collaborator_name")
+            .map(|x| latex_escape_str(x));
+        let collaborator_email = gem_bs
+            .get_config_str(Section::Report, "collaborator_email")
+            .map(|x| latex_escape_str(x));
+        let analyst_name = gem_bs
+            .get_config_str(Section::Report, "analyst_name")
+            .map(|x| latex_escape_str(x));
+        let analyst_team = gem_bs
+            .get_config_str(Section::Report, "analyst_team")
+            .map(|x| latex_escape_str(x));
+        let analyst_email = gem_bs
+            .get_config_str(Section::Report, "analyst_email")
+            .map(|x| latex_escape_str(x));
+        let latex_template = gem_bs
+            .get_config_str(Section::Report, "latex_template")
+            .map(|x| x.to_owned());
+        let extra_latex_files = gem_bs
+            .get_config_stringvec(Section::Report, "extra_latex_files")
+            .map(|x| x.to_owned());
+        let analysis_start_date = gem_bs
+            .get_config_str(Section::Report, "analysis_start_date")
+            .map(|x| latex_escape_str(x));
+        let analysis_end_date = gem_bs
+            .get_config_str(Section::Report, "analysis_end_date")
+            .map(|x| latex_escape_str(x));
+        let extras_path = gem_bs.get_latex_extras_path();
+        let samples = gem_bs.get_samples();
+        Self {
+            page_size,
+            extras_path,
+            pdf,
+            comment,
+            project,
+            collaborator_name,
+            collaborator_email,
+            analyst_name,
+            analyst_team,
+            analyst_email,
+            latex_template,
+            extra_latex_files,
+            analysis_start_date,
+            analysis_end_date,
+            samples,
+        }
+    }
+}
+
 pub fn make_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
     let task = &gem_bs.get_tasks()[job];
     let mut pipeline = QPipe::new(gem_bs.get_signal_clone());
@@ -166,17 +250,8 @@ pub fn make_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
                 .path(),
         );
     }
-    let project = gem_bs
-        .get_config_str(Section::Report, "project")
-        .map(|x| x.to_owned());
-    let page_size =
-        if let Some(DataValue::PageSize(s)) = gem_bs.get_config(Section::Report, "paper_size") {
-            *s
-        } else {
-            PageSize::A4
-        };
-    let pdf = gem_bs.get_config_bool(Section::Report, "pdf");
-    let com = QPipeCom::Report((project, page_size, pdf));
+    let rep_opt = ReportOptions::from_gem_bs(gem_bs);
+    let com = QPipeCom::Report(rep_opt);
     pipeline.add_com(com);
     pipeline
 }

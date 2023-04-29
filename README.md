@@ -88,6 +88,8 @@ Documentation can be found at
 ----------
 Changelog:
 ----------
+    4.2.0 Move to new system to make latex top level doc allowing more
+          flexibility.
     4.1.5 Ensure that all user supplied options are passed on to slurm scripts
     4.1.4 Workaround for bug in plotters crate which could cause the
           generation of insertion size historgrams to hang

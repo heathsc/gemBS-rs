@@ -9,15 +9,18 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::{mpsc, Arc};
 use std::{fs, thread, time};
 
-use crate::commands::report::{make_call_report, make_map_report, make_report};
-use crate::common::assets::GetAsset;
-use crate::common::defs::{Command, DataValue, Section, VarType};
-use crate::common::latex_utils::PageSize;
-use crate::common::tasks::{RunningTask, TaskStatus};
-use crate::common::utils;
-use crate::common::utils::{FileLock, Pipeline};
-use crate::config::GemBS;
+use crate::{
+    commands::report::{make_call_report, make_map_report, make_report},
+    common::{
+        assets::GetAsset,
+        defs::{Command, DataValue, Section, VarType},
+        tasks::{RunningTask, TaskStatus},
+        utils::{self, FileLock, Pipeline},
+    },
+    config::GemBS,
+};
 
+use crate::scheduler::report::ReportOptions;
 use report::{CallJsonFiles, MergeJsonFiles, SampleJsonFiles};
 
 pub mod call;
@@ -365,14 +368,14 @@ impl<'a> Scheduler<'a> {
 pub enum QPipeCom {
     MapReport((Option<String>, PathBuf, usize, usize, Vec<SampleJsonFiles>)),
     CallReport((Option<String>, PathBuf, usize, Vec<CallJsonFiles>)),
-    Report((Option<String>, PageSize, bool)),
+    Report(ReportOptions),
     MergeCallJsons(MergeJsonFiles),
 }
 
 #[derive(Debug)]
 pub enum QPipeStage {
     External(Vec<(PathBuf, String)>),
-    Internal(QPipeCom),
+    Internal(Box<QPipeCom>),
     None,
 }
 
@@ -410,7 +413,7 @@ impl QPipe {
     }
     pub fn add_com(&mut self, com: QPipeCom) -> &mut Self {
         if let QPipeStage::None = self.stages {
-            self.stages = QPipeStage::Internal(com)
+            self.stages = QPipeStage::Internal(Box::new(com))
         } else {
             panic!("Can't add internal command to existing pipeline")
         }
@@ -507,7 +510,7 @@ fn worker_thread(
                         res
                     }
                     QPipeStage::Internal(com) => {
-                        let ret = match com {
+                        let ret = match *com {
                             QPipeCom::MergeCallJsons(x) => {
                                 report::merge_call_jsons(Arc::clone(&qpipe.sig), &qpipe.outputs, &x)
                             }
@@ -532,24 +535,24 @@ fn worker_thread(
                                     x,
                                 )
                             }
-                            QPipeCom::Report((prj, page_size, pdf)) => make_report::make_report(
+                            QPipeCom::Report(rep_opt) => make_report::make_report(
                                 Arc::clone(&qpipe.sig),
                                 &qpipe.outputs,
-                                prj,
-                                page_size,
-                                pdf,
+                                rep_opt,
                             ),
                         };
-                        if ret.is_err() {
-                            error!("Error returned from internal pipeline command");
+                        if let Err(e) = ret {
+                            error!("Error returned from internal pipeline command {}", e);
                             for file in qpipe.outputs.iter() {
                                 if file.exists() {
                                     warn!("Removing output file {}", file.to_string_lossy());
                                     let _ = fs::remove_file(file);
                                 }
                             }
+                            Err(e)
+                        } else {
+                            ret
                         }
-                        ret
                     }
                     QPipeStage::None => Err("No pipeline stages".to_string()),
                 };
@@ -559,7 +562,7 @@ fn worker_thread(
                         if rm_log {
                             trace!("Removing log file {:?}", log);
                             if let Some(lfile) = log {
-                                if let Err(e) = std::fs::remove_file(&lfile) {
+                                if let Err(e) = fs::remove_file(&lfile) {
                                     error!(
                                         "Could not remove log file {}: {}",
                                         lfile.to_string_lossy(),
@@ -570,7 +573,7 @@ fn worker_thread(
                         }
                         for p in rm_list.iter() {
                             trace!("Removing file {} after normal task completion", p.display());
-                            if let Err(e) = std::fs::remove_file(&p) {
+                            if let Err(e) = fs::remove_file(&p) {
                                 error!("Could not remove file {}: {}", p.to_string_lossy(), e);
                             }
                         }

@@ -274,7 +274,25 @@ fn make_known_var_list() -> KnownVarList {
         vec![Section::Extract],
     );
     kv_list.add_known_var("strand_specific", VarType::Bool, vec![Section::Extract]);
+    kv_list.add_known_var("comment", VarType::String, vec![Section::Report]);
     kv_list.add_known_var("project", VarType::String, vec![Section::Report]);
+    kv_list.add_known_var("collaborator_name", VarType::String, vec![Section::Report]);
+    kv_list.add_known_var("collaborator_email", VarType::String, vec![Section::Report]);
+    kv_list.add_known_var("analyst_name", VarType::String, vec![Section::Report]);
+    kv_list.add_known_var("analyst_team", VarType::String, vec![Section::Report]);
+    kv_list.add_known_var("analyst_email", VarType::String, vec![Section::Report]);
+    kv_list.add_known_var("latex_template", VarType::String, vec![Section::Report]);
+    kv_list.add_known_var(
+        "extra_latex_files",
+        VarType::StringVec,
+        vec![Section::Report],
+    );
+    kv_list.add_known_var(
+        "analysis_start_date",
+        VarType::String,
+        vec![Section::Report],
+    );
+    kv_list.add_known_var("analysis_end_date", VarType::String, vec![Section::Report]);
     kv_list.add_known_var("report_dir", VarType::String, vec![Section::Report]);
     kv_list.add_known_var("paper_size", VarType::PageSize, vec![Section::Report]);
     kv_list.add_known_var("pdf", VarType::Bool, vec![Section::Report]);
@@ -586,14 +604,14 @@ impl PrepConfig {
                         }
                         _ => {
                             if let DataValue::String(var_str) = &pv.var {
-                                Some(DataValue::from_str(&var_str, pv.vtype)?)
+                                Some(DataValue::from_str(var_str, pv.vtype)?)
                             } else {
                                 None
                             }
                         }
                     };
                     if let Some(v) = rv {
-                        gem_bs.set_config(pv.section, &name, v);
+                        gem_bs.set_config(pv.section, name, v);
                     }
                 } else if !pv.used {
                     warn!(

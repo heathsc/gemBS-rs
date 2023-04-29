@@ -1,6 +1,6 @@
 [package]
 name = "gem_bs"
-version = "4.1.5"
+version = "4.2.0"
 authors = ["Simon Heath <simon.heath@gmail.com>"]
 edition = "2021"
 
@@ -24,6 +24,7 @@ plotters-bitmap = "~0.3"
 plotters = {version = "~0.3", default_features = false, features = ["bitmap_encoder", "line_series", "ttf"]}
 regex = "1"
 md-5 = "~0.10"
+chrono = "~0.4"
 utils = { path = "../utils" }
 
 [features]

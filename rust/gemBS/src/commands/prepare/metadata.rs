@@ -43,51 +43,27 @@ impl SampleData {
         thash.insert(Metadata::AltDataset, DataValue::String(alt_dataset));
         for (key, val) in hr.iter() {
             let kval = match key.as_str() {
-                "sample_barcode" => {
-                    if let Some(s) = val.as_str() {
-                        Some((Metadata::SampleBarcode, DataValue::String(s.to_string())))
-                    } else {
-                        None
-                    }
-                }
-                "library_barcode" => {
-                    if let Some(s) = val.as_str() {
-                        Some((Metadata::LibraryBarcode, DataValue::String(s.to_string())))
-                    } else {
-                        None
-                    }
-                }
-                "sample_name" => {
-                    if let Some(s) = val.as_str() {
-                        Some((Metadata::SampleName, DataValue::String(s.to_string())))
-                    } else {
-                        None
-                    }
-                }
-                "platform" => {
-                    if let Some(s) = val.as_str() {
-                        Some((Metadata::Platform, DataValue::String(s.to_string())))
-                    } else {
-                        None
-                    }
-                }
-                "centre" => {
-                    if let Some(s) = val.as_str() {
-                        Some((Metadata::Centre, DataValue::String(s.to_string())))
-                    } else {
-                        None
-                    }
-                }
-                "application" => {
-                    if let Some(s) = val.as_str() {
-                        Some((
-                            Metadata::Bisulfite,
-                            DataValue::Bool(BISULFITE_APPS.contains(&(s.to_lowercase().as_str()))),
-                        ))
-                    } else {
-                        None
-                    }
-                }
+                "sample_barcode" => val
+                    .as_str()
+                    .map(|s| (Metadata::SampleBarcode, DataValue::String(s.to_string()))),
+                "library_barcode" => val
+                    .as_str()
+                    .map(|s| (Metadata::LibraryBarcode, DataValue::String(s.to_string()))),
+                "sample_name" => val
+                    .as_str()
+                    .map(|s| (Metadata::SampleName, DataValue::String(s.to_string()))),
+                "platform" => val
+                    .as_str()
+                    .map(|s| (Metadata::Platform, DataValue::String(s.to_string()))),
+                "centre" => val
+                    .as_str()
+                    .map(|s| (Metadata::Centre, DataValue::String(s.to_string()))),
+                "application" => val.as_str().map(|s| {
+                    (
+                        Metadata::Bisulfite,
+                        DataValue::Bool(BISULFITE_APPS.contains(&(s.to_lowercase().as_str()))),
+                    )
+                }),
                 _ => None,
             };
             if let Some((md, dval)) = kval {
@@ -158,13 +134,13 @@ impl SampleData {
 
 lazy_static! {
     static ref BISULFITE_APPS: Vec<&'static str> = {
-        let mut m = Vec::new();
-        m.push("wg-bs-seq");
-        m.push("bsseq");
-        m.push("oxbs-seq");
-        m.push("customcapturebs-seq");
-        m.push("wg-em-seq");
-        m.push("other-bs");
-        m
+        vec![
+            "wg-bs-seq",
+            "bsseq",
+            "oxbs-seq",
+            "customcapturebs-seq",
+            "wg-em-seq",
+            "other-bs",
+        ]
     };
 }

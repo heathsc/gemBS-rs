@@ -496,6 +496,13 @@ impl GemBS {
         [root, Path::new("etc"), Path::new("css")].iter().collect()
     }
 
+    pub fn get_latex_extras_path(&self) -> PathBuf {
+        let root = &self.fs.as_ref().unwrap().gem_bs_root;
+        [root, Path::new("etc"), Path::new("latex_extras")]
+            .iter()
+            .collect()
+    }
+
     pub fn get_samples(&self) -> Vec<(String, Option<String>)> {
         let mut bc_set = HashMap::new();
         let href = self.get_sample_data_ref();
