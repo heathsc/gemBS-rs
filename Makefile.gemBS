@@ -44,6 +44,7 @@ install: all installdirs
 	cp etc/config_scripts/*.conf $(cfg_dir)
 	cp etc/latex_extras/* $(extras_dir)
 	strip $(bin_dir)/*
+	mkdir -p $(INSTALL_PREFIX)/bin
 	cp gemBS $(INSTALL_PREFIX)/bin/
 
 texlive: .texlive
