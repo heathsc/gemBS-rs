@@ -298,7 +298,7 @@ pub fn merge_call_jsons(
     for (_, path) in it {
         check_signal(Arc::clone(&sig))?;
         let rdr = compress::open_bufreader(path).map_err(|e| format!("{}", e))?;
-        let jstats = CallJson::from_reader(rdr)?;
+        let jstats = CallJson::from_reader(rdr).map_err(|e| format!("Couldn't open JSON file {}: {}", path.display(), e))?;
         combined_stats = if let Some(mut st) = combined_stats {
             st.merge(&jstats);
             Some(st)
