@@ -177,12 +177,12 @@ fn make_known_var_list() -> KnownVarList {
     );
     kv_list.add_known_var(
         "underconversion_sequence",
-        VarType::String,
+        VarType::StringVec,
         vec![Section::Mapping],
     );
     kv_list.add_known_var(
         "overconversion_sequence",
-        VarType::String,
+        VarType::StringVec,
         vec![Section::Mapping],
     );
     kv_list.add_known_var("tmp_dir", VarType::String, vec![Section::Mapping]);

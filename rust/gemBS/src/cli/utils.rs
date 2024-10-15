@@ -106,11 +106,11 @@ pub static OPT_ASSOC: &[(&str, OptionType)] = &[
     ("tmp_dir", OptionType::Global("tmp_dir", VarType::String)),
     (
         "underconv_seq",
-        OptionType::Global("underconversion_sequence", VarType::String),
+        OptionType::Global("underconversion_sequence", VarType::StringVec),
     ),
     (
         "overconv_seq",
-        OptionType::Global("overconversion_sequence", VarType::String),
+        OptionType::Global("overconversion_sequence", VarType::StringVec),
     ),
     (
         "reverse",

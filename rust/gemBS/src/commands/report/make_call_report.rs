@@ -268,7 +268,7 @@ fn make_qc_dist_graph(
 }
 
 fn load_call_json(cjson: LoadCallJson) -> Result<(), String> {
-    let rdr = compress::open_bufreader(&cjson.path).map_err(|e| format!("{}", e))?;
+    let rdr = compress::open_bufreader(&cjson.path).map_err(|e| format!("Couldn't open JSON file {}: {}", &cjson.path.display(), e))?;
     let jstats = CallJson::from_reader(rdr)?;
     let mut cj = cjson
         .call_json

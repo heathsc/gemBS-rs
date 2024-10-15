@@ -127,12 +127,12 @@ pub fn make_map_pipeline(
         (
             "underconversion_sequence",
             "underconversion-sequence",
-            VarType::String,
+            VarType::StringVec,
         ),
         (
             "overconversion_sequence",
             "overconversion-sequence",
-            VarType::String,
+            VarType::StringVec,
         ),
         ("benchmark_mode", "benchmark-mode", VarType::Bool),
         (
