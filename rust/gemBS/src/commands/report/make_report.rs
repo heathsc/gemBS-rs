@@ -97,9 +97,9 @@ fn create_latex_report(
 
     let nc = |c, s| format!("\\newcommand{{\\{c}}}{{{s}}}");
 
-    let mut out = Vec::with_capacity(16);
+    let mut out = Vec::with_capacity(17);
 
-    out.push(nc("gembs_version", crate_version!()));
+    out.push(nc("gembsversion", crate_version!()));
     
     if let Some(s) = rep_opt.project.as_deref() {
         out.push(nc("projectname", s))
