@@ -7,6 +7,7 @@ use std::{
 };
 
 use chrono::prelude::*;
+use clap::crate_version;
 
 use super::make_map_report::{make_section, make_title};
 use crate::common::html_utils::*;
@@ -98,6 +99,8 @@ fn create_latex_report(
 
     let mut out = Vec::with_capacity(16);
 
+    out.push(nc("gembs_version", crate_version!()));
+    
     if let Some(s) = rep_opt.project.as_deref() {
         out.push(nc("projectname", s))
     }
@@ -153,7 +156,7 @@ fn create_latex_report(
         out.push(nc("samples", samples.as_str()))
     }
 
-    out.push(format!("\\input{{extras/gemBS_report.tex}}"));
+    out.push("\\input{{extras/gemBS_report.tex}}".to_owned());
 
     // Write out top level latex file
     let ofile = fs::File::create(path)

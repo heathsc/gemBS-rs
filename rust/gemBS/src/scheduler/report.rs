@@ -184,6 +184,7 @@ impl ReportOptions {
             PageSize::A4
         };
         let pdf = gem_bs.get_config_bool(Section::Report, "pdf");
+        
         let comment = gem_bs
             .get_config_str(Section::Report, "comment")
             .map(|x| latex_escape_str(x));
