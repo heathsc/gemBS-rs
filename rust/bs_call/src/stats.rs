@@ -16,7 +16,7 @@ pub struct Stats {
 }
 
 impl Stats {
-	pub fn new<S: AsRef<str>, U: AsRef<str>>(ofile: U, source: S, vcf_stats: Option<VcfStats>, filter_stats: FSType) -> Self {
+	pub fn new<S: AsRef<str>, U: AsRef<str>>(ofile: U, source: S, vcf_stats: Option<Box<VcfStats>>, filter_stats: FSType) -> Self {
 		let date = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 		Self {
 			stats: stats_json::CallJson::from_stats(source, date, vcf_stats, filter_stats),
@@ -38,7 +38,7 @@ pub enum StatJob {
 	AddFSReadLevelCounts(FSReadLevelType, FSCounts),
 	AddFSBaseLevelCounts(FSBaseLevelType, usize),
 	SetNonCpgReadProfile(Vec<[usize; 4]>),
-	AddVcfStats(VcfStats),
+	AddVcfStats(Box<VcfStats>),
 	Quit,
 }
 
@@ -46,7 +46,7 @@ fn accumulate_stats(name: String, source: String, rx: mpsc::Receiver<StatJob>) {
 	info!("stat_thread starting up");
 	let mut filter_stats = FSType::new();
 	let mut non_cpg_read_profile: Option<Vec<[usize; 4]>> = None;
-	let mut vcf_stats: Option<VcfStats> = None;
+	let mut vcf_stats: Option<Box<VcfStats>> = None;
 	loop {
 		match rx.recv() {
 			Ok(StatJob::Quit) => {
@@ -54,7 +54,7 @@ fn accumulate_stats(name: String, source: String, rx: mpsc::Receiver<StatJob>) {
 				let mut stats = Stats::new(name, source, vcf_stats, filter_stats);
 				stats.stats.total_stats().methylation().non_cpg_read_profile = non_cpg_read_profile;
 				break;
-			},
+			}
 			Ok(StatJob::AddFSReadLevelCounts(fs_type, c)) => filter_stats.add_read_level_fs_counts(fs_type, c),
 			Ok(StatJob::AddFSBaseLevelCounts(fs_type, c)) => filter_stats.add_base_level_count(fs_type, c),
 			Ok(StatJob::SetNonCpgReadProfile(v)) => non_cpg_read_profile = Some(v),

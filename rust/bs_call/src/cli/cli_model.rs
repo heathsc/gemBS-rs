@@ -144,7 +144,7 @@ pub(super) fn cli_model() -> Command {
                 .num_args(1..=2)
                 .value_delimiter(',')
                 .action(ArgAction::Append)
-                .default_values(&["0.01","0.05"])
+                .default_values(["0.01","0.05"])
                 .help("Set under and over conversion rates"),
         )
         .arg(

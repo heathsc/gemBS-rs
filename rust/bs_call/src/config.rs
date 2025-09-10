@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::{io, fmt};
-use std::io::{Error, ErrorKind};
 
 use crate::htslib;
 use crate::defs::{CtgRegion, CtgInfo};
 
 use crate::dbsnp;
 
+#[inline]
 pub fn new_err(s: String) -> io::Error {
-	Error::new(ErrorKind::Other, s)	
+	io::Error::other(s)
 }
 
 #[derive(Debug, Copy, Clone)]

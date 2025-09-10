@@ -35,6 +35,6 @@ pub fn process_cli() -> io::Result<(BsCallConfig, BsCallFiles)> {
     process::write_vcf_header(&mut bs_cfg, &mut bs_files, &source)?;
     bs_cfg
         .conf_hash
-        .set(&"bs_call_source", ConfVar::String(Some(source)));
+        .set("bs_call_source", ConfVar::String(Some(source)));
     Ok((bs_cfg, bs_files))
 }

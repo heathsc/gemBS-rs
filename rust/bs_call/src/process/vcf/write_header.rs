@@ -1,11 +1,11 @@
-use std::io;
 use std::collections::HashSet;
+use std::io;
 
 use chrono::prelude::*;
 
 use crate::config::*;
 use crate::defs::contigs;
-use crate::htslib::{VcfHeader, SamFile};
+use crate::htslib::{SamFile, VcfHeader};
 
 const FIXED_HEADERS: [&str; 20] = [
 	"##INFO=<ID=CX,Number=1,Type=String,Description=\"5 base sequence context (from position -2 to +2 on the positive strand) determined from the reference\">",
@@ -31,91 +31,121 @@ const FIXED_HEADERS: [&str; 20] = [
 ];
 
 fn find_tags<'a>(s: &'a str, tags: &[&str]) -> Vec<Option<&'a str>> {
-	let n = tags.len();
-	let mut tg = vec![None; n];
-	
-	for fd in s.split('\t') {
-		for (ix, t) in tags.iter().enumerate() {
-			if fd.starts_with(t) && fd[2..3].eq(":") && fd.len() > 3  { tg[ix] = Some(&fd[3..]) }
-		}
-	}
-	tg
+    let n = tags.len();
+    let mut tg = vec![None; n];
+
+    for fd in s.split('\t') {
+        for (ix, t) in tags.iter().enumerate() {
+            if fd.starts_with(t) && fd[2..3].eq(":") && fd.len() > 3 {
+                tg[ix] = Some(&fd[3..])
+            }
+        }
+    }
+    tg
 }
 
-fn add_sample_info<'a>(hd: &mut VcfHeader, text: &'a str, bench: bool) -> io::Result<Option<&'a str>> {
-	let mut bc_set = HashSet::new();
-	for s in text.lines() {
-		if s.starts_with("@RG\t") {
-			let tags = find_tags(s, &["BC", "SM", "DS"]);
-			if let Some(bc) = tags[0] {
-				if !bc_set.insert(bc) && !bench {
-					let mut sbuf = format!("##bs_call_sample_info=<ID=\"{}\"", bc);
-					if let Some(sm) = tags[1] { sbuf.push_str(format!(",SM=\"{}\"", sm).as_str()); }
-					if let Some(ds) = tags[2] { sbuf.push_str(format!(",DS=\"{}\"", ds).as_str()); }
-					sbuf.push('>');
-					hd.append(&sbuf)?;
-				}
-			}
-		}
-	}
-	if let Some(bc) = bc_set.iter().next() {
-		Ok(Some(bc))
-	} else { Ok(None) }
+fn add_sample_info<'a>(
+    hd: &mut VcfHeader,
+    text: &'a str,
+    bench: bool,
+) -> io::Result<Option<&'a str>> {
+    let mut bc_set = HashSet::new();
+    for s in text.lines() {
+        if s.starts_with("@RG\t") {
+            let tags = find_tags(s, &["BC", "SM", "DS"]);
+            if let Some(bc) = tags[0] {
+                if !bc_set.insert(bc) && !bench {
+                    let mut sbuf = format!("##bs_call_sample_info=<ID=\"{}\"", bc);
+                    if let Some(sm) = tags[1] {
+                        sbuf.push_str(format!(",SM=\"{}\"", sm).as_str());
+                    }
+                    if let Some(ds) = tags[2] {
+                        sbuf.push_str(format!(",DS=\"{}\"", ds).as_str());
+                    }
+                    sbuf.push('>');
+                    hd.append(&sbuf)?;
+                }
+            }
+        }
+    }
+    if let Some(bc) = bc_set.iter().next() {
+        Ok(Some(bc))
+    } else {
+        Ok(None)
+    }
 }
 
-fn add_seq_info(hd: &mut VcfHeader, ctgs: &[contigs::CtgInfo], sam_file: &SamFile) -> io::Result<()> {
-	for s in sam_file.text().lines() {
-		if s.starts_with("@SQ\t") {
-			let tags = find_tags(s, &["SN", "AS", "M5", "SP"]);
-			if let Some(sn) = tags[0] {
-				let tid = sam_file.name2tid(sn).expect("COuldn't get tid for SAM Sequence");
-				if ctgs[tid].in_header() {
-					let ln = sam_file.tid2len(tid);
-					let mut sbuf = format!("##contig=<ID={},length={}", sn, ln);
-					if let Some(x) = tags[1] { sbuf.push_str(format!(",assembly={}", x).as_str()); }
-					if let Some(x) = tags[2] { sbuf.push_str(format!(",md5={}", x).as_str()); }
-					if let Some(x) = tags[3] { sbuf.push_str(format!(",sp={}", x).as_str()); }
-					sbuf.push('>');
-					hd.append(&sbuf)?;
-				}
-			}
-		}
-	}
-	Ok(())
+fn add_seq_info(
+    hd: &mut VcfHeader,
+    ctgs: &[contigs::CtgInfo],
+    sam_file: &SamFile,
+) -> io::Result<()> {
+    for s in sam_file.text().lines() {
+        if s.starts_with("@SQ\t") {
+            let tags = find_tags(s, &["SN", "AS", "M5", "SP"]);
+            if let Some(sn) = tags[0] {
+                let tid = sam_file
+                    .name2tid(sn)
+                    .expect("COuldn't get tid for SAM Sequence");
+                if ctgs[tid].in_header() {
+                    let ln = sam_file.tid2len(tid);
+                    let mut sbuf = format!("##contig=<ID={},length={}", sn, ln);
+                    if let Some(x) = tags[1] {
+                        sbuf.push_str(format!(",assembly={}", x).as_str());
+                    }
+                    if let Some(x) = tags[2] {
+                        sbuf.push_str(format!(",md5={}", x).as_str());
+                    }
+                    if let Some(x) = tags[3] {
+                        sbuf.push_str(format!(",sp={}", x).as_str());
+                    }
+                    sbuf.push('>');
+                    hd.append(&sbuf)?;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
-pub fn write_vcf_header(bs_cfg: &mut BsCallConfig, bs_files: &mut BsCallFiles, source: &str) -> io::Result<()> {
-	let mut hd = &mut bs_files.vcf_output.as_mut().unwrap().hdr;
-	let sam_file = &bs_files.sam_input.as_ref().unwrap();
-	let chash = &bs_cfg.conf_hash;
-	let mut sbuf = format!("##fileformat={}", hd.get_version());
-	hd.append(&sbuf)?;
-	let benchmark = chash.get_bool("benchmark_mode");
-	if !benchmark {
-		sbuf = format!("##fileDate(dd/mm/yyyy)={}", Local::now().format("%d/%m/%Y"));
-		hd.append(&sbuf)?;
-		sbuf = format!("##source={}", source);
-		hd.append(&sbuf)?;
-		if let Some(dbsnp_index) = &bs_files.dbsnp_index.as_ref() {
-			let header = dbsnp_index.header();
-			if !header.is_empty() {
-				sbuf = format!("##dbsnp={}", header);
-				hd.append(&sbuf)?;
-			}
-		}
-	}
-	let sam_sample = add_sample_info(&mut hd, sam_file.text(), benchmark)?;
-	let contigs = &mut bs_cfg.contigs;
-	add_seq_info(&mut hd, contigs, sam_file)?;	
-	for line in FIXED_HEADERS.iter() { hd.append(line)?; }
-	let sample = if let Some(s) = chash.get_str("sample") { s }
-	else if let Some(s) = sam_sample { s }
-	else { "SAMPLE" };
-	hd.add_sample(sample)?;
-	hd.sync()?;
-	// Get VCF/BCF header IDs for contigs
-	contigs::set_contig_vcf_ids(&hd, contigs, sam_file); 
-	// And write out header
-	bs_files.vcf_output.as_mut().unwrap().write_hdr()?;	
-	Ok(())
+pub fn write_vcf_header(
+    bs_cfg: &mut BsCallConfig,
+    bs_files: &mut BsCallFiles,
+    source: &str,
+) -> io::Result<()> {
+    let hd = &mut bs_files.vcf_output.as_mut().unwrap().hdr;
+    let sam_file = &bs_files.sam_input.as_ref().unwrap();
+    let chash = &bs_cfg.conf_hash;
+    let mut sbuf = format!("##fileformat={}", hd.get_version());
+    hd.append(&sbuf)?;
+    let benchmark = chash.get_bool("benchmark_mode");
+    if !benchmark {
+        sbuf = format!("##fileDate(dd/mm/yyyy)={}", Local::now().format("%d/%m/%Y"));
+        hd.append(&sbuf)?;
+        sbuf = format!("##source={}", source);
+        hd.append(&sbuf)?;
+        if let Some(dbsnp_index) = &bs_files.dbsnp_index.as_ref() {
+            let header = dbsnp_index.header();
+            if !header.is_empty() {
+                sbuf = format!("##dbsnp={}", header);
+                hd.append(&sbuf)?;
+            }
+        }
+    }
+    let sam_sample = add_sample_info(hd, sam_file.text(), benchmark)?;
+    let contigs = &mut bs_cfg.contigs;
+    add_seq_info(hd, contigs, sam_file)?;
+    for line in FIXED_HEADERS.iter() {
+        hd.append(line)?;
+    }
+
+    let sample = chash.get_str("sample").or(sam_sample).unwrap_or("SAMPLE");
+
+    hd.add_sample(sample)?;
+    hd.sync()?;
+    // Get VCF/BCF header IDs for contigs
+    contigs::set_contig_vcf_ids(hd, contigs, sam_file);
+    // And write out header
+    bs_files.vcf_output.as_mut().unwrap().write_hdr()?;
+    Ok(())
 }

@@ -89,6 +89,7 @@ pub struct Pileup {
 }
 
 impl Pileup {
+    #[allow(clippy::too_many_arguments)]
 	fn new(
 		data: Vec<PileupPos>,
 		ref_seq: Vec<u8>,
@@ -146,7 +147,7 @@ impl Pileup {
 		}
 	}
 
-	pub fn get_ref_iter(&self) -> slice::Iter<u8> {
+	pub fn get_ref_iter<'a>(&'a self) -> slice::Iter<'a, u8> {
 		self.ref_seq[self.start - self.ref_start..].iter()
 	}
 }
@@ -273,7 +274,7 @@ fn load_ref_seq(
 	// for which the pileup will be generated.
 	// The returned sequence is copied to a vector and translated A=1, C=2, G=3, T=4, _=0
 
-	let x = if preg.start > 2 { preg.start - 2 } else { 0 };
+	let x = preg.start.saturating_sub(2);
 	let seq_data = seq_data.as_ref().unwrap();
 
 	let ref_seq: Vec<_> = seq_data
@@ -502,7 +503,7 @@ fn handle_pileup(
 	check_sequence(&preg.cname, seq_data, ref_index, dbsnp_file)?;
 	check_regions(&mut preg, &bs_cfg.regions)?;
 	let meth_prof = &mut pileup_data.meth_prof;
-	let (ref_seq, ref_start, gc_bins) = load_ref_seq(&mut preg, &seq_data)?;
+	let (ref_seq, ref_start, gc_bins) = load_ref_seq(&mut preg, seq_data)?;
 	let mut fs_stats = FSType::new();
 	let size = preg.end + 1 - preg.start;
 	let mut pileup_vec = Vec::with_capacity(size);
@@ -550,7 +551,7 @@ fn handle_pileup(
 			fs_stats.add_base_level_count(FSBaseLevelType::Passed, l - nflt);
 		}
 	}
-	send_call_job(pileup, &call_tx)?;
+	send_call_job(pileup, call_tx)?;
 	for (flag, ct) in fs_stats.base_level().iter() {
 		let _ = stat_tx.send(StatJob::AddFSBaseLevelCounts(*flag, *ct));
 	}

@@ -63,8 +63,8 @@ fn call_from_pileup(mut pileup: Pileup, model: &Model, fisher: &FisherTest, writ
 				qual[i] = cmp::min((pp.quality[i] / (*n as f32)).round() as c_int, 63);
 				s + pp.quality[i]
 			});
-			let aq = cmp::min((total_qual / (total_flt as f32)).round() as usize, 255) as u8;
-			let mq = cmp::min((pp.mapq2 / (total_flt as f32)).sqrt().round() as usize, 255) as u8;
+			let aq = cmp::min((total_qual / total_flt).round() as usize, 255) as u8;
+			let mq = cmp::min((pp.mapq2 / total_flt).sqrt().round() as usize, 255) as u8;
 			let (mx, gt_ll) = model.calc_gt_prob(&counts, &qual, *ref_base, None);
 			let fisher_strand = fisher.calc_fs_stat(mx, &pp.counts);
 			let gc = pileup.gc_bins[(ix + pileup.start) / (GC_BIN_SIZE as usize) - gc_bin_start];

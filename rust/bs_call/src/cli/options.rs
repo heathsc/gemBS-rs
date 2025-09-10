@@ -72,9 +72,9 @@ fn distribute_threads(
         0
     };
     let calc_threads = k;
-    conf_hash.insert(&"calc_threads", ConfVar::Int(calc_threads));
-    conf_hash.insert(&"input_threads", ConfVar::Int(input_threads));
-    conf_hash.insert(&"output_threads", ConfVar::Int(output_threads));
+    conf_hash.insert("calc_threads", ConfVar::Int(calc_threads));
+    conf_hash.insert("input_threads", ConfVar::Int(input_threads));
+    conf_hash.insert("output_threads", ConfVar::Int(output_threads));
     if input_threads > 0 {
         in_file.set_threads(input_threads)?
     }
@@ -116,16 +116,16 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(BsCallConfig, BsCallFiles)>
     } else {
         (0.01, 0.05)
     };
-    conf_hash.insert(&"under_conversion", ConfVar::Float(under));
-    conf_hash.insert(&"over_conversion", ConfVar::Float(over));
+    conf_hash.insert("under_conversion", ConfVar::Float(under));
+    conf_hash.insert("over_conversion", ConfVar::Float(over));
 
     // Left and right trim
     let (x1, x2) = get_trim_values(m, "left_trim")?;
-    conf_hash.insert(&"left_trim_read_1", ConfVar::Int(x1));
-    conf_hash.insert(&"left_trim_read_2", ConfVar::Int(x2));
+    conf_hash.insert("left_trim_read_1", ConfVar::Int(x1));
+    conf_hash.insert("left_trim_read_2", ConfVar::Int(x2));
     let (x1, x2) = get_trim_values(m, "right_trim")?;
-    conf_hash.insert(&"right_trim_read_1", ConfVar::Int(x1));
-    conf_hash.insert(&"right_trim_read_2", ConfVar::Int(x2));
+    conf_hash.insert("right_trim_read_1", ConfVar::Int(x1));
+    conf_hash.insert("right_trim_read_2", ConfVar::Int(x2));
 
     // Output type - if not set we try to guess from output file name (if supplied), otherwise use VCF format
     let output = if let ConfVar::String(x) = conf_hash.get(&"output").unwrap() {
@@ -155,7 +155,7 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(BsCallConfig, BsCallFiles)>
     } else {
         OType::new(htslib::FT_VCF)
     };
-    conf_hash.insert(&"output_type", ConfVar::OType(otype));
+    conf_hash.insert("output_type", ConfVar::OType(otype));
 
     // Input file
     let mut in_file = process::open_sam_input(m.get_one::<String>("input").map(|s| s.as_ref()))?;
@@ -165,18 +165,18 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(BsCallConfig, BsCallFiles)>
 
     // Threads
     conf_hash.insert(
-        &"threads",
+        "threads",
         cli_utils::get_option(m, "threads", ConfVar::Int(num_cpus::get()))?,
     );
     distribute_threads(&mut conf_hash, &mut in_file, &mut out_file)?;
 
     let chash = ConfHash::new(conf_hash);
     // Reference
-    let rf = chash.get_str(&"reference");
+    let rf = chash.get_str("reference");
     let ref_idx = reference::handle_reference(rf.unwrap(), &mut in_file)?;
 
     // dbSNP index
-    let dbsnp_index = if let Some(dbsnp_file) = chash.get_str(&"dbsnp") {
+    let dbsnp_index = if let Some(dbsnp_file) = chash.get_str("dbsnp") {
         Some(dbsnp::DBSnpIndex::new(dbsnp_file)?)
     } else {
         None

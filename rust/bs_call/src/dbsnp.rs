@@ -41,8 +41,8 @@ impl DBSnpFile {
 		}
 		Ok(())
 	}
-	pub fn get_dbsnp_contig<S: AsRef<str>>(&self, name: S) -> Option<DBSnpContig> {
-		if let Some(ctg) = self.index.dbsnp.get(name.as_ref()) { Some(ctg.ctg.clone()) } else { None }
+	pub fn get_dbsnp_contig<S: AsRef<str>>(&self, name: S) -> Option<DBSnpContig> {		
+		self.index.dbsnp.get(name.as_ref()).map(|c| c.ctg.clone())
 	}
 }
 
@@ -123,9 +123,8 @@ impl DBSnpIndex {
 /// 
 /// Everything below is private to the module
 /// 
-
 fn new_err(s: String) -> io::Error {
-	Error::new(ErrorKind::Other, s)	
+	Error::other(s)
 }
 
 struct DBSnpBin {

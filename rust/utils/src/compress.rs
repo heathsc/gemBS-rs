@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::prelude::*;
-use std::io::{BufReader, BufRead, BufWriter, Error, ErrorKind, Result, stdin};
+use std::io::{BufReader, BufRead, BufWriter, Error, Result, stdin};
 use std::process::{Command, Stdio, ChildStdout, ChildStdin};
 use std::path::{Path, PathBuf};
 use std::ffi::OsStr;
@@ -30,7 +30,7 @@ pub enum CompressType {
 }
 
 fn get_path<'a>(x: Option<&'a PathBuf>, s: &'static str) -> Result<&'a PathBuf> {
-	x.ok_or_else(|| Error::new(ErrorKind::Other, format!("Can not find {} executable to uncompress file", s)))
+	x.ok_or_else(|| Error::other(format!("Can not find {} executable to uncompress file", s)))
 }
 
 impl CompressType {
@@ -42,7 +42,7 @@ impl CompressType {
 			CompressType::LZ4 => get_path(LZ4_PATH.as_ref().or_else(|| ZSTD_PATH.as_ref()), "lz4 or zstd"),
 			CompressType::LZMA => get_path(LZMA_PATH.as_ref().or_else(|| ZSTD_PATH.as_ref()), "lzma or zstd"),
 			CompressType::ZSTD => get_path(ZSTD_PATH.as_ref(), "zstd"),
-			CompressType::UNCOMPRESSED => Err(Error::new(ErrorKind::Other, "Can not get filter path for uncompressed file".to_string())),
+			CompressType::UNCOMPRESSED => Err(Error::other("Can not get filter path for uncompressed file".to_string())),
 		}
 	}	
 }
@@ -60,7 +60,7 @@ where
 	let path: &Path = prog.as_ref();
 	match Command::new(path).args(args).stdout(Stdio::piped()).spawn() {
 		Ok(proc) => Ok(proc.stdout.expect("pipe problem")),
-		Err(error) => Err(Error::new(ErrorKind::Other, format!("Error executing pipe command '{}': {}", path.display(), error))),
+		Err(error) => Err(Error::other(format!("Error executing pipe command '{}': {}", path.display(), error))),
 	}
 }
 
@@ -71,7 +71,7 @@ pub fn new_read_filter_from_pipe<P: AsRef<Path>>(prog: P, pipe: Stdio) -> Result
         .stdout(Stdio::piped())
         .spawn() {
             Ok(proc) => Ok(proc.stdout.expect("pipe problem")),
-            Err(error) => Err(Error::new(ErrorKind::Other, format!("Error executing pipe command '{} -d': {}", path.display(), error))),
+            Err(error) => Err(Error::other(format!("Error executing pipe command '{} -d': {}", path.display(), error))),
         }
 }
 
@@ -83,14 +83,14 @@ where
 	let path: &Path = prog.as_ref();
 	match Command::new(path).args(args).stdout(file).stdin(Stdio::piped()).spawn() {
 		Ok(proc) => Ok(proc.stdin.expect("pipe problem")),
-		Err(error) => Err(Error::new(ErrorKind::Other, format!("Error exectuing pipe command '{}': {}", path.display(), error))),
+		Err(error) => Err(Error::other(format!("Error exectuing pipe command '{}': {}", path.display(), error))),
 	}
 }
 
 fn test_open_file(path: &Path) -> Result<std::fs::File> {
     match File::open(path) {
         Ok(handle) => Ok(handle),
-        Err(error) => Err(Error::new(ErrorKind::Other, format!("Error opening {} for input: {}", path.display(), error))),
+        Err(error) => Err(Error::other(format!("Error opening {} for input: {}", path.display(), error))),
     }
 }
 
@@ -99,7 +99,7 @@ fn get_compress_type(path: &Path) -> Result<CompressType> {
     let mut buf = [0; 6];
     let n = match f.read(&mut buf) {
         Ok(num) => num,
-        Err(error) => return Err(Error::new(ErrorKind::Other, format!("Error reading from {}: {}", path.display(), error))),
+        Err(error) => return Err(Error::other(format!("Error reading from {}: {}", path.display(), error))),
     };
     
     let mut ctype = CompressType::UNCOMPRESSED;    

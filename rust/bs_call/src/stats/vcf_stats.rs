@@ -288,10 +288,10 @@ fn handle_stats(
     bs_cfg: &BsCallConfig,
 ) {
     let cname = bs_cfg.ctg_name(call_stats[0].sam_tid).to_owned();
-    let mut ctg_stats = vcf_stats
+    let ctg_stats = vcf_stats
         .contig_stats
         .entry(cname)
-        .or_insert_with(VCFBasic::default);
+        .or_default();
     for cs in call_stats.iter() {
         let flags = get_basic_stats(cs);
         let dp = (cs.d_inf + cs.dp1) as usize;
@@ -311,7 +311,7 @@ fn handle_stats(
             continue;
         }
         let rs_found = (cs.flags & CALL_STATS_RS_FOUND) != 0;
-        add_basic_stats(&mut ctg_stats, cs.filter, rs_found, flags);
+        add_basic_stats(ctg_stats, cs.filter, rs_found, flags);
         add_basic_stats(&mut vcf_stats.total_stats, cs.filter, rs_found, flags);
         if (flags & (BS_SNPS | BS_INDELS | BS_MULTI)) != 0 {
             vcf_stats.qual[SITE_TYPE_VARIANT][cs.phred as usize] += 1;
@@ -360,7 +360,7 @@ pub fn collect_vcf_stats(
             }
         }
     }
-    let _ = stat_tx.send(StatJob::AddVcfStats(vcf_stats));
+    let _ = stat_tx.send(StatJob::AddVcfStats(Box::new(vcf_stats)));
     if let Ok(ru_thread) = Rusage::get(RusageWho::RusageThread) {
         info!(
             "collect_vcf_stats_thread shutting down: user {} sys {}",

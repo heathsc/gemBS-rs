@@ -250,10 +250,10 @@ fn enc_size(v: &mut Vec<u8>, size: c_int, bcf_type: u8) {
 
 // Note - we don't check for vector_end or missing values here as we don't generate these
 fn enc_int(v: &mut Vec<u8>, x: c_int) {
-	if x <= BCF_MAX_BT_INT8 && x >= BCF_MIN_BT_INT8 {
+    if (BCF_MIN_BT_INT8..=BCF_MAX_BT_INT8).contains(&x) {
 		enc_size(v, 1, BCF_BT_INT8);
 		v.push(x as u8)
-	} else if x <= BCF_MAX_BT_INT16 && x >= BCF_MIN_BT_INT16 {
+	} else if (BCF_MIN_BT_INT16..=BCF_MAX_BT_INT16).contains(&x) {
 		enc_size(v, 1, BCF_BT_INT16);
 		v.extend_from_slice(&(x as u16).to_le_bytes())							
 	} else {
@@ -316,7 +316,7 @@ fn write_fixed_columns(call: &GenotypeCall, filter_ids: &[u8], v: &mut Vec<u8>, 
 		v.push(allele);
 	}
 	// FILTER
-	let (filter, filter_id) = handle_filters(call, &call_stats);	
+	let (filter, filter_id) = handle_filters(call, call_stats);	
 	enc_u8(v, filter_ids[filter_id]);	
 	// INFO
 	enc_u8(v, filter_ids[FLT_ID_CX]);

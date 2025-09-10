@@ -79,6 +79,12 @@ impl Sub for QCCounts {
     }
 }
 
+impl Default for QCCounts {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QCCounts {
 	pub fn new() -> Self { Self{non_variant: 0, variant: 0} }
 	fn set(v: &[usize; 2]) -> Self { Self{non_variant: v[0], variant: v[1]} }
@@ -122,6 +128,12 @@ impl Add for MutCounts {
     }
 }
 
+impl Default for MutCounts {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MutCounts {
 	pub fn new() -> Self { Self{all: 0, passed: 0, dbsnp_all: 0, dbsnp_passed: 0} }
 	pub fn all(&self) -> usize {self.all}
@@ -161,6 +173,12 @@ impl AddAssign for FSCounts {
             reads: self.reads + other.reads,
             bases: self.bases + other.bases,
         };
+    }
+}
+
+impl Default for FSCounts {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -248,12 +266,12 @@ pub struct FSType {
 
 impl FSType {
 	pub fn add_read_level_count(&mut self, fs_type: FSReadLevelType, counts: usize) {
-		let mut fc = self.read_level.entry(fs_type).or_insert_with(FSCounts::new);
+		let fc = self.read_level.entry(fs_type).or_default();
 		fc.reads += 1;
 		fc.bases += counts;
 	}
 	pub fn add_read_level_fs_counts(&mut self, fs_type: FSReadLevelType, counts: FSCounts) {
-		let fc = self.read_level.entry(fs_type).or_insert_with(FSCounts::new);
+		let fc = self.read_level.entry(fs_type).or_default();
 		*fc += counts;
 	}
 	pub fn add_base_level_count(&mut self, fs_type: FSBaseLevelType, bases: usize) {
@@ -263,6 +281,13 @@ impl FSType {
 	pub fn read_level(&self) -> &HashMap<FSReadLevelType, FSCounts> { &self.read_level }
 	pub fn base_level(&self) -> &HashMap<FSBaseLevelType, usize> { &self.base_level }
 }
+
+impl Default for FSType {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FSType {
 	pub fn new() -> Self { Self{read_level: HashMap::new(), base_level: HashMap::new()}}
 }
@@ -417,6 +442,12 @@ pub struct BasicStats {
 	pub non_ref_cpg: Counts,	
 }
 
+impl Default for BasicStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BasicStats {
 	pub fn new() -> Self {
 		Self{ snps: Counts::new(), indels: Counts::new(), multiallelic: Counts::new(), ref_cpg: Counts::new(), non_ref_cpg: Counts::new() }
@@ -438,6 +469,11 @@ pub struct CSType {
 	#[serde(rename = "dbSNPVariantSites")]
     #[serde(skip_serializing_if = "Option::is_none")]
 	pub dbsnp_variants: Option<Counts>,
+}
+impl Default for CSType {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CSType {
@@ -543,7 +579,7 @@ impl CallJson {
 	pub fn mutations(&self) -> &HashMap<String, MutCounts> { &self.total_stats.mutations }
 	
 	// name, source, vcf_stats, filter_stats, non_cpg_read_profile);
-	pub fn from_stats<S: AsRef<str>, T: AsRef<str>>(source: S, date: T, mut vcf_stats: Option<VcfStats>, filter_stats: FSType) -> Self {
+	pub fn from_stats<S: AsRef<str>, T: AsRef<str>>(source: S, date: T, mut vcf_stats: Option<Box<VcfStats>>, filter_stats: FSType) -> Self {
 		let (contig_stats, total_stats) = if let Some(mut vs) = vcf_stats.take() {
 			let cs = contig_stats_from_vcf_stats(&mut vs);
 			let ts = TSType::from_vcf_stats(&vs);
