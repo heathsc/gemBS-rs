@@ -57,10 +57,9 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<Config> {
                 }),
                 false,
             ))
-        } else if let Some(s) = m.get_one::<String>("regions_file") {
-            Some((s.to_owned(), true))
         } else {
-            None
+            m.get_one::<String>("regions_file")
+                .map(|s| (s.to_owned(), true))
         }
     };
     if let Some((reg, flag)) = regions {

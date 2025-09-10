@@ -12,7 +12,6 @@ use md5::{Md5, Digest};
 /// output file as it is being made.  If we get to the EOF, we wait for 500ms and
 /// try again, until we get a signal that the file has been completed.
 /// 
-
 pub fn md5_thread(name: String, r: Receiver<bool>) {
 	let mut f = File::open(&name).expect("md5_thread: file not found");
 	

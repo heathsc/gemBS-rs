@@ -1,12 +1,12 @@
 use std::collections::HashSet;
-use std::io::{self, Error, ErrorKind};
+use std::io::{self, Error};
 
 use r_htslib::BcfSrs;
 
 use crate::dbsnp;
 
 pub fn new_err(s: String) -> io::Error {
-	Error::new(ErrorKind::Other, s)	
+	Error::other(s)
 }
 
 #[derive(Default)]

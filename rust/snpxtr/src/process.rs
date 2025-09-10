@@ -72,7 +72,7 @@ pub fn process(mut conf: Config) -> io::Result<()> {
 			if brec.rid() != *rid { 
 				if dbsnp_ctg.is_some() {
 					let dbf = dbsnp_file.as_mut().unwrap();
-					dbf.unload_ctg(&cname); 
+					dbf.unload_ctg(cname); 
 				}
 				true
 			} else { false }

@@ -1,6 +1,6 @@
 use std::{env, fmt};
 use std::collections::HashMap;
-use std::io::{self, Write, StdinLock, StdoutLock, BufRead, Error, ErrorKind};
+use std::io::{self, Write, StdinLock, StdoutLock, BufRead, Error};
 use lazy_static::lazy_static;
 
 use utils::compress;
@@ -82,7 +82,7 @@ fn handle_header(rd_handle: &mut StdinLock, wr_handle: &mut StdoutLock) -> io::R
 						}
 					}
 					if let Some(name) = tags.get(&TagType::SN) {
-						if let Some(hr) = contig_hash.get(&name.to_string()) {
+						if let Some(hr) = contig_hash.get(*name) {
 							for (tag, s) in hr.tags.iter() { tags.insert(*tag, s); }
 						}
 						write!(wr_handle, "@SQ")?;
@@ -91,7 +91,7 @@ fn handle_header(rd_handle: &mut StdinLock, wr_handle: &mut StdoutLock) -> io::R
 						}
 						for gt in gen_tags { write!(wr_handle, "\t{}", gt)?; }
 						writeln!(wr_handle)?;
-					} else { return Err(Error::new(ErrorKind::Other, "No SN tag in @SQ Header line")) }
+					} else { return Err(Error::other("No SN tag in @SQ Header line")) }
 				} else {
 					wr_handle.write_all(buffer.as_bytes())?;
 				}	
