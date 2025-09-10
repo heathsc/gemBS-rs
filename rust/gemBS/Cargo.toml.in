@@ -2,7 +2,7 @@
 name = "gem_bs"
 version = "4.3.2"
 authors = ["Simon Heath <simon.heath@gmail.com>"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 log = "~0.4"

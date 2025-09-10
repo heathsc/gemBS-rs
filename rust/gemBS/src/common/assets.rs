@@ -1,7 +1,7 @@
-use std::path::{Path, PathBuf};
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
 use std::fmt;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::SystemTime;
 
 // Supplied - user supplied files (reference or fastq files etc.) that gemBS can not generate
@@ -10,7 +10,12 @@ use std::time::SystemTime;
 // Log - log files - these are ignored when working out what tasks need to be run
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AssetType { Supplied, Derived, Temp, Log }
+pub enum AssetType {
+    Supplied,
+    Derived,
+    Temp,
+    Log,
+}
 
 // Present - file exists on file system
 // Outdated - file exists but has at least 1 ancestor that has a more recent modification time
@@ -18,229 +23,320 @@ pub enum AssetType { Supplied, Derived, Temp, Log }
 // Incomplete - file is the output of a running task
 // Deleted - file does not exist but is a Temp file where all the descendents are Present (i.e., pool BCF files that are deleted after the merged BCF is created)
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AssetStatus { Present, Outdated, Absent, Incomplete, Deleted }
+pub enum AssetStatus {
+    Present,
+    Outdated,
+    Absent,
+    Incomplete,
+    Deleted,
+}
 
 impl fmt::Display for AssetStatus {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
-			AssetStatus::Present => write!(f, "Present"),
-			AssetStatus::Absent => write!(f, "Absent"),
-			AssetStatus::Outdated => write!(f, "Outdated"),
-			AssetStatus::Incomplete => write!(f, "Incomplete"),
-			AssetStatus::Deleted => write!(f, "Deleted"),
-		}
-	}
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            AssetStatus::Present => write!(f, "Present"),
+            AssetStatus::Absent => write!(f, "Absent"),
+            AssetStatus::Outdated => write!(f, "Outdated"),
+            AssetStatus::Incomplete => write!(f, "Incomplete"),
+            AssetStatus::Deleted => write!(f, "Deleted"),
+        }
+    }
 }
 #[derive(Debug, Clone)]
 pub struct Asset {
-	id: Rc<str>,
-	path: PathBuf,
-	idx: usize,
-	creator: Option<usize>, // Id of task that creates this asset
-	parents: Vec<usize>, // Ids of inputs assets of creator task
-	asset_type: AssetType,
-	status: AssetStatus,
-	mod_time: Option<SystemTime>,
-	mod_time_ances: Option<SystemTime>,
+    id: Rc<str>,
+    path: PathBuf,
+    idx: usize,
+    creator: Option<usize>, // Id of task that creates this asset
+    parents: Vec<usize>,    // Ids of inputs assets of creator task
+    asset_type: AssetType,
+    status: AssetStatus,
+    mod_time: Option<SystemTime>,
+    mod_time_ances: Option<SystemTime>,
 }
 
 fn get_status_time(path: &Path, asset_type: AssetType) -> (AssetStatus, Option<SystemTime>) {
-	match path.metadata() {
-		Ok(md) => {
-			(AssetStatus::Present, md.modified().ok())
-		},
-		Err(e) => {
-			if let AssetType::Supplied = asset_type {
-				// If pipe then treat as if it is present
-				if path.to_string_lossy().ends_with('|') { return (AssetStatus::Present, None); }
-				warn!("Warning: required datafile {} not accessible: {}", path.to_string_lossy(), e);
-			}
-			(AssetStatus::Absent, None)
-		},
-	}
+    match path.metadata() {
+        Ok(md) => (AssetStatus::Present, md.modified().ok()),
+        Err(e) => {
+            if let AssetType::Supplied = asset_type {
+                // If pipe then treat as if it is present
+                if path.to_string_lossy().ends_with('|') {
+                    return (AssetStatus::Present, None);
+                }
+                warn!(
+                    "Warning: required datafile {} not accessible: {}",
+                    path.to_string_lossy(),
+                    e
+                );
+            }
+            (AssetStatus::Absent, None)
+        }
+    }
 }
 impl Asset {
-	fn new(id_str: &str, path: &Path, idx: usize, asset_type: AssetType) -> Self {
-		let (status, mod_time) = get_status_time(path, asset_type);
-		let id: Rc<str> = Rc::from(id_str);
-		Asset{id, path: path.to_owned(), idx, creator: None, parents: Vec::new(), asset_type, status, mod_time, mod_time_ances: mod_time}
-	}
-	pub fn recheck_status(&mut self) {
-		let (status, mod_time) = get_status_time(&self.path, self.asset_type);
-		self.status = status;
-		self.mod_time = mod_time;
-		trace!("Rechecking status of asset {} {} {}", self.idx, self.id, self.status);
-	}	
-	pub fn path(&self) -> &Path { &self.path }
-	pub fn status(&self) -> AssetStatus { self.status }
-	pub fn idx(&self) -> usize { self.idx }
-	pub fn id(&self) -> &str { &self.id }
-	pub fn creator(&self) -> Option<usize> { self.creator }
-	pub fn set_creator(&mut self, idx: usize, pvec: &[usize]) { 
-		self.creator = Some(idx);
-		pvec.iter().for_each(|x| self.parents.push(*x)); 
-	}
-//	pub fn mod_time(&self) -> Option<SystemTime> { self.mod_time }
-	pub fn mod_time_ances(&self) -> Option<SystemTime> { self.mod_time_ances }
-	pub fn parents(&self) -> &[usize] { &self.parents }
-	pub fn asset_type(&self) -> AssetType { self.asset_type }
+    fn new(id_str: &str, path: &Path, idx: usize, asset_type: AssetType) -> Self {
+        let (status, mod_time) = get_status_time(path, asset_type);
+        let id: Rc<str> = Rc::from(id_str);
+        Asset {
+            id,
+            path: path.to_owned(),
+            idx,
+            creator: None,
+            parents: Vec::new(),
+            asset_type,
+            status,
+            mod_time,
+            mod_time_ances: mod_time,
+        }
+    }
+    pub fn recheck_status(&mut self) {
+        let (status, mod_time) = get_status_time(&self.path, self.asset_type);
+        self.status = status;
+        self.mod_time = mod_time;
+        trace!(
+            "Rechecking status of asset {} {} {}",
+            self.idx, self.id, self.status
+        );
+    }
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+    pub fn status(&self) -> AssetStatus {
+        self.status
+    }
+    pub fn idx(&self) -> usize {
+        self.idx
+    }
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+    pub fn creator(&self) -> Option<usize> {
+        self.creator
+    }
+    pub fn set_creator(&mut self, idx: usize, pvec: &[usize]) {
+        self.creator = Some(idx);
+        pvec.iter().for_each(|x| self.parents.push(*x));
+    }
+    //	pub fn mod_time(&self) -> Option<SystemTime> { self.mod_time }
+    pub fn mod_time_ances(&self) -> Option<SystemTime> {
+        self.mod_time_ances
+    }
+    pub fn parents(&self) -> &[usize] {
+        &self.parents
+    }
+    pub fn asset_type(&self) -> AssetType {
+        self.asset_type
+    }
 }
 
 pub fn make_ext_asset(id: &str, par: &Path, ext: &str) -> (String, PathBuf) {
-	let lname = format!("{}.{}", id, ext);
-	let lpath: PathBuf = [par, Path::new(&lname)].iter().collect();
-	(lname, lpath) 
+    let lname = format!("{}.{}", id, ext);
+    let lpath: PathBuf = [par, Path::new(&lname)].iter().collect();
+    (lname, lpath)
 }
 
 pub fn derive_log_asset(id: &str, file: &Path) -> (String, PathBuf) {
-	let mut v = Vec::new();
-	if let Some(par) = file.parent() { v.push(par) }
-	let lname = format!("{}.log", id);
-	v.push(Path::new(lname.as_str()));
-	let lpath: PathBuf = v.iter().collect();
-	(lname, lpath) 
+    let mut v = Vec::new();
+    if let Some(par) = file.parent() {
+        v.push(par)
+    }
+    let lname = format!("{}.log", id);
+    v.push(Path::new(lname.as_str()));
+    let lpath: PathBuf = v.iter().collect();
+    (lname, lpath)
 }
 
 pub struct AssetList {
-	asset_hash: HashMap<Rc<str>, usize>, 
-	assets: Vec<Asset>,
+    asset_hash: HashMap<Rc<str>, usize>,
+    assets: Vec<Asset>,
 }
 
 pub trait GetAsset<T> {
-	fn get_asset(&self, idx: T) -> Option<&Asset>; 	
-	fn get_asset_mut(&mut self, idx: T) -> Option<&mut Asset>; 	
+    fn get_asset(&self, idx: T) -> Option<&Asset>;
+    fn get_asset_mut(&mut self, idx: T) -> Option<&mut Asset>;
 }
 
 impl GetAsset<usize> for AssetList {
-	fn get_asset(&self, idx: usize) -> Option<&Asset> {
-		if idx < self.assets.len() { Some(&self.assets[idx]) }
-		else { None }
-	}
-	fn get_asset_mut(&mut self, idx: usize) -> Option<&mut Asset> {
-		if idx < self.assets.len() { Some(&mut self.assets[idx]) }
-		else { None }
-	}
+    fn get_asset(&self, idx: usize) -> Option<&Asset> {
+        if idx < self.assets.len() {
+            Some(&self.assets[idx])
+        } else {
+            None
+        }
+    }
+    fn get_asset_mut(&mut self, idx: usize) -> Option<&mut Asset> {
+        if idx < self.assets.len() {
+            Some(&mut self.assets[idx])
+        } else {
+            None
+        }
+    }
 }
-
 
 impl GetAsset<&str> for AssetList {
-	fn get_asset(&self, idx: &str) -> Option<&Asset> {
-		self.asset_hash.get(idx).map(|x| &self.assets[*x])
-	}
-	fn get_asset_mut(&mut self, idx: &str) -> Option<&mut Asset> {
-		if let Some(x) = self.asset_hash.get(idx) {
-			let ix = *x;
-			Some(&mut self.assets[ix])		
-		} else { None }
-	}
+    fn get_asset(&self, idx: &str) -> Option<&Asset> {
+        self.asset_hash.get(idx).map(|x| &self.assets[*x])
+    }
+    fn get_asset_mut(&mut self, idx: &str) -> Option<&mut Asset> {
+        if let Some(x) = self.asset_hash.get(idx) {
+            let ix = *x;
+            Some(&mut self.assets[ix])
+        } else {
+            None
+        }
+    }
 }
-	
+
 impl AssetList {
-	pub fn new() -> Self { AssetList{asset_hash: HashMap::new(), assets: Vec::new() }}
+    pub fn new() -> Self {
+        AssetList {
+            asset_hash: HashMap::new(),
+            assets: Vec::new(),
+        }
+    }
 
-	pub fn insert(&mut self, id: &str, path: &Path, asset_type: AssetType) -> usize {
-		if let Some(a) = self.get_asset(id) {
-			warn!("Warning - Can not insert asset {}, path {} as asset already exists with path {}", id, path.to_string_lossy(), a.path().to_string_lossy());
-			a.idx()
-		} else {		
-			let idx = self.assets.len();
-			let asset = Asset::new(id, path, idx, asset_type);
-			let asset_id = Rc::clone(&asset.id);
-			self.assets.push(asset);
-			self.asset_hash.insert(asset_id, idx);
-			idx
-		}
-	}
-		
-	// Calculate most recent modification time of the ancestors for an asset
-	// If the asset is supplied (so has no ancestors) this is just the modification time of the file
-	fn calc_mta(&self, idx: usize, visited: &mut Vec<bool>, mtime: &mut Vec<Option<SystemTime>>) {
-		if !visited[idx] {
-			let asset = &self.assets[idx];
-			if let AssetType::Supplied = asset.asset_type {	mtime[idx] = asset.mod_time; }
-			else {
-				let cmp_time = |x: Option<SystemTime>, y: Option<SystemTime>| match (x, y) {
-					(None, None) => None,
-					(Some(m), None) => Some(m),
-					(None, Some(m)) => Some(m),
-					(Some(m), Some(n)) => if n > m { Some(n) } else { Some(m) }									
-				};
-				let mut latest_time = None;
-				for j in &asset.parents {
-					self.calc_mta(*j, visited, mtime);
-					latest_time = cmp_time(latest_time, mtime[*j]);
-				}
-				mtime[idx] = cmp_time(latest_time, asset.mod_time);
-			}
-			visited[idx] = true;
-		} 
-	}
-	pub fn iter(&self) -> std::slice::Iter<'_, Asset> { self.assets.iter() }
-	pub fn len(&self) -> usize { self.assets.len() }
-	pub fn recheck_status(&mut self, hs: &HashSet<usize>) {
-		let len = self.assets.len();
-		let mut changed = vec!(None; len);
-		for asset in self.assets.iter_mut().filter(|x| x.asset_type != AssetType::Log) { 
-			if hs.contains(&asset.idx) { 
-				trace!("recheck_status: switching status of {} from {} to Incomplete", asset.id, asset.status);
-				asset.status = AssetStatus::Incomplete 
-			} else if !(asset.status == AssetStatus::Present || asset.status == AssetStatus::Deleted) {
-				let mut chg = None;
-				for i in asset.parents.iter() {
-					if let Some(x) = changed[*i] {
-						chg = Some(x);
-						if x { break; }
-					}
-				} 
-				changed[asset.idx] = match chg {
-					Some(false) => Some(false),
-					_ => {
-						let st = asset.status;
-						asset.recheck_status();
-						Some(asset.status != st)					
-					},
-				}; 
-			}
-		}
-	}
-	
-	pub fn calc_mod_time_ances(&mut self) {
-		let len = self.assets.len();
-		let mut visited = vec!(false; len);
-		let mut mtime: Vec<Option<SystemTime>> = vec!(None; len);
-		// recurse through tree, checking supplied assets before derived ones
-		for ix in 0..len { self.calc_mta(ix, &mut visited, &mut mtime); }
-		for (ix, asset) in self.assets.iter_mut().enumerate() { 
-			asset.mod_time_ances = mtime[ix];
-			if let AssetStatus::Present = asset.status {
-				if let (Some(m), Some(n)) = (asset.mod_time, asset.mod_time_ances) {
-					if n > m { asset.status = AssetStatus::Outdated; }
-				}
-			} 
-		}
-	}
-	
-	pub fn check_delete_status(&mut self) {
-		let len = self.assets.len();
-		let mut missing_desc = vec!(false; len);
-		for ix in (0..len).rev() {
-			let asset = &mut self.assets[ix];
-			if asset.asset_type == AssetType::Temp {
-				if asset.status == AssetStatus::Absent && !missing_desc[ix] { 
-					debug!("Switching Asset Type for {} from Absent to Deleted", asset.path.display());
-					asset.status = AssetStatus::Deleted
-				} else if missing_desc[ix] && asset.status == AssetStatus::Deleted {
-					debug!("Switching Asset Type for {} from {} to Absent", asset.path.display(), asset.status);
-					asset.status = AssetStatus::Absent
-				} 	 
-			}
-			match asset.status {		
-				AssetStatus::Absent | AssetStatus::Outdated => {
-					for j in &asset.parents { missing_desc[*j] = true; }
-				},
-				_ => (),
-			}
-		}
-	}
+    pub fn insert(&mut self, id: &str, path: &Path, asset_type: AssetType) -> usize {
+        if let Some(a) = self.get_asset(id) {
+            warn!(
+                "Warning - Can not insert asset {}, path {} as asset already exists with path {}",
+                id,
+                path.to_string_lossy(),
+                a.path().to_string_lossy()
+            );
+            a.idx()
+        } else {
+            let idx = self.assets.len();
+            let asset = Asset::new(id, path, idx, asset_type);
+            let asset_id = Rc::clone(&asset.id);
+            self.assets.push(asset);
+            self.asset_hash.insert(asset_id, idx);
+            idx
+        }
+    }
+
+    // Calculate most recent modification time of the ancestors for an asset
+    // If the asset is supplied (so has no ancestors) this is just the modification time of the file
+    fn calc_mta(&self, idx: usize, visited: &mut Vec<bool>, mtime: &mut Vec<Option<SystemTime>>) {
+        if !visited[idx] {
+            let asset = &self.assets[idx];
+            if let AssetType::Supplied = asset.asset_type {
+                mtime[idx] = asset.mod_time;
+            } else {
+                let cmp_time = |x: Option<SystemTime>, y: Option<SystemTime>| match (x, y) {
+                    (None, None) => None,
+                    (Some(m), None) => Some(m),
+                    (None, Some(m)) => Some(m),
+                    (Some(m), Some(n)) => {
+                        if n > m {
+                            Some(n)
+                        } else {
+                            Some(m)
+                        }
+                    }
+                };
+                let mut latest_time = None;
+                for j in &asset.parents {
+                    self.calc_mta(*j, visited, mtime);
+                    latest_time = cmp_time(latest_time, mtime[*j]);
+                }
+                mtime[idx] = cmp_time(latest_time, asset.mod_time);
+            }
+            visited[idx] = true;
+        }
+    }
+    pub fn iter(&self) -> std::slice::Iter<'_, Asset> {
+        self.assets.iter()
+    }
+    pub fn len(&self) -> usize {
+        self.assets.len()
+    }
+    pub fn recheck_status(&mut self, hs: &HashSet<usize>) {
+        let len = self.assets.len();
+        let mut changed = vec![None; len];
+        for asset in self
+            .assets
+            .iter_mut()
+            .filter(|x| x.asset_type != AssetType::Log)
+        {
+            if hs.contains(&asset.idx) {
+                trace!(
+                    "recheck_status: switching status of {} from {} to Incomplete",
+                    asset.id, asset.status
+                );
+                asset.status = AssetStatus::Incomplete
+            } else if !(asset.status == AssetStatus::Present
+                || asset.status == AssetStatus::Deleted)
+            {
+                let mut chg = None;
+                for i in asset.parents.iter() {
+                    if let Some(x) = changed[*i] {
+                        chg = Some(x);
+                        if x {
+                            break;
+                        }
+                    }
+                }
+                changed[asset.idx] = match chg {
+                    Some(false) => Some(false),
+                    _ => {
+                        let st = asset.status;
+                        asset.recheck_status();
+                        Some(asset.status != st)
+                    }
+                };
+            }
+        }
+    }
+
+    pub fn calc_mod_time_ances(&mut self) {
+        let len = self.assets.len();
+        let mut visited = vec![false; len];
+        let mut mtime: Vec<Option<SystemTime>> = vec![None; len];
+        // recurse through tree, checking supplied assets before derived ones
+        for ix in 0..len {
+            self.calc_mta(ix, &mut visited, &mut mtime);
+        }
+        for (ix, asset) in self.assets.iter_mut().enumerate() {
+            asset.mod_time_ances = mtime[ix];
+            if let AssetStatus::Present = asset.status
+                && let (Some(m), Some(n)) = (asset.mod_time, asset.mod_time_ances)
+                && n > m
+            {
+                asset.status = AssetStatus::Outdated;
+            }
+        }
+    }
+
+    pub fn check_delete_status(&mut self) {
+        let len = self.assets.len();
+        let mut missing_desc = vec![false; len];
+        for ix in (0..len).rev() {
+            let asset = &mut self.assets[ix];
+            if asset.asset_type == AssetType::Temp {
+                if asset.status == AssetStatus::Absent && !missing_desc[ix] {
+                    debug!(
+                        "Switching Asset Type for {} from Absent to Deleted",
+                        asset.path.display()
+                    );
+                    asset.status = AssetStatus::Deleted
+                } else if missing_desc[ix] && asset.status == AssetStatus::Deleted {
+                    debug!(
+                        "Switching Asset Type for {} from {} to Absent",
+                        asset.path.display(),
+                        asset.status
+                    );
+                    asset.status = AssetStatus::Absent
+                }
+            }
+            match asset.status {
+                AssetStatus::Absent | AssetStatus::Outdated => {
+                    for j in &asset.parents {
+                        missing_desc[*j] = true;
+                    }
+                }
+                _ => (),
+            }
+        }
+    }
 }
-

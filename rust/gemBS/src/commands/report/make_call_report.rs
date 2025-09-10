@@ -1372,7 +1372,7 @@ fn get_section_array_for_bc<'a>(
     let sec = ldoc.find_section(bc).expect("Couldn't find LatexSection");
     let mut sa = None;
     for c in sec.content().iter_mut() {
-        if let LatexContent::SecArray(ref mut s) = c {
+        if let LatexContent::SecArray(s) = c {
             sa = Some(s);
             break;
         }

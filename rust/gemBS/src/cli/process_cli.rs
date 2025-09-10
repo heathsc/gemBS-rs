@@ -55,16 +55,16 @@ fn gen_cli() -> Command {
 
 fn generate_completions(m: &ArgMatches) -> Result<(), String> {
     //    Err("Completions currently not working".to_string())
-    let gen = *m.get_one::<Shell>("shell").expect("Missing shell");
+    let g = *m.get_one::<Shell>("shell").expect("Missing shell");
     let mut cmd = cli_model();
-    eprintln!("Generating completion file for {}...", gen);
+    eprintln!("Generating completion file for {}...", g);
     let ofile = m
         .get_one::<String>("output")
         .expect("Default output option missing");
 
     match fs::File::create(ofile) {
         Ok(mut file) => {
-            generate(gen, &mut cmd, "gemBS", &mut file);
+            generate(g, &mut cmd, "gemBS", &mut file);
             Ok(())
         }
         Err(e) => Err(format!(

@@ -22,12 +22,12 @@ pub fn get_barcode_list<'a>(
     } else if let Some((DataValue::StringVec(svec), _)) = options.get("sample") {
         let mut seen = HashSet::new();
         for hr in gem_bs.get_sample_data_ref().values() {
-            if let Some(DataValue::String(x)) = hr.get(&Metadata::SampleName) {
-                if svec.contains(x) {
-                    seen.insert(x);
-                    if let Some(DataValue::String(barcode)) = hr.get(&Metadata::SampleBarcode) {
-                        barcodes.push(barcode);
-                    }
+            if let Some(DataValue::String(x)) = hr.get(&Metadata::SampleName)
+                && svec.contains(x)
+            {
+                seen.insert(x);
+                if let Some(DataValue::String(barcode)) = hr.get(&Metadata::SampleBarcode) {
+                    barcodes.push(barcode);
                 }
             }
         }

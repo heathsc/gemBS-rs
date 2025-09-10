@@ -1,7 +1,7 @@
 use crate::config::ConfHash;
 use crate::htslib::*;
 use crate::stats::stats_json::FSReadLevelType as ReadFlag;
-use std::str::{from_utf8, FromStr};
+use std::str::{FromStr, from_utf8};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct MapPos {
@@ -117,12 +117,10 @@ fn maps_from_bam_rec(
         split_id: 0,
     });
     // Handle SA tag
-    if check_supp {
-        if let Some(tag) = sa_tag.map(|s| from_utf8(s).unwrap()) {
-            for sa_map in tag.split(';') {
-                if sa_map.trim().len() > 1 {
-                    maps.push(map_from_sa_tag(sam_hdr, sa_map)?);
-                }
+    if check_supp && let Some(tag) = sa_tag.map(|s| from_utf8(s).unwrap()) {
+        for sa_map in tag.split(';') {
+            if sa_map.trim().len() > 1 {
+                maps.push(map_from_sa_tag(sam_hdr, sa_map)?);
             }
         }
     }
@@ -189,7 +187,7 @@ fn map_from_sa_tag(sam_hdr: &SamHeader, tag: &str) -> Result<Map, String> {
                 return Err(format!(
                     "Couldn't parse strand information {} in SA tag {}",
                     v[2], tag
-                ))
+                ));
             }
         };
         let cigar = match CigarBuf::from_str(v[3]) {

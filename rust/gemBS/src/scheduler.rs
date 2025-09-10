@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::{fs, thread, time};
 
 use crate::{
@@ -146,10 +146,10 @@ fn get_merge_bcf_req(gem_bs: &GemBS) -> (f64, usize) {
         .get_config_int(Section::Calling, "merge_threads")
         .or(threads)
         .map(|x| x as f64);
-    if let Some(t) = merge_threads {
-        if t < n {
-            n = t
-        }
+    if let Some(t) = merge_threads
+        && t < n
+    {
+        n = t
     }
     (n, 0)
 }
@@ -402,7 +402,7 @@ impl QPipe {
         let stage = (path.to_owned(), args.to_owned());
         match &mut self.stages {
             QPipeStage::None => self.stages = QPipeStage::External(vec![stage]),
-            QPipeStage::External(ref mut s) => s.push(stage),
+            QPipeStage::External(s) => s.push(stage),
             _ => panic!("Can't push stages to internal command"),
         }
         self
@@ -557,14 +557,14 @@ fn worker_thread(
                         debug!("Worker thread {} finished job", idx);
                         if rm_log {
                             trace!("Removing log file {:?}", log);
-                            if let Some(lfile) = log {
-                                if let Err(e) = fs::remove_file(lfile) {
-                                    error!(
-                                        "Could not remove log file {}: {}",
-                                        lfile.to_string_lossy(),
-                                        e
-                                    );
-                                }
+                            if let Some(lfile) = log
+                                && let Err(e) = fs::remove_file(lfile)
+                            {
+                                error!(
+                                    "Could not remove log file {}: {}",
+                                    lfile.to_string_lossy(),
+                                    e
+                                );
                             }
                         }
                         for p in rm_list.iter() {

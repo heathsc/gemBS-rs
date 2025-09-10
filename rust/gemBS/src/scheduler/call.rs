@@ -19,12 +19,12 @@ fn check_inputs<'a>(gem_bs: &'a GemBS, task: &'a Task) -> (usize, &'a str) {
     let (mut in_bam, mut bc) = (None, None);
     for ix in task.inputs() {
         let asset = gem_bs.get_asset(*ix).expect("Missing asset");
-        if let Some(cap) = RE.captures(asset.id()) {
-            if let Some(x) = cap.get(1) {
-                bc = Some(x.as_str());
-                in_bam = Some(*ix);
-                break;
-            }
+        if let Some(cap) = RE.captures(asset.id())
+            && let Some(x) = cap.get(1)
+        {
+            bc = Some(x.as_str());
+            in_bam = Some(*ix);
+            break;
         }
     }
     (
@@ -203,8 +203,15 @@ pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
     let (under, over) = get_conversion_rate(gem_bs, barcode);
 
     // Set up bs_call arguments
-    let mut args = format!("--loglevel\x1e{}\x1e--output\x1e{}\x1e--output-type\x1eb\x1e--reference\x1e{}\x1e--sample\x1e{}\x1e--contig-include\x1e{}\x1e--report-file\x1e{}\x1e",
-		gem_bs.verbose(), output_bcf.to_string_lossy(), gembs_ref.path().to_string_lossy(), barcode, contig_sizes.to_string_lossy(), report_file.to_string_lossy());
+    let mut args = format!(
+        "--loglevel\x1e{}\x1e--output\x1e{}\x1e--output-type\x1eb\x1e--reference\x1e{}\x1e--sample\x1e{}\x1e--contig-include\x1e{}\x1e--report-file\x1e{}\x1e",
+        gem_bs.verbose(),
+        output_bcf.to_string_lossy(),
+        gembs_ref.path().to_string_lossy(),
+        barcode,
+        contig_sizes.to_string_lossy(),
+        report_file.to_string_lossy()
+    );
     if let Some(cp) = contig_pool {
         args.push_str(format!("--contig-bed\x1e{}\x1e", cp.to_string_lossy()).as_str());
         pipeline.add_remove_file(&cp);

@@ -8,26 +8,26 @@ use crate::defs::contigs;
 use crate::htslib::{SamFile, VcfHeader};
 
 const FIXED_HEADERS: [&str; 20] = [
-	"##INFO=<ID=CX,Number=1,Type=String,Description=\"5 base sequence context (from position -2 to +2 on the positive strand) determined from the reference\">",
-	"##FILTER=<ID=fail,Description=\"No sample passed filters\">",
-	"##FILTER=<ID=q20,Description=\"Genotype Quality below 20\">",
-	"##FILTER=<ID=qd2,Description=\"Quality By Depth below 2\">",
-	"##FILTER=<ID=fs60,Description=\"Fisher Strand above 60\">",
-	"##FILTER=<ID=mq40,Description=\"RMS Mapping Quality below 40\">",
-	"##FILTER=<ID=mac1,Description=\"Minor allele count <= 1\">",
-	"##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">",
-	"##FORMAT=<ID=FT,Number=1,Type=String,Description=\"Sample Genotype Filter\">",
-	"##FORMAT=<ID=GL,Number=G,Type=Float,Description=\"Genotype Likelihood\">",
-	"##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Phred scaled conditional genotype quality\">",
-	"##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Read Depth (non converted reads only)\">",
-	"##FORMAT=<ID=MQ,Number=1,Type=Integer,Description=\"RMS Mapping Quality\">",
-	"##FORMAT=<ID=QD,Number=1,Type=Integer,Description=\"Quality By Depth (Variant quality / read depth (non-converted reads only))\">",
-	"##FORMAT=<ID=MC8,Number=8,Type=Integer,Description=\"Base counts: non-informative for methylation (ACGT) followed by informative for methylation (ACGT)\">",
-	"##FORMAT=<ID=AMQ,Number=.,Type=Integer,Description=\"Average base quailty for where MC8 base count non-zero\">",
-	"##FORMAT=<ID=CS,Number=1,Type=String,Description=\"Strand of Cytosine relative to reference sequence (+/-/+-/NA)\">",
-	"##FORMAT=<ID=CG,Number=1,Type=String,Description=\"CpG Status (from genotype calls: Y/N/H/?)\">",
-	"##FORMAT=<ID=CX,Number=1,Type=String,Description=\"5 base sequence context (from position -2 to +2 on the positive strand) determined from genotype call\">",
-	"##FORMAT=<ID=FS,Number=1,Type=Integer,Description=\"Phred scaled log p-value from Fishers exact test of strand bias\"",
+    "##INFO=<ID=CX,Number=1,Type=String,Description=\"5 base sequence context (from position -2 to +2 on the positive strand) determined from the reference\">",
+    "##FILTER=<ID=fail,Description=\"No sample passed filters\">",
+    "##FILTER=<ID=q20,Description=\"Genotype Quality below 20\">",
+    "##FILTER=<ID=qd2,Description=\"Quality By Depth below 2\">",
+    "##FILTER=<ID=fs60,Description=\"Fisher Strand above 60\">",
+    "##FILTER=<ID=mq40,Description=\"RMS Mapping Quality below 40\">",
+    "##FILTER=<ID=mac1,Description=\"Minor allele count <= 1\">",
+    "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">",
+    "##FORMAT=<ID=FT,Number=1,Type=String,Description=\"Sample Genotype Filter\">",
+    "##FORMAT=<ID=GL,Number=G,Type=Float,Description=\"Genotype Likelihood\">",
+    "##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Phred scaled conditional genotype quality\">",
+    "##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Read Depth (non converted reads only)\">",
+    "##FORMAT=<ID=MQ,Number=1,Type=Integer,Description=\"RMS Mapping Quality\">",
+    "##FORMAT=<ID=QD,Number=1,Type=Integer,Description=\"Quality By Depth (Variant quality / read depth (non-converted reads only))\">",
+    "##FORMAT=<ID=MC8,Number=8,Type=Integer,Description=\"Base counts: non-informative for methylation (ACGT) followed by informative for methylation (ACGT)\">",
+    "##FORMAT=<ID=AMQ,Number=.,Type=Integer,Description=\"Average base quailty for where MC8 base count non-zero\">",
+    "##FORMAT=<ID=CS,Number=1,Type=String,Description=\"Strand of Cytosine relative to reference sequence (+/-/+-/NA)\">",
+    "##FORMAT=<ID=CG,Number=1,Type=String,Description=\"CpG Status (from genotype calls: Y/N/H/?)\">",
+    "##FORMAT=<ID=CX,Number=1,Type=String,Description=\"5 base sequence context (from position -2 to +2 on the positive strand) determined from genotype call\">",
+    "##FORMAT=<ID=FS,Number=1,Type=Integer,Description=\"Phred scaled log p-value from Fishers exact test of strand bias\"",
 ];
 
 fn find_tags<'a>(s: &'a str, tags: &[&str]) -> Vec<Option<&'a str>> {
@@ -53,18 +53,19 @@ fn add_sample_info<'a>(
     for s in text.lines() {
         if s.starts_with("@RG\t") {
             let tags = find_tags(s, &["BC", "SM", "DS"]);
-            if let Some(bc) = tags[0] {
-                if !bc_set.insert(bc) && !bench {
-                    let mut sbuf = format!("##bs_call_sample_info=<ID=\"{}\"", bc);
-                    if let Some(sm) = tags[1] {
-                        sbuf.push_str(format!(",SM=\"{}\"", sm).as_str());
-                    }
-                    if let Some(ds) = tags[2] {
-                        sbuf.push_str(format!(",DS=\"{}\"", ds).as_str());
-                    }
-                    sbuf.push('>');
-                    hd.append(&sbuf)?;
+            if let Some(bc) = tags[0]
+                && !bc_set.insert(bc)
+                && !bench
+            {
+                let mut sbuf = format!("##bs_call_sample_info=<ID=\"{}\"", bc);
+                if let Some(sm) = tags[1] {
+                    sbuf.push_str(format!(",SM=\"{}\"", sm).as_str());
                 }
+                if let Some(ds) = tags[2] {
+                    sbuf.push_str(format!(",DS=\"{}\"", ds).as_str());
+                }
+                sbuf.push('>');
+                hd.append(&sbuf)?;
             }
         }
     }

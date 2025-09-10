@@ -79,24 +79,24 @@ impl SampleData {
         dataset: String,
     ) -> Result<(), String> {
         let thash = self.data.entry(dataset.clone()).or_default();
-        if hr.contains_key(&Metadata::FilePath) {
-            if let Some(end) = hr.remove(&Metadata::ReadEnd) {
-                let fp = hr.remove(&Metadata::FilePath).unwrap();
-                match end {
-                    DataValue::ReadEnd(ReadEnd::End1) => hr.insert(Metadata::FilePath1, fp),
-                    DataValue::ReadEnd(ReadEnd::End2) => hr.insert(Metadata::FilePath2, fp),
-                    _ => return Err("Internal error in check_and_store_record()".to_string()),
-                };
-            }
+        if hr.contains_key(&Metadata::FilePath)
+            && let Some(end) = hr.remove(&Metadata::ReadEnd)
+        {
+            let fp = hr.remove(&Metadata::FilePath).unwrap();
+            match end {
+                DataValue::ReadEnd(ReadEnd::End1) => hr.insert(Metadata::FilePath1, fp),
+                DataValue::ReadEnd(ReadEnd::End2) => hr.insert(Metadata::FilePath2, fp),
+                _ => return Err("Internal error in check_and_store_record()".to_string()),
+            };
         }
         for (md, val) in hr.drain() {
-            if let Some(old_val) = thash.insert(md, val.clone()) {
-                if old_val != val {
-                    return Err(format!(
-                        "Inconsistent data for dataset {} item {:?}",
-                        &dataset, md
-                    ));
-                }
+            if let Some(old_val) = thash.insert(md, val.clone())
+                && old_val != val
+            {
+                return Err(format!(
+                    "Inconsistent data for dataset {} item {:?}",
+                    &dataset, md
+                ));
             }
         }
         Ok(())
@@ -106,17 +106,21 @@ impl SampleData {
     pub fn check_and_store_sample_data(&mut self, gem_bs: &mut GemBS) -> Result<(), String> {
         for (dataset, href) in self.data.iter_mut() {
             // Check for paired data
-            if href.contains_key(&Metadata::FilePath1) && href.contains_key(&Metadata::FilePath2) {
-                if let Some(ftype) = href.get(&Metadata::FileType) {
-                    if let DataValue::FileType(ft) = ftype {
-                        if *ft == FileType::Interleaved || *ft == FileType::Single {
-                            return Err(format!("Error with dataset {}: Interleaved or Single file type incompatible with two input files", dataset));
-                        }
-                    }
+            if href.contains_key(&Metadata::FilePath1)
+                && href.contains_key(&Metadata::FilePath2)
+                && let Some(ftype) = href.get(&Metadata::FileType)
+                && let DataValue::FileType(ft) = ftype
+            {
+                if *ft == FileType::Interleaved || *ft == FileType::Single {
+                    return Err(format!(
+                        "Error with dataset {}: Interleaved or Single file type incompatible with two input files",
+                        dataset
+                    ));
                 } else {
                     href.insert(Metadata::FileType, DataValue::FileType(FileType::Paired));
                 }
             }
+
             for (md, val) in href.iter() {
                 gem_bs.set_sample_data(dataset, *md, val.clone());
             }

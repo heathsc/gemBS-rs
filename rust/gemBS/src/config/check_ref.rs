@@ -124,14 +124,14 @@ fn check_indices(gem_bs: &mut GemBS) -> Result<(), String> {
         infer_idx_dir.clone().unwrap()
     };
     // Check directory exists
-    if !idx_dir.is_dir() {
-        if let Err(e) = fs::create_dir(&idx_dir) {
-            return Err(format!(
-                "Could not create index_dir directory {}: {}",
-                idx_dir.display(),
-                e
-            ));
-        }
+    if !idx_dir.is_dir()
+        && let Err(e) = fs::create_dir(&idx_dir)
+    {
+        return Err(format!(
+            "Could not create index_dir directory {}: {}",
+            idx_dir.display(),
+            e
+        ));
     }
     if missing_index || missing_nonbs_index {
         if missing_index {

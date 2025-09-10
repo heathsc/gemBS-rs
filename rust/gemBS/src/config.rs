@@ -10,18 +10,18 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 use std::{env, option_env};
 
 use crate::common::assets::{Asset, AssetList, AssetStatus, AssetType, GetAsset};
 use crate::common::defs::{
-    signal_msg, Command, DataValue, JobLen, MemSize, Metadata, Section, SIGHUP, SIGINT, SIGQUIT,
-    SIGTERM,
+    Command, DataValue, JobLen, MemSize, Metadata, SIGHUP, SIGINT, SIGQUIT, SIGTERM, Section,
+    signal_msg,
 };
 use crate::common::tasks::{RunningTask, Task, TaskList, TaskStatus};
-use crate::common::utils::{get_phys_memory, timed_wait_for_lock, FileLock};
+use crate::common::utils::{FileLock, get_phys_memory, timed_wait_for_lock};
 
 use crate::config::contig::{Contig, ContigPool};
 use utils::{find_exec_path, log_level::LogLevel};
@@ -192,10 +192,10 @@ impl GemBS {
     }
     pub fn get_config(&self, section: Section, name: &str) -> Option<&DataValue> {
         if let GemBSData::Config(href) = &self.var[0] {
-            if let Some(h) = href.get(&section) {
-                if let Some(s) = h.get(name) {
-                    return Some(s);
-                }
+            if let Some(h) = href.get(&section)
+                && let Some(s) = h.get(name)
+            {
+                return Some(s);
             }
             if let Some(h) = href.get(&Section::Default) {
                 return h.get(name);
@@ -204,12 +204,11 @@ impl GemBS {
         None
     }
     pub fn get_config_strict(&self, section: Section, name: &str) -> Option<&DataValue> {
-        if let GemBSData::Config(href) = &self.var[0] {
-            if let Some(h) = href.get(&section) {
-                if let Some(s) = h.get(name) {
-                    return Some(s);
-                }
-            }
+        if let GemBSData::Config(href) = &self.var[0]
+            && let Some(h) = href.get(&section)
+            && let Some(s) = h.get(name)
+        {
+            return Some(s);
         }
         None
     }
@@ -399,7 +398,10 @@ impl GemBS {
                 PathBuf::from("/usr/local/lib/gemBS")
             };
         if !check_root(&gem_bs_root) {
-            return Err(format!("Could not find (installation) root directory for gemBS at {:?}.  Use root-dir option or set GEMBS_ROOT environment variable", gem_bs_root));
+            return Err(format!(
+                "Could not find (installation) root directory for gemBS at {:?}.  Use root-dir option or set GEMBS_ROOT environment variable",
+                gem_bs_root
+            ));
         }
         let config_dir = Path::new(cdir);
         if initial {
@@ -792,10 +794,10 @@ impl GemBS {
                 if ignore || st != TaskStatus::Complete {
                     for ix in rf[i].inputs() {
                         let asset = arf.get_asset(*ix).unwrap();
-                        if let Some(j) = asset.creator() {
-                            if asset.status() != AssetStatus::Present {
-                                check_reqd(j, reqd, tlist, rf, arf, com_set, ignore)
-                            }
+                        if let Some(j) = asset.creator()
+                            && asset.status() != AssetStatus::Present
+                        {
+                            check_reqd(j, reqd, tlist, rf, arf, com_set, ignore)
                         }
                     }
                 }
@@ -817,10 +819,10 @@ impl GemBS {
                 asset.path(),
                 asset.status()
             );
-            if let Some(j) = asset.creator() {
-                if asset.status() != AssetStatus::Present {
-                    check_reqd(j, &mut reqd, &mut tlist, tasks, asset_ref, &com_set, ignore);
-                }
+            if let Some(j) = asset.creator()
+                && asset.status() != AssetStatus::Present
+            {
+                check_reqd(j, &mut reqd, &mut tlist, tasks, asset_ref, &com_set, ignore);
             }
         }
         tlist.sort_unstable();

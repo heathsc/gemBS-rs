@@ -10,7 +10,7 @@ use crate::bbi::*;
 const Z_OK:c_int = 0;
 
 #[link(name = "z")]
-extern "C" {
+unsafe extern "C" {
 	fn compress(dest: *mut u8, destLen: *mut c_ulong, source: *const u8, sourceLen: c_ulong) -> c_int;
 	fn compressBound(sourceLen: c_ulong) -> c_ulong;
 }

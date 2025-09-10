@@ -55,13 +55,12 @@ fn get_required_asset_list(
         for sample in svec.iter() {
             let mut asset = None;
             for hr in gem_bs.get_sample_data_ref().values() {
-                if let Some(DataValue::String(x)) = hr.get(&Metadata::SampleName) {
-                    if x == sample {
-                        if let Some(DataValue::String(bc)) = hr.get(&Metadata::SampleBarcode) {
-                            asset = gem_bs.get_asset(format!("{}.{}", bc, suffix).as_str());
-                            break;
-                        }
-                    }
+                if let Some(DataValue::String(x)) = hr.get(&Metadata::SampleName)
+                    && x == sample
+                    && let Some(DataValue::String(bc)) = hr.get(&Metadata::SampleBarcode)
+                {
+                    asset = gem_bs.get_asset(format!("{}.{}", bc, suffix).as_str());
+                    break;
                 }
             }
             if let Some(a) = asset {
