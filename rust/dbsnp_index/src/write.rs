@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::fs::File;
-use std::io::{self, BufWriter, Write, Seek, SeekFrom, ErrorKind};
+use std::io::{self, BufWriter, Write, Seek, SeekFrom};
 
 use crossbeam_channel::Receiver;
 use zstd::block::compress;
@@ -10,7 +10,7 @@ use super::contig::Contig;
 use super::compress::CompressBlock;
 
 pub fn new_err(s: String) -> io::Error {
-	io::Error::new(ErrorKind::Other, s)	
+	io::Error::other(s)	
 }
 
 
@@ -95,7 +95,6 @@ pub fn new_err(s: String) -> io::Error {
 /// Magic Number
 /// 
 /// magic           32           Magic number (0xd7278434)
-
 const IDX_MAGIC: u32 = 0xd7278434;
  
 pub fn write_thread(conf: Arc<Config>, recv: Receiver<(Arc<Contig>, Vec<CompressBlock>, usize)>) {
@@ -112,7 +111,7 @@ pub fn write_thread(conf: Arc<Config>, recv: Receiver<(Arc<Contig>, Vec<Compress
 	let mut max_size = 0;
 	for (ctg, mut cblock, msize) in recv.iter() {
 		info!("Writing out data for contig {}", ctg.name());
-		let pos = ofile.seek(SeekFrom::Current(0)).expect("IO error - can't get current file position");
+		let pos = ofile.stream_position().expect("IO error - can't get current file position");
 		debug!("Writer thread received data for contig {}, file pos = {}, starting writing", ctg.name(), pos);
 		for cb in cblock.drain(..) {
 			let cbuf = cb.cbuf();
@@ -126,7 +125,7 @@ pub fn write_thread(conf: Arc<Config>, recv: Receiver<(Arc<Contig>, Vec<Compress
 		max_size = max_size.max(msize);
 	}
 	debug!("Writer thread adding index information");
-	let pos = ofile.seek(SeekFrom::Current(0)).expect("IO error - can't get current file position");
+	let pos = ofile.stream_position().expect("IO error - can't get current file position");
 	let mut ubuf: Vec<u8> = Vec::new();
 	write_u32(ubuf.by_ref(), &[ctgs.len() as u32]).expect("Write error");
 	for (ctg, x) in ctgs.iter() {

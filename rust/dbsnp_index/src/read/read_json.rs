@@ -218,10 +218,10 @@ fn handle_json_tokens<'a>(jtxt: &'a str, jtok: &[JTok], jsnp: &mut JsonSnp<'a>, 
 								},
 								JsKey::InsertedSequence => {
 									if level == 7 && ntok1.tok_type == JType::String && (jsnp.mask & IN_SPDI) != 0 {
-										if ntok1.end - ntok1.start == 1 { jsnp.inserted_sequence = Some(jtxt[ntok1.start..ntok1.end].as_bytes()[0]) }
+										if ntok1.end - ntok1.start == 1 { jsnp.inserted_sequence = Some(jtxt.as_bytes()[ntok1.start..ntok1.end][0]) }
 									} else if level == 6 && ntok1.tok_type == JType::String && (jsnp.mask & IN_OBSERVATION) != 0 {
 										jsnp.mask |= SEEN_FREQ_INSERTED_SEQUENCE;
-										if ntok1.end - ntok1.start != 1 || Some(jtxt[ntok1.start..ntok1.end].as_bytes()[0]) != jsnp.inserted_sequence {
+										if ntok1.end - ntok1.start != 1 || Some(jtxt.as_bytes()[ntok1.start..ntok1.end][0]) != jsnp.inserted_sequence {
 											jsnp.mask &= !FREQ_ALLELES_OK;
 										}
 									}
@@ -230,10 +230,10 @@ fn handle_json_tokens<'a>(jtxt: &'a str, jtok: &[JTok], jsnp: &mut JsonSnp<'a>, 
 								},
 								JsKey::DeletedSequence => {
 									if level == 7 && ntok1.tok_type == JType::String && (jsnp.mask & IN_SPDI) != 0 {
-										if ntok1.end - ntok1.start == 1 { jsnp.deleted_sequence = Some(jtxt[ntok1.start..ntok1.end].as_bytes()[0]) }
+										if ntok1.end - ntok1.start == 1 { jsnp.deleted_sequence = Some(jtxt.as_bytes()[ntok1.start..ntok1.end][0]) }
 									} else if level == 6 && ntok1.tok_type == JType::String && (jsnp.mask & IN_OBSERVATION) != 0 {
 										jsnp.mask |= SEEN_FREQ_DELETED_SEQUENCE;
-										if ntok1.end - ntok1.start != 1 || Some(jtxt[ntok1.start..ntok1.end].as_bytes()[0]) != jsnp.deleted_sequence {
+										if ntok1.end - ntok1.start != 1 || Some(jtxt.as_bytes()[ntok1.start..ntok1.end][0]) != jsnp.deleted_sequence {
 											jsnp.mask &= !FREQ_ALLELES_OK;
 										}
 									}
@@ -307,7 +307,7 @@ fn snp_from_json(s: &str, rb: &mut SnpBuilder) -> Option<Snp> {
 }
 
 pub fn process_json_line(buf: &str, builder: &mut SnpBuilder, rbuf: &mut ReaderBuf) {
-	if let Some(snp) = snp_from_json(&buf, builder) { 
+	if let Some(snp) = snp_from_json(buf, builder) { 
 		rbuf.add_snp(snp) 
 	}	
 }

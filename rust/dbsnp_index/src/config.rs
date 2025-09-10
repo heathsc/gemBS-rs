@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet};
-use std::io::{self, Error, ErrorKind};
+use std::io::{self, Error};
 use std::sync::RwLock;
 
 use super::contig::*;
 
 pub fn new_err(s: String) -> io::Error {
-	Error::new(ErrorKind::Other, s)	
+	Error::other(s)	
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -23,6 +23,7 @@ pub struct Config {
 }
 
 impl Config {
+    #[allow(clippy::too_many_arguments)]
 	pub fn new(threads: usize, jobs: usize, maf_limit: Option<f64>, output: Option<String>, description: Option<String>, input_type: IType,
 		chrom_alias: Option<HashMap<String, String>>, selected: HashSet<String>) -> Self { 
 		Self { threads, jobs, maf_limit, output, description: RwLock::new(description), input_type, selected, 

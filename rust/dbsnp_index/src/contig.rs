@@ -233,7 +233,7 @@ impl Contig {
 			Err(_) => panic!("Error obtaining lock"),
 		}
 	}
-	pub fn try_bind(&self) -> Option<RwLockWriteGuard<ContigData>> {
+	pub fn try_bind<'a>(&'a self) -> Option<RwLockWriteGuard<'a, ContigData>> {
 		match self.data.try_write() {
 			Ok(guard) => Some(guard),
 			Err(TryLockError::WouldBlock) => None,
@@ -260,7 +260,7 @@ pub struct ContigHash {
 impl ContigHash {
 	pub fn new(channel_size: usize, chrom_alias: Option<HashMap<String, String>>) -> Self { Self{ contig_hash: RwLock::new(HashMap::new()), chrom_alias, channel_size }}
 	
-	pub fn mk_lookup(&self) -> ContigLookup {
+	pub fn mk_lookup<'a>(&'a self) -> ContigLookup<'a> {
 		ContigLookup{cache: None, contig_hash: self}
 	}	
 	
