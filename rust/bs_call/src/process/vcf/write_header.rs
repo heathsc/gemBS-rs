@@ -27,7 +27,7 @@ const FIXED_HEADERS: [&str; 20] = [
     "##FORMAT=<ID=CS,Number=1,Type=String,Description=\"Strand of Cytosine relative to reference sequence (+/-/+-/NA)\">",
     "##FORMAT=<ID=CG,Number=1,Type=String,Description=\"CpG Status (from genotype calls: Y/N/H/?)\">",
     "##FORMAT=<ID=CX,Number=1,Type=String,Description=\"5 base sequence context (from position -2 to +2 on the positive strand) determined from genotype call\">",
-    "##FORMAT=<ID=FS,Number=1,Type=Integer,Description=\"Phred scaled log p-value from Fishers exact test of strand bias\"",
+    "##FORMAT=<ID=FS,Number=1,Type=Integer,Description=\"Phred scaled log p-value from Fishers exact test of strand bias\">",
 ];
 
 fn find_tags<'a>(s: &'a str, tags: &[&str]) -> Vec<Option<&'a str>> {

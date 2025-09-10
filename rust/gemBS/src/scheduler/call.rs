@@ -220,9 +220,8 @@ pub fn make_call_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
         args.push_str(format!("--threads\x1e{}\x1e", t).as_str());
     }
     args.push_str(format!("--conversion\x1e{},{}\x1e", under, over).as_str());
-    super::add_command_opts(gem_bs, &mut args, Section::Calling, OPT_LIST);
+    super::add_command_opts(gem_bs, &mut args, Section::Calling, OPT_LIST);    
     args.push_str(&gem_bs.get_asset(in_bam).unwrap().path().to_string_lossy());
-
     if let Some(x) = task.log() {
         pipeline.log = Some(
             gem_bs
