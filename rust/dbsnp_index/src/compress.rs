@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::io::Write;
 
 use crossbeam_channel::Sender;
-use zstd::block::compress;
+use zstd::bulk::compress;
 
 use super::process::AtomicServer;
 use super::contig::Contig;

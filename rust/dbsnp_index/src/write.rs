@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{self, BufWriter, Write, Seek, SeekFrom};
 
 use crossbeam_channel::Receiver;
-use zstd::block::compress;
+use zstd::bulk::compress;
 
 use super::config::Config;
 use super::contig::Contig;

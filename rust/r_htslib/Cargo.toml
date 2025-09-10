@@ -8,4 +8,4 @@ edition = "2018"
 
 [dependencies]
 libc = "0.2.0"
-c2rust-bitfields = "0.3.0"
+c2rust-bitfields = "0.20.0"

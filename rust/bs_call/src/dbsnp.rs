@@ -5,7 +5,7 @@ use std::io::{Error, ErrorKind, Read, BufReader, Seek, SeekFrom};
 use std::convert::TryInto;
 use std::collections::HashMap;
 
-use zstd::block::decompress_to_buffer;
+use zstd::bulk::decompress_to_buffer;
 
 pub struct DBSnpFile {
 	file: BufReader<File>,

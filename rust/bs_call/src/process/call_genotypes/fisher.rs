@@ -5,7 +5,7 @@ use std::f64::consts::LN_10;
 use libc::c_double;
 
 #[link(name = "m")]
-extern "C" {
+unsafe extern "C" {
     fn lgamma(x: c_double) -> c_double;
 }
 
