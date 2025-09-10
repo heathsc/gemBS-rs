@@ -13,7 +13,7 @@ The manuscript describing the original gemBS pipeline is available
 
 The rewrite of the pipeline into Rust has two aims: (1) to have a more
 robust pipeline and (2) to provide a more flexible platform for future
-developments.  All of the tools developed for the pipeline except for the GEM3 mapper (being an external project that is also very stable!) have now been re-written in Rust. These include bs_call, the methylation and SNV-variant caller, and the methylation and SNP extractions tools mextr and snpxtr.  In all cases the running times are comparable to the original C versions.
+developments.  All the tools developed for the pipeline except for the GEM3 mapper (being an external project that is also very stable!) have now been re-written in Rust. These include bs_call, the methylation and SNV-variant caller, and the methylation and SNP extractions tools mextr and snpxtr.  In all cases the running times are comparable to the original C versions.
 
 ------------
 Dependencies

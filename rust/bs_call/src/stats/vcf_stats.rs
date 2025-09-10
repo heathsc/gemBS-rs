@@ -250,6 +250,7 @@ fn handle_meth_stats(
             &mut vs.cpg_non_ref_meth
         };
         for (i, p) in d.iter().enumerate() {
+            assert!(p.is_finite(),"p = {p}");
             m_ref[i][0] += *p;
             m_ref[i][1] += *p * z;
         }

@@ -35,7 +35,7 @@ fn gen_cli() -> Command {
                         .action(ArgAction::SetTrue)
                         .help("Submit commands to slurm for execution"),
                 )
-                .group(ArgGroup::new("slurm_opts").args(&["slurm", "slurm_script"]))
+                .group(ArgGroup::new("slurm_opts").args(["slurm", "slurm_script"]))
         } else {
             cli_model().arg(
                 Arg::new("slurm_script")

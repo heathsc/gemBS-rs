@@ -128,7 +128,7 @@ pub(super) fn cli_model() -> Command {
                 )
                 .group(
                     ArgGroup::new("metadata")
-                        .args(&["cvs_metadata", "json_metadata"])
+                        .args(["cvs_metadata", "json_metadata"])
                         .required(true)
                 )
         )
@@ -262,7 +262,7 @@ pub(super) fn cli_model() -> Command {
                 )
                 .group(
                     ArgGroup::new("sample_desc")
-                        .args(&["dataset", "sample", "barcode"])
+                        .args(["dataset", "sample", "barcode"])
                 )
                 .next_help_heading("global options")
                 .arg(
@@ -360,7 +360,7 @@ pub(super) fn cli_model() -> Command {
                 )
                 .group(
                     ArgGroup::new("mapping_types")
-                        .args(&["bs", "non_bs"])
+                        .args(["bs", "non_bs"])
                 )
                 .next_help_heading("sorting options")
                 .arg(
@@ -424,15 +424,15 @@ pub(super) fn cli_model() -> Command {
                 )
                 .group(
                     ArgGroup::new("remove_group")
-                        .args(&["remove", "no_merge"])
+                        .args(["remove", "no_merge"])
                 )
                 .group(
                     ArgGroup::new("merging")
-                        .args(&["merge", "no_merge"])
+                        .args(["merge", "no_merge"])
                 )
                 .group(
                     ArgGroup::new("md5_group")
-                        .args(&["md5", "no_md5"])
+                        .args(["md5", "no_md5"])
                 )
         )
         .subcommand(
@@ -463,7 +463,7 @@ pub(super) fn cli_model() -> Command {
                 )
                 .group(
                     ArgGroup::new("sample_desc")
-                        .args(&["sample", "barcode"])
+                        .args(["sample", "barcode"])
                 )
                 .next_help_heading("filtering")
                 .arg(
@@ -581,7 +581,7 @@ pub(super) fn cli_model() -> Command {
                 .arg(
                     Arg::new("conversion")
                         .short('C').long("conversion")
-                        .value_names(&["[UNDER]", "OVER"])
+                        .value_names(["[UNDER]", "OVER"])
                         .value_parser(value_parser!(f64))
                         .num_args(1..=2).value_delimiter(' ')
                         .help("Set conversion rates (under over)")
@@ -594,7 +594,7 @@ pub(super) fn cli_model() -> Command {
                 )
                 .group(
                     ArgGroup::new("conversion_group")
-                        .args(&["conversion", "auto_conversion"])
+                        .args(["conversion", "auto_conversion"])
                 )
                 .arg(
                     Arg::new("ref_bias")
@@ -625,7 +625,7 @@ pub(super) fn cli_model() -> Command {
                 )
                 .group(
                     ArgGroup::new("md5_group")
-                        .args(&["md5", "no_md5"])
+                        .args(["md5", "no_md5"])
                 )
                 .arg(
                     Arg::new("index")
@@ -641,7 +641,7 @@ pub(super) fn cli_model() -> Command {
                 )
                 .group(
                     ArgGroup::new("index_group")
-                        .args(&["index", "no_index"])
+                        .args(["index", "no_index"])
                 )
                 .arg(
                     Arg::new("remove")
@@ -651,7 +651,7 @@ pub(super) fn cli_model() -> Command {
                 )
                 .group(
                     ArgGroup::new("remove_group")
-                        .args(&["remove", "no_merge"])
+                        .args(["remove", "no_merge"])
                 )
                 .arg(
                     Arg::new("merge")
@@ -667,7 +667,7 @@ pub(super) fn cli_model() -> Command {
                 )
                 .group(
                     ArgGroup::new("merge_group")
-                        .args(&["merge", "no_merge"])
+                        .args(["merge", "no_merge"])
                 )
                 .arg(
                     Arg::new("species")
@@ -703,7 +703,7 @@ pub(super) fn cli_model() -> Command {
                 )
                 .group(
                     ArgGroup::new("sample_desc")
-                        .args(&["sample", "barcode"])
+                        .args(["sample", "barcode"])
                 )
                 .next_help_heading("filtering")
                 .arg(
