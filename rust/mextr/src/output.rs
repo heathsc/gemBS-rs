@@ -81,7 +81,7 @@ impl Record {
 		self.gt_strand.map(|(_, s)|
 			match s {
 				Strand::Amb | Strand::Unk => {
-					if self.cx[2].to_ascii_uppercase() == b'G' { Strand::G } else { Strand::C } 					
+					if self.cx[2].eq_ignore_ascii_case(&b'G') { Strand::G } else { Strand::C } 					
 				},
 				_ => s,
 			} 
@@ -187,7 +187,7 @@ fn print_tsv_header(f: &mut HtsFile, hdr: &VcfHeader, _chash: &ConfHash) -> io::
 }
 
 pub fn output_handler(chash: &ConfHash, hdr: &VcfHeader, r: Recv, outfiles: &mut [HtsFile], ph: PrintHeader, ob: OutputBlock) {
-	if !chash.get_bool("no_header") { for mut outfile in outfiles.iter_mut() { ph(&mut outfile, hdr, chash).expect("Error writing header") } }
+	if !chash.get_bool("no_header") { for outfile in outfiles.iter_mut() { ph(outfile, hdr, chash).expect("Error writing header") } }
 	let mut blk_store: HashMap<usize, Arc<RecordBlock>> = HashMap::new();
 	let mut curr_ix = 0;	
 	let mut pblk: Option<Arc<RecordBlock>> = None;
@@ -234,7 +234,7 @@ pub fn output_bed_methyl_thread(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, r: Re
 	let nt = chash.get_int("threads");
 	let (comp_send, comp_recv) = bounded(nt * 10);
 	let (wrt_send, wrt_recv) = bounded(nt * 10);
-	let bbi = Bbi::init(&prefix, comp_send, &chash).unwrap_or_else(|e| panic!("Error creating BigBed / BigWig files: {}", e));
+	let bbi = Bbi::init(prefix, comp_send, &chash).unwrap_or_else(|e| panic!("Error creating BigBed / BigWig files: {}", e));
 	chash.set_bbi(bbi);
 	
 	// setup compress threads

@@ -15,7 +15,6 @@ use crate::config::ConfHash;
 /// output file as it is being made.  If we get to the EOF, we wait for 500ms and
 /// try again, until we get a signal that the file has been completed.
 /// 
-
 struct Md5File {
 	name: String,
 	file: File,

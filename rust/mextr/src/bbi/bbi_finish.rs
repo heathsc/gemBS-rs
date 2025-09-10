@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::io::{Seek, Write, SeekFrom};
+use std::io::{Seek, Write};
 
 use crate::config::ConfHash;
 use super::write_bbi::BbiWriter;
@@ -43,28 +43,28 @@ pub fn bbi_finish(ch: Arc<ConfHash>, mut writer: BbiWriter) {
 		debug!("bbi_finish: generating main index for {:?}", bbi_type);
 		let offset = writer.index_offset;
 		let ctg_blocks = &writer.ctg_blocks;
-		let rtree = RTree::init(&ctg_blocks, n_rec as u32, offset);
+		let rtree = RTree::init(ctg_blocks, n_rec as u32, offset);
 		rtree.write(&mut writer.fp, bbi_type, offset).expect("Error writing out main index");
 	}
 	
-	let mut zoom_hdr = Vec::with_capacity(ZOOM_LEVELS as usize);
+	let mut zoom_hdr = Vec::with_capacity(ZOOM_LEVELS);
 	// Write out zoom data and indices
 	for (level, z_nrec) in n_zoom_rec.iter().enumerate() {
 		debug!("bbi_finish: generating zoom level {} for {:?}", level + 1, bbi_type);
 		writer.clear_ctg_blocks();
 		let w = &mut writer.fp;
-		let data_offset = w.seek(SeekFrom::Current(0)).unwrap() as u64;
+		let data_offset = w.stream_position().unwrap();
 		let zdata = &mut writer.zoom_data[level];
 		let ctg_blocks = &mut writer.ctg_blocks;
 		for (blk, v) in zdata.drain(..) {
-			let pos = w.seek(SeekFrom::Current(0)).unwrap() as u64;
+			let pos = w.stream_position().unwrap();
 			w.write_all(&v).expect("Error writing out zoom data");
 			let blocks = &mut ctg_blocks[blk.id() as usize];
 			blocks.push(BbiCtgBlock::new(&blk, pos));
 		}
-		let index_offset = w.seek(SeekFrom::Current(0)).unwrap() as u64;
+		let index_offset = w.stream_position().unwrap();
 		zoom_hdr.push(ZoomHeader::new(zoom_scales[level], data_offset, index_offset));
-		let rtree = RTree::init(&ctg_blocks, *z_nrec, index_offset);
+		let rtree = RTree::init(ctg_blocks, *z_nrec, index_offset);
 		rtree.write(&mut writer.fp, bbi_type, index_offset).expect("Error writing out main index");		
 	}
 	

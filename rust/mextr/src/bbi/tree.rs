@@ -30,7 +30,7 @@ impl <'a>CtgTree<'a> {
 		let mut width = Vec::new();
 		let mut n1 = n_nodes;
 		loop {
-			n1 = (n1 + BLOCK_SIZE - 1) / BLOCK_SIZE;
+			n1 = n1.div_ceil(BLOCK_SIZE);
 			width.push(n1 as u32);
 			if n1 <= 1 { break }			
 		} 
@@ -105,7 +105,7 @@ impl <'a>CtgTree<'a> {
 	
 	fn write_non_leaf_level(&self, w: &mut BufWriter<File>, level: usize) -> io::Result<()> {
 		assert!(level > 0);
-		let pos = w.seek(SeekFrom::Current(0))? as usize;
+		let pos = w.stream_position()? as usize;
 		let zeroes = vec![0u8; self.key_len as usize];
 		let n = self.width[level] as usize; // Nodes at this level
 		let n1 = self.width[level - 1] as usize; // Nodes at next (lower) level
@@ -180,7 +180,7 @@ impl <'a>RTree<'a> {
 		let mut width = Vec::new();
 		let mut n1 = n_nodes;
 		loop {
-			n1 = (n1 + BLOCK_SIZE - 1) / BLOCK_SIZE;
+			n1 = n1.div_ceil(BLOCK_SIZE);
 			width.push(n1 as u32);
 			if n1 <= 1 { break }			
 		} 
@@ -217,8 +217,8 @@ impl <'a>RTree<'a> {
 						start_idx: off as u32
 					}
 				} else {
-					let (nd1, ctg1) = get_node(&ctg_blocks, &ctg_blk_ends, off);
-					let (nd2, ctg2) = get_node(&ctg_blocks, &ctg_blk_ends, off + sz - 1);
+					let (nd1, ctg1) = get_node(ctg_blocks, &ctg_blk_ends, off);
+					let (nd2, ctg2) = get_node(ctg_blocks, &ctg_blk_ends, off + sz - 1);
 					RNode {
 						start_ctg: ctg1,
 						start_base: nd1.start,
@@ -260,7 +260,7 @@ impl <'a>RTree<'a> {
 
 	fn write_non_leaf_level(&self,  w: &mut BufWriter<File>, level: usize) -> io::Result<()> {
 		assert!(level > 0);
-		let pos = w.seek(SeekFrom::Current(0))? as u64;
+		let pos = w.stream_position()?;
 		let n_nodes = self.width[level] as u64;
 		let item_size = 24;
 		let rn = &self.start[level];

@@ -148,8 +148,8 @@ fn setup_bed_methyl_structs(
                 && hr.key() == "bs_call_sample_info"
                 && hr.find_key("ID").is_some()
             {
-                sample_name = hr.find_key("SM").map(|s| trim(s));
-                sample_desc = hr.find_key("DS").map(|s| trim(s));
+                sample_name = hr.find_key("SM").map(trim);
+                sample_desc = hr.find_key("DS").map(trim);
                 break;
             }
         }
@@ -180,15 +180,11 @@ pub fn handle_options(m: &ArgMatches) -> io::Result<(ConfHash, BcfSrs)> {
     } else {
         (0.01, 0.05)
     };
-    conf_hash.insert(&"under_conversion", ConfVar::Float(under));
-    conf_hash.insert(&"over_conversion", ConfVar::Float(over));
+    conf_hash.insert("under_conversion", ConfVar::Float(under));
+    conf_hash.insert("over_conversion", ConfVar::Float(over));
 
     // Min Proportion
-    let prop = if let Some(x) = cli_utils::get_f64(m, "prop", 0.0, 1.0)? {
-        x
-    } else {
-        0.0
-    };
+    let prop = cli_utils::get_f64(m, "prop", 0.0, 1.0)?.unwrap_or(0.0);
 
     let infile = m.get_one::<String>("input").expect("No input filename"); // This should not be allowed by Clap
     let (ns, vcf_contigs) = read_header(infile)?;

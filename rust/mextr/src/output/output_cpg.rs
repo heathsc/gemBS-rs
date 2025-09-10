@@ -147,11 +147,11 @@ pub fn output_cpg(outfiles: &mut [HtsFile], rec_blk: &RecordBlock, prev: Option<
 	match rec_blk {
 		RecordBlock::Single(svec) => {
 			let prev = if let Some(RecordBlockElem::Single((r, m))) = prev { Some((r, m)) } else { None }; 
-			output_single_rec(outfile, hdr, &opts, &svec, prev)
+			output_single_rec(outfile, hdr, &opts, svec, prev)
 		},
 		RecordBlock::Multi(mvec) => {
 			let prev = if let Some(RecordBlockElem::Multi((r, mv))) = prev { Some((r, mv as &[MethRec])) } else { None }; 
-			output_multi_rec(outfile, hdr, &opts, &mvec, prev)
+			output_multi_rec(outfile, hdr, &opts, mvec, prev)
 		},
 	}
 }

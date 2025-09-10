@@ -32,7 +32,7 @@ pub enum RecordBlock {
 }
 
 impl RecordBlock {
-	pub fn last(&self) -> Option<RecordBlockElem> {
+	pub fn last<'a>(&'a self) -> Option<RecordBlockElem<'a>> {
 		match self {
 			RecordBlock::Single(v) => v.last().map(|(r, m)| RecordBlockElem::Single((r, m))),
 			RecordBlock::Multi(v) => v.last().map(|(r, mv)| RecordBlockElem::Multi((r, mv))),
@@ -161,7 +161,7 @@ impl UnpackData {
 		let mdb_aq = MallocDataBlock::<i32>::new();
 		let mdb_mq = MallocDataBlock::<i32>::new();
 		let mdb_cx = MallocDataBlock::<u8>::new();
-		let model = setup_model(&chash);
+		let model = setup_model(chash);
 		let bq = chash.get_int("bq_threshold").min(MAX_QUAL) as c_int;
 		let common_gt = chash.get_bool("common_gt");
 		let mrec_vec = Some(Vec::with_capacity(ns));
@@ -187,28 +187,28 @@ pub fn unpack_vcf(brec: &mut BcfRec, hdr: &VcfHeader, udata: &mut UnpackData) {
 	// We only consider sites where at least one allele is C or G
 	if !alls.iter().any(|a| a == &"C" || a == &"G") { return }
 	// Get site context from INFO field
-	if brec.get_info_u8(&hdr, "CX", &mut udata.mdb_cx).is_none() || udata.mdb_cx.len() != 5 { return }
+	if brec.get_info_u8(hdr, "CX", &mut udata.mdb_cx).is_none() || udata.mdb_cx.len() != 5 { return }
 	let ns = udata.ns;
 	let cx: [u8; 5] = (&udata.mdb_cx as &[u8]).try_into().unwrap();
 	// Get reference base coded as 1,2,3,4 for A,C,G,T or 0 for anything else 
 	let ref_base = BASE_MAP[cx[2] as usize];
 
 	// Get format values
-	if brec.get_format_i32(&hdr, "MC8", &mut udata.mdb_mc8).is_none() || udata.mdb_mc8.len() != 8 * ns
-		|| brec.get_format_u8(&hdr, "CX", &mut udata.mdb_cx).is_none()
-		|| brec.get_format_i32(&hdr, "MQ", &mut udata.mdb_mq).is_none() || udata.mdb_mq.len() != ns { return }
+	if brec.get_format_i32(hdr, "MC8", &mut udata.mdb_mc8).is_none() || udata.mdb_mc8.len() != 8 * ns
+		|| brec.get_format_u8(hdr, "CX", &mut udata.mdb_cx).is_none()
+		|| brec.get_format_i32(hdr, "MQ", &mut udata.mdb_mq).is_none() || udata.mdb_mq.len() != ns { return }
 
 	let cx_step = if udata.mdb_cx.len() == 5 * ns { 5 }
 	else if udata.mdb_cx.len() == 6 * ns { 6 }
 	else { return };
-	brec.get_format_i32(&hdr, "AMQ", &mut udata.mdb_aq).or_else(|| brec.get_format_i32(&hdr, "AQ", &mut udata.mdb_aq));
+	brec.get_format_i32(hdr, "AMQ", &mut udata.mdb_aq).or_else(|| brec.get_format_i32(hdr, "AQ", &mut udata.mdb_aq));
 		
 	// Replace missing values
 	udata.mdb_mc8.iter_mut().for_each(|x| if *x == bcf_int32_missing {*x = 0});
 	udata.mdb_mq.iter_mut().for_each(|x| if *x == bcf_int32_missing {*x = 0});
 	udata.mdb_aq.iter_mut().for_each(|x| if *x == bcf_int32_missing {*x = 0} else if *x > (MAX_QUAL as i32) { *x = MAX_QUAL as i32});
 	
-	let mut mrec_vec = udata.mrec_vec.as_mut().unwrap();	 
+	let mrec_vec = udata.mrec_vec.as_mut().unwrap();	 
 	let ne_aq = udata.mdb_aq.len() / ns;
 	mrec_vec.clear();
 	for ix in 0..ns {
@@ -227,8 +227,8 @@ pub fn unpack_vcf(brec: &mut BcfRec, hdr: &VcfHeader, udata: &mut UnpackData) {
 		mrec_vec.push(MethRec::new(counts, gt_probs, meth, cx, mq, max_gt));
 	}
 	// Get common genotype call 
-	let gt_strand = if udata.ns > 1 { calc_common_gt(&mut mrec_vec, udata.common_gt) } 
-	else { mrec_vec[0].max_gt().map(|x| (x, find_strand(&mrec_vec[0].gt_probs(), x as usize))) };
+	let gt_strand = if udata.ns > 1 { calc_common_gt(mrec_vec, udata.common_gt) } 
+	else { mrec_vec[0].max_gt().map(|x| (x, find_strand(mrec_vec[0].gt_probs(), x as usize))) };
 	// Store record
 	let rec = Record::new(brec.rid() as u32, brec.pos() as u32, cx, gt_strand);
 	let mut rec_blk = udata.rec_blk.as_mut().unwrap();
@@ -241,6 +241,7 @@ pub fn unpack_vcf(brec: &mut BcfRec, hdr: &VcfHeader, udata: &mut UnpackData) {
 	}
 }
 
+#[allow(clippy::type_complexity)]
 pub fn unpack_vcf_slave(chash: Arc<ConfHash>, hdr: Arc<VcfHeader>, channel_vec: Arc<Vec<Sender<(usize, Arc<RecordBlock>)>>>, 
 	empty_s: Sender<BrecBlock>, full_r: Receiver<BrecBlock>) {
 		

@@ -100,7 +100,7 @@ pub(super) fn cli_model() -> Command {
         )
         .group(
             ArgGroup::new("region_def")
-                .args(&["region_list", "regions_file"])
+                .args(["region_list", "regions_file"])
         )
         .next_help_heading("genotype recalling")
         .arg(
@@ -120,7 +120,7 @@ pub(super) fn cli_model() -> Command {
                 .action(ArgAction::Append)
                 .num_args(1..=2)
                 .value_name("FLOAT,FLOAT")
-                .default_values(&["0.01", "0.05"])
+                .default_values(["0.01", "0.05"])
                 .value_delimiter(',')
                 .help("Under and over conversion rates"),
         )

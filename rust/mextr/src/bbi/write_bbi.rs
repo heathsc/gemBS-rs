@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::fs::File;
-use std::io::{BufWriter, Write, SeekFrom};
+use std::io::{BufWriter, Write};
 use std::collections::HashMap;
 use std::thread;
 
@@ -102,7 +102,7 @@ impl <'a>WriterState<'a> {
 }
 
 fn add_block(ws: &mut WriterState, blk: &BbiBlock) {
-	let pos = ws.writer.fp.seek(SeekFrom::Current(0)).expect("Error getting position from BBI file");
+	let pos = ws.writer.fp.stream_position().expect("Error getting position from BBI file");
 	let ctg_block = &mut ws.writer.ctg_blocks;
 	let blocks = &mut ctg_block[blk.id() as usize];
 	blocks.push(BbiCtgBlock::new(blk, pos));
@@ -178,7 +178,7 @@ pub fn write_bbi_thread(ch: Arc<ConfHash>, r: Receiver<BbiMsg>) {
 	}
 	
 	// Store start of index in file
-	for w in bb_writers.iter_mut().chain(bw_writers.iter_mut()) { w.index_offset = w.fp.seek(SeekFrom::Current(0)).expect("Error getting position from BBI file") }
+	for w in bb_writers.iter_mut().chain(bw_writers.iter_mut()) { w.index_offset = w.fp.stream_position().expect("Error getting position from BBI file") }
 	
 	// Launch threads to generate indices and write out zoom data
 	let mut threads = Vec::with_capacity(5);

@@ -1,11 +1,11 @@
 use std::collections::HashMap;
-use std::io::{self, Error, ErrorKind};
+use std::io::{self, Error};
 use std::sync::{RwLock, Arc};
 
 use crate::bbi::{Bbi, BbiBlockType};
 
 pub fn new_err(s: String) -> io::Error {
-	Error::new(ErrorKind::Other, s)	
+	Error::other(s)	
 }
 
 pub struct VcfContig {

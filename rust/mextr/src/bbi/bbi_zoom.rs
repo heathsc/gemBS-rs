@@ -30,8 +30,8 @@ impl ZoomCounts {
 pub fn make_zoom_scales() -> (Vec<u32>, Vec<u32>) {
 	let make_scales = |x| {
 		let mut v = Vec::with_capacity(ZOOM_LEVELS);
-		v.push(x as u32);
-		for i in 1..ZOOM_LEVELS { v.push(v[i - 1] * (ZOOM_RES_INCREMENT as u32)) } 
+		v.push(x);
+		for i in 1..ZOOM_LEVELS { v.push(v[i - 1] * ZOOM_RES_INCREMENT) } 
 		v
 	};
 

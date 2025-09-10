@@ -64,7 +64,7 @@ impl BbiHeader {
 	pub fn new(bb_flag: bool) -> Self {
 		let version = 4;
 		let zoom_levels = ZOOM_LEVELS as u16;
-		let off = BBI_HEADER_SIZE + (ZOOM_LEVELS as u64) * ZOOM_HEADER_SIZE as u64;
+		let off = BBI_HEADER_SIZE + (ZOOM_LEVELS as u64) * ZOOM_HEADER_SIZE;
 		let (magic, field_count, defined_field_count, auto_sql_offset, total_summary_offset) = if bb_flag {
 			(0x8789F2EB, 14, 0, off, off + (AUTOSQL_DESC.to_bytes().len() + 1) as u64)
 		} else {
@@ -88,7 +88,7 @@ impl BbiHeader {
 		write_u64(fp, self.extension_offset)
 	}
 	pub fn write_ext_header(&self, fp: &mut BufWriter<File>) -> io::Result<()> {
-		let pos = fp.seek(SeekFrom::Current(0))?;
+		let pos = fp.stream_position()?;
 		assert!(pos == self.extension_offset);
 		// Size of extension offset
 		write_u16(fp, EXT_HEADER_SIZE as u16)?;
