@@ -2,7 +2,7 @@ use utils::compress;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{fmt, env, fs};
-use std::io::{BufRead, BufReader, Write, Error, ErrorKind};
+use std::io::{BufRead, BufReader, Write, Error};
 use std::ffi::OsStr;
 use std::str::FromStr;
 
@@ -91,7 +91,7 @@ impl Md5Contig {
 		Md5Contig{name: name.as_ref().to_owned(), md5: Md5Digest::new(), len: 0}
 	}
 	fn handle_cache(&self, cache_path: &str, cache_buf: Vec<u8>) -> std::io::Result<Vec<u8>> {
-		let fname = get_fname(cache_path, format!("{}", self.md5).as_str()).map_err(|e| Error::new(ErrorKind::Other, e))?;
+		let fname = get_fname(cache_path, format!("{}", self.md5).as_str()).map_err(Error::other)?;
 		if !fname.exists() {
 			// Make cache directories if required
 			if let Some(d) = &fname.parent() { fs::create_dir_all(d)? }
@@ -208,7 +208,7 @@ pub fn md5_fasta<P: AsRef<Path>, Q: AsRef<Path>, R: AsRef<Path>>(gem_bs: &GemBS,
 	let threads = gem_bs.get_threads(Section::Index);
 	let bgzip_path = gem_bs.get_exec_path("bgzip");
 	let filt_tab = init_filter();
-	let output = compress::open_pipe_writer(opath, &bgzip_path, &["-@", format!("{}", threads).as_str()])
+	let output = compress::open_pipe_writer(opath, &bgzip_path, ["-@", format!("{}", threads).as_str()])
 		.map_err(|e| format!("Couldn't open output {}: {}", opath.display(), e))?;
 	let output_md5 = compress::open_bufwriter(ctg_md5.as_ref())
 		.map_err(|e| format!("Couldn't open output {}: {}", ctg_md5.as_ref().display(), e))?;
@@ -294,7 +294,7 @@ pub fn check_reference_cache<P: AsRef<Path>, Q: AsRef<Path>>(gem_bs: &GemBS, gre
 					for f in iter {
 						if f.starts_with("M5:") && f.len() >= 35 {
 							let md5 = get_from_hex(&f.as_bytes()[3..])?;
-							let mut c = Md5Contig::new(&name);
+							let mut c = Md5Contig::new(name);
 							c.md5.set(&md5)?;
 							c.check_cache(gem_bs, &cp, &gref)?;
 							found = true;

@@ -445,7 +445,7 @@ impl PrepConfig {
             pvar.var = DataValue::String(self.interpolation(x, section, &name)?);
         }
         trace!("Making assignment {:?}: {} = {:?}", section, name, pvar.var);
-        self.var.entry(name).or_insert_with(Vec::new).push(pvar);
+        self.var.entry(name).or_default().push(pvar);
         Ok(())
     }
 
@@ -461,10 +461,7 @@ impl PrepConfig {
         // Apparently env::var_os() can panic if the name contains an equals or Nul character
         stored_var.or_else(|| {
             if !(vname1.is_empty() || vname1.contains('=') || vname1.contains('\0')) {
-                match env::var(vname1) {
-                    Ok(st) => Some(st),
-                    Err(_) => None,
-                }
+                env::var(vname1).ok()
             } else {
                 None
             }

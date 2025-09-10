@@ -58,7 +58,7 @@ fn setup_contig_pools(gem_bs: &GemBS, contigs: &[Contig], pools: &mut Vec<Contig
 	}
 	if !small_contigs.is_empty() {
 		let mut tpool = BinaryHeap::new();
-		let n_pools = (size_left + pool_size - 1) / pool_size;
+		let n_pools = size_left.div_ceil(pool_size);
 		for i in 0..n_pools {
 			let name = Rc::new(format!("Pool@{}", i + 1));
 			tpool.push(ContigPool{name, contigs: Vec::new(), len: 0});

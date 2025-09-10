@@ -15,8 +15,8 @@ use crate::common::latex_utils::*;
 use crate::common::utils;
 use crate::scheduler::report::ReportOptions;
 
-fn create_html_report(path: &PathBuf, project: &str) -> Result<(), String> {
-    let mut html = HtmlPage::new(&path)?;
+fn create_html_report(path: &Path, project: &str) -> Result<(), String> {
+    let mut html = HtmlPage::new(path)?;
     let mut head_element = HtmlElement::new("HEAD", None, true);
     let mut style_element = HtmlElement::new("STYLE", Some("TYPE=\"text/css\""), true);
     style_element.push_str("<!--\n@import url(\"css/style.css\");\n-->");
@@ -178,7 +178,7 @@ pub fn make_report(
     utils::check_signal(Arc::clone(&sig))?;
     info!("Making summary report");
     let project = rep_opt.project.as_deref().unwrap_or("gemBS");
-    let report_tex_path = outputs.get(0).expect("No output files for report");
+    let report_tex_path = outputs.first().expect("No output files for report");
     let report_html_path = outputs.get(1).expect("No html output file for report");
     let output_dir = report_tex_path
         .parent()
@@ -209,11 +209,11 @@ pub fn make_report(
 
         let mut pipeline = utils::Pipeline::new();
         let tex_name = format!("{}", report_tex_path.display());
-        let args = vec!["-pdf", "-silent", "-cd", "-outdir=.latexwork", &tex_name];
+        let args = ["-pdf", "-silent", "-cd", "-outdir=.latexwork", &tex_name];
         let path = Path::new("latexmk");
         let ofile = output_dir.join("latexmk.log");
         pipeline
-            .add_stage(&path, Some(args.iter()))
+            .add_stage(path, Some(args.iter()))
             .log_file(output_dir.join("latexmk.err"))
             .out_filepath(&ofile);
         let tdir = output_dir.join(".latexwork");

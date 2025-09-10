@@ -271,7 +271,7 @@ impl GemBS {
     }
     pub fn get_sample_data_ref(&self) -> &HashMap<String, HashMap<Metadata, DataValue>> {
         if let GemBSData::SampleData(href) = &self.var[1] {
-            &href
+            href
         } else {
             panic!("Internal error!");
         }
@@ -410,7 +410,7 @@ impl GemBS {
                         config_dir
                     ));
                 }
-            } else if std::fs::create_dir(&config_dir).is_err() {
+            } else if std::fs::create_dir(config_dir).is_err() {
                 return Err(format!(
                     "Could not create config directory {:?}",
                     config_dir

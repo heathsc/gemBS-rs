@@ -79,7 +79,7 @@ lazy_static! {
 pub fn process_cvs_metatdata_file(file_name: &str, gem_bs: &mut GemBS) -> Result<(), String> {
 	let mut rdr = Reader::from_path(file_name).map_err(|e| format!("Error opening cvs metadata file {} for input: {}", file_name, e))?;
 	let hrecord = rdr.headers().map_err(|e| format!("Error reading header line from cvs metadata file {} for input: {}", file_name, e))?;
-	let header = Header::from_record(&hrecord)?;
+	let header = Header::from_record(hrecord)?;
 	let mut sample_data = SampleData::new();
    	let mut record = StringRecord::new();
 	let mut line = 2;

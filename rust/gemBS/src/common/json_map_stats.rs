@@ -497,7 +497,7 @@ impl MapJson {
     fn merge_single(&mut self, other: &Self) {
         if let MapJson::Single(s1) = self {
             if let MapJson::Single(s2) = other {
-                s1.merge(&s2);
+                s1.merge(s2);
             } else {
                 panic!("Invalid conversion")
             }
@@ -509,7 +509,7 @@ impl MapJson {
     fn merge_paired_types(&mut self, other: &Self) {
         if let MapJson::Paired(s1) | MapJson::Unknown(s1) = self {
             if let MapJson::Paired(s2) | MapJson::Unknown(s2) = other {
-                s1.merge(&s2);
+                s1.merge(s2);
             } else {
                 panic!("Invalid conversion")
             }

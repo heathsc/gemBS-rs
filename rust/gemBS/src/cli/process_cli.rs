@@ -62,7 +62,7 @@ fn generate_completions(m: &ArgMatches) -> Result<(), String> {
         .get_one::<String>("output")
         .expect("Default output option missing");
 
-    match fs::File::create(&ofile) {
+    match fs::File::create(ofile) {
         Ok(mut file) => {
             generate(gen, &mut cmd, "gemBS", &mut file);
             Ok(())

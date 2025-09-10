@@ -138,10 +138,7 @@ impl<'a> LexBuf<'a> {
     }
     fn get_str_range(&self) -> Option<&'a str> {
         if self.end > self.start {
-            match str::from_utf8(&self.buffer[self.start..self.end]) {
-                Ok(s) => Some(s),
-                Err(_) => None,
-            }
+            str::from_utf8(&self.buffer[self.start..self.end]).ok()
         } else {
             None
         }
@@ -289,7 +286,7 @@ impl Lexer {
     ) {
         self.action_table
             .entry(state)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .insert(
                 raw_token,
                 LexAction {
@@ -769,7 +766,6 @@ impl Lexer {
                                     buffer.end += 1
                                 }
                                 let end = buffer.end;
-                                drop(buffer);
                                 reader.consume(end);
                                 let etok = match token {
                                     IntLexToken::End => Ok(LexToken::End),

@@ -28,7 +28,7 @@ pub struct CallJsonFiles {
 
 #[derive(Debug)]
 pub struct MergeJsonFiles {
-    pub barcode: String,
+    // pub barcode: String,
     pub json_files: Vec<(String, PathBuf)>,
 }
 
@@ -187,25 +187,25 @@ impl ReportOptions {
         
         let comment = gem_bs
             .get_config_str(Section::Report, "comment")
-            .map(|x| latex_escape_str(x));
+            .map(latex_escape_str);
         let project = gem_bs
             .get_config_str(Section::Report, "project")
-            .map(|x| latex_escape_str(x));
+            .map(latex_escape_str);
         let collaborator_name = gem_bs
             .get_config_str(Section::Report, "collaborator_name")
-            .map(|x| latex_escape_str(x));
+            .map(latex_escape_str);
         let collaborator_email = gem_bs
             .get_config_str(Section::Report, "collaborator_email")
-            .map(|x| latex_escape_str(x));
+            .map(latex_escape_str);
         let analyst_name = gem_bs
             .get_config_str(Section::Report, "analyst_name")
-            .map(|x| latex_escape_str(x));
+            .map(latex_escape_str);
         let analyst_team = gem_bs
             .get_config_str(Section::Report, "analyst_team")
-            .map(|x| latex_escape_str(x));
+            .map(latex_escape_str);
         let analyst_email = gem_bs
             .get_config_str(Section::Report, "analyst_email")
-            .map(|x| latex_escape_str(x));
+            .map(latex_escape_str);
         let latex_template = gem_bs
             .get_config_str(Section::Report, "latex_template")
             .map(|x| x.to_owned());
@@ -214,10 +214,10 @@ impl ReportOptions {
             .map(|x| x.to_owned());
         let analysis_start_date = gem_bs
             .get_config_str(Section::Report, "analysis_start_date")
-            .map(|x| latex_escape_str(x));
+            .map(latex_escape_str);
         let analysis_end_date = gem_bs
             .get_config_str(Section::Report, "analysis_end_date")
-            .map(|x| latex_escape_str(x));
+            .map(latex_escape_str);
         let extras_path = gem_bs.get_latex_extras_path();
         let samples = gem_bs.get_samples();
         Self {
@@ -252,7 +252,7 @@ pub fn make_report_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
         );
     }
     let rep_opt = ReportOptions::from_gem_bs(gem_bs);
-    let com = QPipeCom::Report(rep_opt);
+    let com = QPipeCom::Report(Box::new(rep_opt));
     pipeline.add_com(com);
     pipeline
 }
@@ -268,9 +268,6 @@ pub fn make_merge_call_jsons_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
                 .path(),
         );
     }
-    let bc = task
-        .barcode()
-        .expect("No barcode set for merge-call-jsons task");
     let mut it = task.inputs();
     let _ = it.next(); // Throw array first element as this is the BCF file
     let json_files: Vec<_> = it
@@ -281,7 +278,7 @@ pub fn make_merge_call_jsons_pipeline(gem_bs: &GemBS, job: usize) -> QPipe {
         })
         .collect();
     let com = QPipeCom::MergeCallJsons(MergeJsonFiles {
-        barcode: bc.to_owned(),
+        // barcode: bc.to_owned(),
         json_files,
     });
     pipeline.add_com(com);
@@ -312,7 +309,7 @@ pub fn merge_call_jsons(
         let output = outputs
             .first()
             .expect("No output file for merge JSON command");
-        let wrt = compress::open_bufwriter(&output).map_err(|e| format!("{}", e))?;
+        let wrt = compress::open_bufwriter(output).map_err(|e| format!("{}", e))?;
         st.to_writer(wrt)?;
         Ok(())
     } else {

@@ -95,10 +95,10 @@ fn gen_map_command(
     let task_path = gem_bs.get_task_file_path();
     let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?;
     gem_bs.setup_assets_and_tasks(&flock)?;
-    let mut assets = get_required_asset_list(gem_bs, &options)?;
+    let mut assets = get_required_asset_list(gem_bs, options)?;
     let mut coms = HashSet::new();
     if !options.contains_key("no_md5") {
-        super::md5sum::get_assets_md5_map(gem_bs, &options, &mut assets, &mut coms)?;
+        super::md5sum::get_assets_md5_map(gem_bs, options, &mut assets, &mut coms)?;
     }
     if gem_bs.all() {
         [Command::Index, Command::Map].iter().for_each(|x| {
@@ -114,9 +114,9 @@ fn gen_map_command(
     let com_set: Vec<_> = coms.iter().copied().collect();
     let task_list = gem_bs.get_required_tasks_from_asset_list(&asset_ids, &com_set);
     if gem_bs.execute_flag() {
-        scheduler::schedule_jobs(gem_bs, &options, &task_list, &asset_ids, &com_set, flock)
+        scheduler::schedule_jobs(gem_bs, options, &task_list, &asset_ids, &com_set, flock)
     } else {
-        dry_run::handle_nonexec(gem_bs, &options, &task_list)
+        dry_run::handle_nonexec(gem_bs, options, &task_list)
     }
 }
 

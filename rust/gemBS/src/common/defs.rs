@@ -81,6 +81,7 @@ impl FromStr for Metadata {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum FileType {
     Paired,
     Interleaved,

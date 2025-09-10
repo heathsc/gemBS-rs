@@ -122,9 +122,9 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 			for(md, val) in dvec.iter() {
 				let asset = AssetType::Supplied;
 				match md {
-					Metadata::FilePath => if let DataValue::String(s) = val { in_vec.push(handle_file(gem_bs, dat, s, "_read", &spath, asset)) },
-					Metadata::FilePath1 => if let DataValue::String(s) = val { in_vec.push(handle_file(gem_bs, dat, s, "_read1", &spath, asset)) },
-					Metadata::FilePath2 => if let DataValue::String(s) = val { in_vec.push(handle_file(gem_bs, dat, s, "_read2", &spath, asset)) },
+					Metadata::FilePath => if let DataValue::String(s) = val { in_vec.push(handle_file(gem_bs, dat, s, "_read", spath, asset)) },
+					Metadata::FilePath1 => if let DataValue::String(s) = val { in_vec.push(handle_file(gem_bs, dat, s, "_read1", spath, asset)) },
+					Metadata::FilePath2 => if let DataValue::String(s) = val { in_vec.push(handle_file(gem_bs, dat, s, "_read2", spath, asset)) },
 					Metadata::AltDataset => if let DataValue::String(s) = val { alt_dataset = Some(s) }
 					Metadata::FileType => if let DataValue::FileType(t) = val { file_type = Some(t) }
 					Metadata::Bisulfite => if let DataValue::Bool(x) = val { if !*x { bisulfite = false; }},
@@ -170,7 +170,7 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 					};
 					let p_abs = p.canonicalize().expect("Could not get absolute path");
 					gem_bs.set_sample_data(dat, *md, DataValue::String(format!("{}", p_abs.display())));
-					in_vec.push(gem_bs.insert_asset(&format!("{}_{}", dat, ext), &p_abs, AssetType::Supplied));		
+					in_vec.push(gem_bs.insert_asset(format!("{}_{}", dat, ext), &p_abs, AssetType::Supplied));		
 				}
 			}
 			if in_vec.is_empty() { return Err(format!("No datafiles for dataset {}", dat)); }
@@ -178,10 +178,10 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 			common_inputs.iter().for_each(|x| in_vec.push(*x));
 			
 			if sample.datasets.len() > 1 {
-				let out1 = handle_file(gem_bs, dat, format!("{}.bam", dat).as_str(), ".bam", &bpath, AssetType::Temp); 
-				let out2 = handle_file(gem_bs, dat, format!("{}.json", dat).as_str(), "_map.json", &bpath, AssetType::Derived);
+				let out1 = handle_file(gem_bs, dat, format!("{}.bam", dat).as_str(), ".bam", bpath, AssetType::Temp); 
+				let out2 = handle_file(gem_bs, dat, format!("{}.json", dat).as_str(), "_map.json", bpath, AssetType::Derived);
 				let id = format!("map_{}", dat);
-				let (lname, lpath) = assets::make_ext_asset(&id, &bpath, "log");
+				let (lname, lpath) = assets::make_ext_asset(&id, bpath, "log");
 				let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);
 				let task = gem_bs.add_task(&id, format!("Map dataset {} for barcode {}", dat, sample.barcode).as_str(),
 					Command::Map, format!("--dataset {}", dat).as_str());
@@ -190,18 +190,18 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 				[out1, out2].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &in_vec));
 				bams.push(out1);
 			} else {
-				let out1 = handle_file(gem_bs, &sample.barcode, format!("{}{}", sample.barcode, suffix).as_str(), suffix, &bpath, AssetType::Derived);
-				let out2 = handle_file(gem_bs, &sample.barcode, format!("{}.json", sample.barcode).as_str(), "_map.json", &bpath, AssetType::Derived);
-				let out3 = handle_file(gem_bs, &sample.barcode, format!("{}{}", sample.barcode, index_suff).as_str(), index_suff, &bpath, AssetType::Derived);
+				let out1 = handle_file(gem_bs, &sample.barcode, format!("{}{}", sample.barcode, suffix).as_str(), suffix, bpath, AssetType::Derived);
+				let out2 = handle_file(gem_bs, &sample.barcode, format!("{}.json", sample.barcode).as_str(), "_map.json", bpath, AssetType::Derived);
+				let out3 = handle_file(gem_bs, &sample.barcode, format!("{}{}", sample.barcode, index_suff).as_str(), index_suff, bpath, AssetType::Derived);
 				let id = format!("single_map_{}", sample.barcode);
-				let (lname, lpath) = assets::make_ext_asset(&id, &bpath, "log");
+				let (lname, lpath) = assets::make_ext_asset(&id, bpath, "log");
 				let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 				let task = gem_bs.add_task(&id, format!("Map dataset {} for barcode {}", dat, sample.barcode).as_str(),
 					Command::Map, format!("--barcode {} --no-md5", sample.barcode).as_str());
 				gem_bs.add_task_inputs(task, &in_vec).add_outputs(&[out1, out2, out3]).set_log(Some(log_index)).set_barcode(&sample.barcode)
 					.add_cores(cores).add_memory(memory).add_time(time);
 				[out1, out2, out3].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &in_vec));
-				let (md5_name, md5_path)  = assets::make_ext_asset(gem_bs.get_asset_mut(out1).unwrap().id(), &bpath, "md5");
+				let (md5_name, md5_path)  = assets::make_ext_asset(gem_bs.get_asset_mut(out1).unwrap().id(), bpath, "md5");
 				let md5 = gem_bs.insert_asset(&md5_name, &md5_path, AssetType::Derived);
 				let md5_task = gem_bs.add_task(&md5_name, format!("Calc MD5 sum for {}", id).as_str(),
 					Command::MD5SumMap, format!("--barcode {}", sample.barcode).as_str());
@@ -215,10 +215,10 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 			};
 		}
 		if !bams.is_empty() {
-			let out1 = handle_file(gem_bs, &sample.barcode, format!("{}{}", sample.barcode, suffix).as_str(), suffix, &bpath, AssetType::Derived);
-			let out2 = handle_file(gem_bs, &sample.barcode, format!("{}{}", sample.barcode, index_suff).as_str(), index_suff, &bpath, AssetType::Derived);
+			let out1 = handle_file(gem_bs, &sample.barcode, format!("{}{}", sample.barcode, suffix).as_str(), suffix, bpath, AssetType::Derived);
+			let out2 = handle_file(gem_bs, &sample.barcode, format!("{}{}", sample.barcode, index_suff).as_str(), index_suff, bpath, AssetType::Derived);
 			let id = format!("merge-bam_{}", sample.barcode);
-			let (lname, lpath) = assets::make_ext_asset(&id, &bpath, "log");
+			let (lname, lpath) = assets::make_ext_asset(&id, bpath, "log");
 			let log_index = gem_bs.insert_asset(&lname, &lpath, AssetType::Log);				
 			let task = gem_bs.add_task(&id, format!("Merge datasets for barcode {}", sample.barcode).as_str(),
 				Command::MergeBams, format!("--barcode {} --no-md5", sample.barcode).as_str());
@@ -226,7 +226,7 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
 				.add_cores(merge_cores).add_memory(merge_memory).add_time(merge_time);
 			[out1, out2].iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &bams));
 			let out_asset = gem_bs.get_asset_mut(out1).unwrap();
-			let (md5_name, md5_path)  = assets::make_ext_asset(out_asset.id(), &bpath, "md5");
+			let (md5_name, md5_path)  = assets::make_ext_asset(out_asset.id(), bpath, "md5");
 			let md5 = gem_bs.insert_asset(&md5_name, &md5_path, AssetType::Derived);
 			let md5_cores = gem_bs.get_config_int(Section::MD5Sum, "cores").map(|x| x as usize).or(Some(1));
 			let md5_memory = gem_bs.get_config_memsize(Section::MD5Sum, "memory");

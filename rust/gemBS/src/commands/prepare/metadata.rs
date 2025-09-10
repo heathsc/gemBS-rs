@@ -78,20 +78,13 @@ impl SampleData {
         hr: &mut HashMap<Metadata, DataValue>,
         dataset: String,
     ) -> Result<(), String> {
-        let thash = self
-            .data
-            .entry(dataset.clone())
-            .or_insert_with(HashMap::new);
+        let thash = self.data.entry(dataset.clone()).or_default();
         if hr.contains_key(&Metadata::FilePath) {
             if let Some(end) = hr.remove(&Metadata::ReadEnd) {
                 let fp = hr.remove(&Metadata::FilePath).unwrap();
                 match end {
-                    DataValue::ReadEnd(end) if end == ReadEnd::End1 => {
-                        hr.insert(Metadata::FilePath1, fp)
-                    }
-                    DataValue::ReadEnd(end) if end == ReadEnd::End2 => {
-                        hr.insert(Metadata::FilePath2, fp)
-                    }
+                    DataValue::ReadEnd(ReadEnd::End1) => hr.insert(Metadata::FilePath1, fp),
+                    DataValue::ReadEnd(ReadEnd::End2) => hr.insert(Metadata::FilePath2, fp),
                     _ => return Err("Internal error in check_and_store_record()".to_string()),
                 };
             }

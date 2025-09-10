@@ -33,7 +33,7 @@ impl fmt::Display for AssetStatus {
 }
 #[derive(Debug, Clone)]
 pub struct Asset {
-	id: Rc<String>,
+	id: Rc<str>,
 	path: PathBuf,
 	idx: usize,
 	creator: Option<usize>, // Id of task that creates this asset
@@ -62,7 +62,7 @@ fn get_status_time(path: &Path, asset_type: AssetType) -> (AssetStatus, Option<S
 impl Asset {
 	fn new(id_str: &str, path: &Path, idx: usize, asset_type: AssetType) -> Self {
 		let (status, mod_time) = get_status_time(path, asset_type);
-		let id = Rc::new(id_str.to_owned());		
+		let id: Rc<str> = Rc::from(id_str);
 		Asset{id, path: path.to_owned(), idx, creator: None, parents: Vec::new(), asset_type, status, mod_time, mod_time_ances: mod_time}
 	}
 	pub fn recheck_status(&mut self) {
@@ -102,7 +102,7 @@ pub fn derive_log_asset(id: &str, file: &Path) -> (String, PathBuf) {
 }
 
 pub struct AssetList {
-	asset_hash: HashMap<Rc<String>, usize>, 
+	asset_hash: HashMap<Rc<str>, usize>, 
 	assets: Vec<Asset>,
 }
 
@@ -125,10 +125,10 @@ impl GetAsset<usize> for AssetList {
 
 impl GetAsset<&str> for AssetList {
 	fn get_asset(&self, idx: &str) -> Option<&Asset> {
-		self.asset_hash.get(&idx.to_string()).map(|x| &self.assets[*x])
+		self.asset_hash.get(idx).map(|x| &self.assets[*x])
 	}
 	fn get_asset_mut(&mut self, idx: &str) -> Option<&mut Asset> {
-		if let Some(x) = self.asset_hash.get(&idx.to_string()) {
+		if let Some(x) = self.asset_hash.get(idx) {
 			let ix = *x;
 			Some(&mut self.assets[ix])		
 		} else { None }

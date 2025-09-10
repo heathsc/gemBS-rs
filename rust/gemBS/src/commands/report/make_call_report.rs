@@ -34,6 +34,8 @@ enum QualType {
     NonRefCpg,
     Variant,
 }
+
+#[allow(clippy::upper_case_acronyms)]
 enum QCDistType {
     QD,
     QDNonVar,
@@ -87,7 +89,7 @@ fn make_hist(
 
     chart
         .configure_mesh()
-        .light_line_style(&WHITE.mix(0.3))
+        .light_line_style(WHITE.mix(0.3))
         .y_desc(ylabel)
         .x_desc(xlabel)
         .y_label_formatter(&|y| format!("{:e}", y))
@@ -161,7 +163,7 @@ fn make_coverage_graph(
     ]
     .iter()
     .collect();
-    make_hist(&path, &ch, title, xaxis, yaxis).map_err(|e| format!("{}", e))?;
+    make_hist(&path, ch, title, xaxis, yaxis).map_err(|e| format!("{}", e))?;
     Ok(())
 }
 
@@ -301,7 +303,7 @@ fn make_heatmap(
 
     chart
         .configure_mesh()
-        .light_line_style(&WHITE.mix(0.3))
+        .light_line_style(WHITE.mix(0.3))
         .y_desc(ylabel)
         .x_desc(xlabel)
         .disable_x_mesh()
@@ -325,7 +327,7 @@ fn make_heatmap(
             let y1 = *y as f64 - 0.5;
             let z1 = (*z as f64) / (max_z as f64);
             let (r, g, b) = rgb(z1);
-            let cl = Into::<ShapeStyle>::into(&RGBColor(r, g, b)).filled();
+            let cl = Into::<ShapeStyle>::into(RGBColor(r, g, b)).filled();
 
             Rectangle::new([(x1, y1), (x1 + 1.0, y1 + 1.0)], cl)
         }))?;
@@ -340,7 +342,7 @@ fn make_heatmap(
 
     chart
         .configure_mesh()
-        .light_line_style(&WHITE.mix(0.3))
+        .light_line_style(WHITE.mix(0.3))
         .y_desc("# sites")
         .disable_x_mesh()
         .disable_y_mesh()
@@ -350,11 +352,11 @@ fn make_heatmap(
         .axis_desc_style(("sans-serif", 15).into_font())
         .draw()?;
 
-    let step = (max_z + 479) / 480;
+    let step = max_z.div_ceil(480);
     chart.draw_series((0..max_z).step_by(step).map(|z| {
         let z1 = (z as f64) / (max_z as f64);
         let (r, g, b) = rgb(z1);
-        let cl = Into::<ShapeStyle>::into(&RGBColor(r, g, b)).filled();
+        let cl = Into::<ShapeStyle>::into(RGBColor(r, g, b)).filled();
         Rectangle::new([(0, z), (1, z + step)], cl)
     }))?;
     Ok(())
@@ -434,7 +436,7 @@ fn make_meth_level_plot(
 
     chart
         .configure_mesh()
-        .light_line_style(&WHITE.mix(0.3))
+        .light_line_style(WHITE.mix(0.3))
         .y_desc(ylabel)
         .x_desc(xlabel)
         .y_label_formatter(&|x| format!("{:.2}", x))
@@ -455,7 +457,7 @@ fn make_meth_level_plot(
     }
     chart
         .configure_series_labels()
-        .border_style(&BLACK)
+        .border_style(BLACK)
         .draw()?;
     Ok(())
 }
@@ -520,7 +522,7 @@ fn make_noncpg_profile_plot(
 
     chart
         .configure_mesh()
-        .light_line_style(&WHITE.mix(0.3))
+        .light_line_style(WHITE.mix(0.3))
         .y_desc(ylabel)
         .x_desc(xlabel)
         .y_label_formatter(&|x| format!("{:.2}", x))
@@ -530,7 +532,7 @@ fn make_noncpg_profile_plot(
 
     chart.draw_series(LineSeries::new(
         v.iter().enumerate().map(|(x, y)| (x, *y)),
-        Into::<ShapeStyle>::into(&RED).stroke_width(3),
+        Into::<ShapeStyle>::into(RED).stroke_width(3),
     ))?;
     Ok(())
 }
@@ -895,11 +897,11 @@ fn make_variant_type_tab<T: Table>(
         row
     };
     for (k, c) in v_ti.iter() {
-        table.add_row(f(*k, c, "Transition"));
+        table.add_row(f(k, c, "Transition"));
     }
     table.add_row(Vec::new());
     for (k, c) in v_tv.iter() {
-        table.add_row(f(*k, c, "Transversion"));
+        table.add_row(f(k, c, "Transversion"));
     }
     table1.add_header(vec!["Status", "Ratio", "Transitions", "Transversions"]);
     let ratio = |a, b| if b > 0 { (a as f64) / (b as f64) } else { 0.0 };
@@ -1826,7 +1828,7 @@ pub fn make_call_report(
         shash.insert(cjson.barcode.clone(), CallSummary::new());
     }
     let summary = Arc::new(Mutex::new(shash));
-    let latex_doc = Arc::new(Mutex::new(LatexBare::new(&report_tex_path)?));
+    let latex_doc = Arc::new(Mutex::new(LatexBare::new(report_tex_path)?));
     let mut job_vec = prepare_jobs(&svec, &project, summary.clone(), latex_doc.clone());
     let (ctr_tx, ctr_rx) = mpsc::channel();
     let mut avail = Vec::new();

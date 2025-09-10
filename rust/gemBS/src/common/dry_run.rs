@@ -127,15 +127,15 @@ pub fn handle_nonexec(
     task_list: &[usize],
 ) -> Result<(), String> {
     if gem_bs.dry_run() {
-        handle_dry_run(gem_bs, &options, &task_list)
+        handle_dry_run(gem_bs, options, task_list)
     }
     if let Some(json_file) = gem_bs.json_out() {
-        handle_json_tasks(gem_bs, &options, &task_list, json_file)?;
+        handle_json_tasks(gem_bs, options, task_list, json_file)?;
     }
 
     #[cfg(feature = "slurm")]
     if gem_bs.slurm() || gem_bs.slurm_script().is_some() {
-        slurm::handle_slurm(gem_bs, &options, &task_list)?;
+        slurm::handle_slurm(gem_bs, options, task_list)?;
     }
 
     Ok(())

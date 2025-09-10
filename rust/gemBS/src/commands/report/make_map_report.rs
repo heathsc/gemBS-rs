@@ -375,7 +375,7 @@ fn create_mapq_hist(path: &Path, json: &MapJson) -> Result<(), Box<dyn std::erro
 
     chart
         .configure_mesh()
-        .light_line_style(&WHITE.mix(0.3))
+        .light_line_style(WHITE.mix(0.3))
         .y_desc("Fragments")
         .x_desc("MapQ")
         .y_label_formatter(&|y| format!("{:e}", y))
@@ -462,7 +462,7 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
     debug!("Preparing isize chart data: {}", path.display());
     chart
         .configure_mesh()
-        .light_line_style(&WHITE.mix(0.3))
+        .light_line_style(WHITE.mix(0.3))
         .y_desc("Fragments")
         .x_desc("Insert Size (bp)")
         .y_label_formatter(&|y| format!("{:e}", *y as f64))
@@ -473,7 +473,7 @@ fn create_isize_hist(path: &Path, paired: &Paired) -> Result<(), Box<dyn std::er
 
     chart.draw_series(LineSeries::new(
         tl[x0..=x1].iter().map(|(x, y)| (*x, *y)),
-        Into::<ShapeStyle>::into(&RED).stroke_width(3),
+        Into::<ShapeStyle>::into(RED).stroke_width(3),
     ))?;
     debug!("Finished isize hist: {}", path.display());
     Ok(())
@@ -716,7 +716,7 @@ fn create_sample_report(job: ReportJob) -> Result<(), String> {
             let mut mrg_json: Option<MapJson> = None;
             let mut dsets: Vec<&str> = Vec::new();
             for (ds, json_path) in v.datasets.iter() {
-                let json = read_map_json(&json_path)?;
+                let json = read_map_json(json_path)?;
                 if let Some(ref mut sa) = dataset_secs {
                     let ds_sec =
                         make_latex_sec(&job.barcode, Some(ds), v.mapq_threshold, &json, false)?;
@@ -982,7 +982,7 @@ pub fn make_map_report(
     }
     // Prepare jobs
     let summary = Arc::new(Mutex::new(Vec::new()));
-    let latex_doc = Arc::new(Mutex::new(LatexBare::new(&report_tex_path)?));
+    let latex_doc = Arc::new(Mutex::new(LatexBare::new(report_tex_path)?));
 
     let mut job_vec = prepare_jobs(
         &svec,

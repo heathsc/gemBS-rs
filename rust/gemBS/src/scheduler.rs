@@ -56,11 +56,7 @@ impl Drop for RunJob {
         match utils::timed_wait_for_lock(Arc::clone(&self.signal), &self.path) {
             Ok(lock) => {
                 let running: Option<Vec<RunningTask>> = if let Ok(reader) = lock.reader() {
-                    if let Ok(x) = serde_json::from_reader(reader) {
-                        Some(x)
-                    } else {
-                        None
-                    }
+                    serde_json::from_reader(reader).ok()
                 } else {
                     None
                 };
@@ -368,7 +364,7 @@ impl<'a> Scheduler<'a> {
 pub enum QPipeCom {
     MapReport((Option<String>, PathBuf, usize, usize, Vec<SampleJsonFiles>)),
     CallReport((Option<String>, PathBuf, usize, Vec<CallJsonFiles>)),
-    Report(ReportOptions),
+    Report(Box<ReportOptions>),
     MergeCallJsons(MergeJsonFiles),
 }
 
@@ -502,7 +498,7 @@ fn worker_thread(
                         }
                         let opath = &qpipe.output.to_owned();
                         if let Some(path) = opath {
-                            pipeline.out_filepath(&path);
+                            pipeline.out_filepath(path);
                         }
                         trace!("Launching external pipeline");
                         let res = pipeline.run(qpipe.sig);
@@ -538,7 +534,7 @@ fn worker_thread(
                             QPipeCom::Report(rep_opt) => make_report::make_report(
                                 Arc::clone(&qpipe.sig),
                                 &qpipe.outputs,
-                                rep_opt,
+                                *rep_opt,
                             ),
                         };
                         if let Err(e) = ret {
@@ -562,7 +558,7 @@ fn worker_thread(
                         if rm_log {
                             trace!("Removing log file {:?}", log);
                             if let Some(lfile) = log {
-                                if let Err(e) = fs::remove_file(&lfile) {
+                                if let Err(e) = fs::remove_file(lfile) {
                                     error!(
                                         "Could not remove log file {}: {}",
                                         lfile.to_string_lossy(),
@@ -573,7 +569,7 @@ fn worker_thread(
                         }
                         for p in rm_list.iter() {
                             trace!("Removing file {} after normal task completion", p.display());
-                            if let Err(e) = fs::remove_file(&p) {
+                            if let Err(e) = fs::remove_file(p) {
                                 error!("Could not remove file {}: {}", p.to_string_lossy(), e);
                             }
                         }
@@ -616,7 +612,7 @@ pub fn schedule_jobs(
     flock: FileLock,
 ) -> Result<(), String> {
     gem_bs.check_signal()?;
-    let tlist: Vec<_> = task_list.iter().copied().collect();
+    let tlist: Vec<_> = task_list.to_vec();
     debug!("Schedule_jobs started with {} tasks", tlist.len());
     let mut sched = Scheduler::new(tlist);
     let task_path = flock.path();
@@ -665,7 +661,7 @@ pub fn schedule_jobs(
         };
         if let Some(idx) = worker_ix {
             if !sched.check_lock() {
-                let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), &task_path)?;
+                let flock = utils::wait_for_lock(gem_bs.get_signal_clone(), task_path)?;
                 gem_bs.rescan_assets_and_tasks(&flock)?;
                 if !asset_ids.is_empty() {
                     let tlist = gem_bs.get_required_tasks_from_asset_list(asset_ids, com_set);

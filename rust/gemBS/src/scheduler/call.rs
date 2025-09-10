@@ -288,7 +288,7 @@ pub fn make_merge_bcfs_pipeline(
         let s = asset.path().to_string_lossy();
         v.push(s);
         if remove_bcfs {
-            pipeline.add_remove_file(&asset.path());
+            pipeline.add_remove_file(asset.path());
         }
     }
     v.sort();

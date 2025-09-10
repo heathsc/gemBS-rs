@@ -350,7 +350,7 @@ pub fn make_merge_bams_pipeline(
     {
         args.push_str(format!("{}\x1e", asset.path().display()).as_str());
         if remove_bams {
-            pipeline.add_remove_file(&asset.path());
+            pipeline.add_remove_file(asset.path());
         }
     }
     if let Some(x) = task.log() {

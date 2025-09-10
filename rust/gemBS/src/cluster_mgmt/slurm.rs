@@ -118,7 +118,7 @@ where
     let mut pipeline = Pipeline::new();
     let sbatch_path = Path::new("sbatch");
     pipeline
-        .add_stage(&sbatch_path, Some(args))
+        .add_stage(sbatch_path, Some(args))
         .in_string(script)
         .out_string()
         .run(sig)?;

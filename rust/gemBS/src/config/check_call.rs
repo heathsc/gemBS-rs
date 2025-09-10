@@ -99,7 +99,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 		let bcf_asset = gem_bs.get_asset(id.as_str()).expect("Couldn't find bcf asset").idx();
 
 		// Add md5sum asset and task
-		let (md5_name, md5_path)  = assets::make_ext_asset(gem_bs.get_asset(bcf_asset).unwrap().id(), &bcf_path, "md5");
+		let (md5_name, md5_path)  = assets::make_ext_asset(gem_bs.get_asset(bcf_asset).unwrap().id(), bcf_path, "md5");
 		let md5 = gem_bs.insert_asset(&md5_name, &md5_path, AssetType::Derived);
 		let md5_task = gem_bs.add_task(&md5_name, format!("Calc MD5 sum for {}", id).as_str(),
 			Command::MD5SumCall, format!("--barcode {}", bcode).as_str());
@@ -111,7 +111,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
 		gem_bs.get_asset_mut(md5).unwrap().set_creator(md5_task, &[bcf_asset]);
 
 		// Add bcf-index asset and task
-		let (csi_name, csi_path)  = assets::make_ext_asset(gem_bs.get_asset(bcf_asset).unwrap().id(), &bcf_path, "csi");
+		let (csi_name, csi_path)  = assets::make_ext_asset(gem_bs.get_asset(bcf_asset).unwrap().id(), bcf_path, "csi");
 		let csi = gem_bs.insert_asset(&csi_name, &csi_path, AssetType::Derived);
 		let csi_task = gem_bs.add_task(&csi_name, format!("Calc Index for {}", id).as_str(),
 			Command::IndexBcf, format!("--barcode {}", bcode).as_str());

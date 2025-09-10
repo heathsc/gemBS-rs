@@ -89,7 +89,7 @@ where
 		self
 	}
 	pub fn out_string_ref(&self) -> Option<&str> { 
-		if let PipelineOutput::String(Some(s)) = &self.output { Some(&s) }
+		if let PipelineOutput::String(Some(s)) = &self.output { Some(s) }
 		else { None }
 	}
 	// Send output of pipeline to file at Path
@@ -115,7 +115,7 @@ where
 			let f = fs::File::create(file).map_err(|e| format!("Couldn't open output file {}: {}", file.to_string_lossy(), e))?;
 			Some(f)
 		} else { None };
-		self.do_run(sig, log_file).map_err(|e| {
+		self.do_run(sig, log_file).inspect_err(|_| {
 			for file in self.expected_outputs.iter() { 
 				debug!("Try to remove output file {}", file.display());
 				if file.exists() {
@@ -123,7 +123,6 @@ where
 					let _ = fs::remove_file(file); 
 				}
 			}
-			e
 		})
 	}
 	fn do_run(&mut self, sig: Arc<AtomicUsize>, log: Option<fs::File>) -> Result<(), String> {
@@ -152,7 +151,7 @@ where
 			if let Some(a) = args { 
 				for arg in a { 
 					desc.push(' ');
-					desc.push_str(&(*arg.as_ref().to_str().unwrap()));
+					desc.push_str(arg.as_ref().to_str().unwrap());
 					arg_vec.push(arg); 
 				}
 			}

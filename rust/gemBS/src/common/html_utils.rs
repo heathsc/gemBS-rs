@@ -45,7 +45,7 @@ impl fmt::Display for HtmlElement {
 
 impl HtmlElement {
 	pub fn new(tag: &'static str, opt: Option<&str>, close: bool) -> Self { 
-		let options = if let Some(s) = opt { Some(s.to_owned()) } else { None };
+		let options = opt.map(|s| s.to_owned());
 		HtmlElement{ tag, options, close, content: Vec::new() }
 	}
 	pub fn push(&mut self, content: Content) { self.content.push(content) }	

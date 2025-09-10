@@ -294,7 +294,7 @@ impl Coverage {
 		for (key, ct) in other.non_ref_cpg_inf.iter() { *(self.non_ref_cpg_inf.entry(*key).or_insert(0)) += ct; }
 		
 		// GC is a hash of vectors
-		for (key, ct) in other.gc.iter() { add_assign_vec(self.gc.entry(*key).or_insert_with(Vec::new), ct, 0); }
+		for (key, ct) in other.gc.iter() { add_assign_vec(self.gc.entry(*key).or_default(), ct, 0); }
 	}
 }
 pub fn add_assign_vec<T: Clone + Copy + AddAssign>(a: &mut Vec<T>, b: &[T], zero: T) {
