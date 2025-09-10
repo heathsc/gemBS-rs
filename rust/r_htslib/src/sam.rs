@@ -23,6 +23,7 @@ pub const BAM_FSUPPLEMENTARY: u16 = 2048;
 
 
 #[repr(C)]
+#[allow(non_camel_case_types)]
 pub struct sam_hdr_t { _unused: [u8; 0], }
 
 impl sam_hdr_t {
@@ -81,6 +82,7 @@ impl sam_hdr_t {
 
 
 #[repr(C)]
+#[allow(non_camel_case_types)]
 struct bam1_core_t {
 	pos: HtsPos,
 	tid: i32,
@@ -97,6 +99,7 @@ struct bam1_core_t {
 }
 
 #[repr(C)] 
+#[allow(non_camel_case_types)]
 pub struct bam1_t {
 	core: bam1_core_t,
 	id: u64,
@@ -132,7 +135,7 @@ impl bam1_t {
 	pub fn get_seq(&self) -> Option<&[u8]> {
 		unsafe {
 			let core = &self.core;
-			let off = ((core.n_cigar as isize) << 2) + (core.l_qname as isize) as isize;
+			let off = ((core.n_cigar as isize) << 2) + (core.l_qname as isize);
 			let p = self.data().offset(off) as *const u8;
 			if p.is_null() { None }
 			else {
@@ -153,7 +156,7 @@ impl bam1_t {
 			} 		
 		}
 	}
-	pub fn cigar(&self) -> Option<Cigar> {
+	pub fn cigar<'a>(&'a self) -> Option<Cigar<'a>> {
 		let len = self.core.n_cigar as usize;
 		if len > 0 {
 			let data = self.data();
@@ -194,8 +197,9 @@ impl bam1_t {
 			} 
 		}
 	}
-	pub fn get_aux_iter(&self) -> Option<BamAuxIter> { 
-		if let Some(aux) = self.get_aux() {	Some(BamAuxIter{data: aux}) } else { None }
+	pub fn get_aux_iter<'a>(&'a self) -> Option<BamAuxIter<'a>> { 
+	
+		self.get_aux().map(|aux| BamAuxIter{data: aux})
 	}
 	pub fn get_tag(&self, tag_id: &str, tag_type: char) -> Option<&[u8]> {
 		if tag_id.len() != 2 { return None } 
@@ -262,7 +266,7 @@ pub struct SamHeader {
 unsafe impl Sync for SamHeader{}
 unsafe impl Send for SamHeader{}
 
-impl <'a>Drop for SamHeader {
+impl Drop for SamHeader {
 	fn drop(&mut self) {
 		unsafe { sam_hdr_destroy(self.as_mut()) };
 	}
@@ -354,7 +358,7 @@ pub struct Cigar<'a>(&'a[CigarElem]);
 
 impl <'a> Deref for Cigar<'a> {
     type Target = [CigarElem];
-	fn deref(&self) -> &[CigarElem] { &self.0 }
+	fn deref(&self) -> &[CigarElem] { self.0 }
 }
 
 impl <'a> Cigar<'a> {
@@ -453,7 +457,7 @@ impl FromStr for CigarBuf {
 			let i = sp.find(|c: char| !c.is_ascii_digit()).ok_or("Cigar string does not end in letter")?;
 			let n = <u32>::from_str(&sp[0..i]).map_err(|_| "Error parsing Cigar string - expecting number")?;
 			if n >= BAM_CIGAR_MAX_LEN { return Err("Cigar number too large")};
-			let op = BAM_CIGAR_TAB[sp[i..=i].as_bytes()[0] as usize];
+			let op = BAM_CIGAR_TAB[sp.as_bytes()[i] as usize];
 			if op < 0 { return Err("Illegal Cigar character") }
 			v.push(CigarElem((n << 4) | (op as u32)));
 			sp = &sp[i+1..];
@@ -531,10 +535,10 @@ impl BamRec {
 			None => Err(hts_err("Failed to allocate new BamRec".to_string())),
 		}
 	}
+	
+	#[inline]
 	pub fn swap(&mut self, other: &mut Self) {
-		let t = self.inner;
-		self.inner = other.inner;
-		other.inner = t;
+	    std::mem::swap(&mut self.inner, &mut other.inner);
 	}
 }
 

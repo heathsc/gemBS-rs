@@ -33,6 +33,7 @@ pub const FT_STDIN: u32 = 8;
 
 #[repr(C)]
 #[derive(BitfieldStruct)]
+#[allow(non_camel_case_types)]
 pub struct hFILE { 
 	pub(crate) buffer: *mut c_char,
 	pub(crate) begin: *mut c_char,
@@ -48,6 +49,7 @@ pub struct hFILE {
 }
 
 #[repr(C)]
+#[allow(non_camel_case_types)]
 pub struct cram_fd { _unused: [u8; 0], }
 
 #[repr(C)]
@@ -59,6 +61,7 @@ union file_ptr {
 
 #[repr(C)]
 #[derive(BitfieldStruct)]
+#[allow(non_camel_case_types)]
 pub struct htsFile { 
 	#[bitfield(name = "is_bin", ty = "c_uchar", bits = "0..=0")]
 	#[bitfield(name = "is_write", ty = "c_uchar", bits = "1..=1")]
@@ -135,6 +138,7 @@ impl io::Write for htsFile {
 }
 
 #[repr(C)]
+#[allow(non_camel_case_types)]
 pub struct hts_idx_t { _unused: [u8; 0], }
 
 impl hts_idx_t {
@@ -172,6 +176,7 @@ impl hts_idx_t {
 
 #[repr(C)]
 #[derive(BitfieldStruct)]
+#[allow(non_camel_case_types)]
 pub struct hts_itr_t { 
 	#[bitfield(name = "read_rest", ty = "c_uchar", bits = "0..=0")]
 	#[bitfield(name = "finished", ty = "c_uchar", bits = "1..=1")]
@@ -183,7 +188,7 @@ pub struct hts_itr_t {
 	_unused: [u8;0],
 }
 impl hts_itr_t {
-    pub unsafe fn sam_itr_next_unsafe<H: AsMut<htsFile>>(&mut self, mut fp: H, p: &mut bam1_t) -> c_int {
+    unsafe fn sam_itr_next_unsafe<H: AsMut<htsFile>>(&mut self, mut fp: H, p: &mut bam1_t) -> c_int {
         if self.multi() != 0 {
             hts_itr_multi_next(fp.as_mut(), self, p as *mut bam1_t as *mut c_void)
         } else {
@@ -192,9 +197,8 @@ impl hts_itr_t {
         }
     }
 
-	pub fn sam_itr_next<H: AsMut<htsFile>, B: AsMut<bam1_t>>(&mut self, fp: H, mut brec: B) -> SamReadResult {
-		let p = brec.as_mut();
-        match unsafe { self.sam_itr_next_unsafe(fp, p) } {
+	pub fn sam_itr_next<H: AsMut<htsFile>>(&mut self, fp: H, brec: &mut bam1_t) -> SamReadResult {
+        match unsafe { self.sam_itr_next_unsafe(fp, brec) } {
 			0..=c_int::MAX => SamReadResult::Ok,
 			-1 => SamReadResult::EOF,
 			_ => SamReadResult::Error,
@@ -213,6 +217,7 @@ impl hts_itr_t {
 }
 
 #[repr(C)]
+#[allow(non_camel_case_types)]
 pub enum htsFormatCategory { UnknownCategory, SequenceData, VariantData, IndexFile, RegionList }
 #[repr(C)]
 #[allow(non_camel_case_types)]
@@ -220,6 +225,7 @@ pub enum htsLogLevel { HTS_LOG_OFF, HTS_LOG_ERROR, HTS_LOG_WARNING = 3, HTS_LOG_
 
 #[repr(C)]
 #[derive(PartialEq,Clone,Copy)]
+#[allow(non_camel_case_types)]
 pub enum htsExactFormat { 
 	UnknownFormat, BinaryFormat, TextFormat, 
 	Sam, Bam, Bai, Cram, Crai, Vcf, Bcf, Csi, Gzi, Tbi, Bed,
@@ -227,13 +233,16 @@ pub enum htsExactFormat {
 	HtsCrypt4GH }
 #[repr(C)]
 #[derive(PartialEq)]
+#[allow(non_camel_case_types)]
 pub enum htsCompression { NoCompression, Gzip, Bgzf, Custom, Bzip2Compression }
 #[repr(C)]
+#[allow(non_camel_case_types)]
 pub struct htsFormatVersion {
 	major: c_short,
 	minor: c_short,
 }
 #[repr(C)]
+#[allow(non_camel_case_types)]
 pub struct htsFormat { 
 	category: htsFormatCategory,
 	format: htsExactFormat,
@@ -244,9 +253,11 @@ pub struct htsFormat {
 }
 
 #[repr(C)]
+#[allow(non_camel_case_types)]
 struct hts_tpool { _unused: [u8; 0], }
 
 #[repr(C)]
+#[allow(non_camel_case_types)]
 pub struct htsThreadPool {
 	pool: NonNull<hts_tpool>,
 	qsize: c_int,	
@@ -264,6 +275,7 @@ unsafe impl Sync for htsThreadPool {}
 unsafe impl Send for htsThreadPool {}
 
 #[repr(C)]
+#[allow(non_camel_case_types)]
 pub enum hts_fmt_option {
 	HtsOptCompressionLevel = 100,
 	HtsOptNThreads,

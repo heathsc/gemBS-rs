@@ -15,12 +15,7 @@ impl SamInner {
         let b = brec.as_mut();
         loop {
     		if let Some(itr) = &mut self.itr {
-                let res = match unsafe { itr.sam_itr_next_unsafe(&mut self.file, b) } {
-                    0..=libc::c_int::MAX => SamReadResult::Ok,
-                    -1 => SamReadResult::EOF,
-                    _ => SamReadResult::Error,
-                };
-//	   		    let res = itr.sam_itr_next(&mut self.file, brec);
+                let res = itr.sam_itr_next(&mut self.file, b);
                 if !matches!(res, SamReadResult::EOF) { return res }
                 self.itr = None;
 		    } 

@@ -1,6 +1,5 @@
 use std::ffi::{CStr, CString};
 use std::io;
-use std::io::{Error, ErrorKind};
 
 pub mod hts;
 pub use hts::*;
@@ -30,5 +29,5 @@ fn from_cstr<'a>(cstr: *const i8) -> &'a str {
 }
 
 pub fn hts_err(s: String) -> io::Error {
-	Error::new(ErrorKind::Other, s)	
+	io::Error::other(s)	
 }

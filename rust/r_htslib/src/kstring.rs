@@ -6,6 +6,7 @@ use libc::{c_char, c_int, c_float, c_void, size_t};
 use super::*;
 
 #[repr(C)] 
+#[allow(non_camel_case_types)]
 pub struct kstring_t {
 	l: size_t,
 	m: size_t,
@@ -40,15 +41,12 @@ impl kstring_t {
 	pub fn to_str(&self) -> Option<&str> {
 		if self.s.is_null() || self.l == 0 { None }
 		else {
-			match std::str::from_utf8(unsafe {std::slice::from_raw_parts(self.s as *const u8, self.l as usize)} ) {
-				Ok(s) => Some(s),
-				Err(_) => None,
-			}
+			std::str::from_utf8(unsafe {std::slice::from_raw_parts(self.s as *const u8, self.l)} ).ok()
 		}
 	}
 	pub fn to_u8(&self) -> Option<&[u8]> {
 		if self.s.is_null() { None }
-		else {Some(unsafe {std::slice::from_raw_parts(self.s as *const u8, self.l as usize )})}
+		else {Some(unsafe {std::slice::from_raw_parts(self.s as *const u8, self.l)})}
 	}
 	pub fn clear(&mut self) { self.l = 0 }
 	pub fn resize(&mut self, size: size_t) -> bool {
@@ -124,9 +122,9 @@ impl kstring_t {
 			self.bcf_enc_size(1, BCF_BT_INT8) || self.putc(bcf_int8_vector_end as c_char)
 		} else if x == bcf_int32_missing {
 			self.bcf_enc_size(1, BCF_BT_INT8) || self.putc(bcf_int8_missing as c_char)
-		} else if x <= BCF_MAX_BT_INT8 && x >= BCF_MIN_BT_INT8 {
+		} else if (BCF_MIN_BT_INT8..=BCF_MAX_BT_INT8).contains(&x) {
 			self.bcf_enc_size(1, BCF_BT_INT8) || self.putc(x as c_char)
-		} else if x <= BCF_MAX_BT_INT16 && x >= BCF_MIN_BT_INT16 {
+		} else if (BCF_MIN_BT_INT16..=BCF_MAX_BT_INT16).contains(&x) {
 			self.bcf_enc_size(1, BCF_BT_INT16) || self.putsn((x as u16).to_le_bytes().as_ptr() as *const i8, 2)							
 		} else {
 			self.bcf_enc_size(1, BCF_BT_INT32) || self.putsn(x.to_le_bytes().as_ptr() as *const i8, 4)				
