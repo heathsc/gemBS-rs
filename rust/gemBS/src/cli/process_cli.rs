@@ -29,8 +29,12 @@ fn gen_cli() -> Command {
             .arg(
                 Arg::new("slurm_options")
                     .long("slurm-options")
+                    .action(ArgAction::Append)
                     .value_name("STRING")
                     .value_parser(value_parser!(String))
+                    .allow_hyphen_values(true)
+                    .value_terminator(";")
+                    .num_args(1..)
                     .help("Command line options to be passed to slurm (sbatch)"),
             );
         
@@ -109,7 +113,17 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
     gem_bs.set_all(m.get_flag("all"));
     gem_bs.set_dry_run(m.get_flag("dry_run"));
     gem_bs.set_slurm(m.get_flag("slurm"));
-    if let Some(s) = m.get_one::<String>("slurm_options") {
+    if let Some(s) = m.get_many::<String>("slurm_options")
+        .map(|mut v| {
+            let mut s = v.next().expect("Expect at least one argument to slurm_options").to_owned();
+            for c in v {
+                s.push(' ');
+                s.push_str(c)
+            }
+            s
+        })
+   
+    {
         gem_bs.set_slurm_options(s);
     }
     if let Some(s) = m.get_one::<String>("json") {

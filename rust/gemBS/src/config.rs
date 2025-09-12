@@ -147,9 +147,9 @@ impl GemBS {
             panic!("Internal error!");
         }
     }
-    pub fn set_slurm_options(&mut self, options: &str) {
+    pub fn set_slurm_options(&mut self, options: String) {
         self.set_slurm(true);
-        self.slurm_options = Some(options.to_owned())
+        self.slurm_options = Some(options)
     }
     
     pub fn set_sample_data(&mut self, dataset: &str, mt: Metadata, val: DataValue) {
