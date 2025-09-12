@@ -17,17 +17,26 @@ use clap::value_parser;
 fn gen_cli() -> Command {
     #[cfg(feature = "slurm")]
     {
+        let com = cli_model()
+            .arg(
+                Arg::new("slurm_script")
+                    .short('s')
+                    .long("slurm-script")
+                    .value_name("FILE")
+                    .value_parser(value_parser!(String))
+                    .help("Generate PERL script to submit commands to slurm for execution"),
+            )
+            .arg(
+                Arg::new("slurm_options")
+                    .long("slurm-options")
+                    .value_name("STRING")
+                    .value_parser(value_parser!(String))
+                    .help("Command line options to be passed to slurm (sbatch)"),
+            );
+        
         let container: Option<&'static str> = option_env!("GEMBS_CONTAINER");
         if container.is_none() {
-            cli_model()
-                .arg(
-                    Arg::new("slurm_script")
-                        .short('s')
-                        .long("slurm-script")
-                        .value_name("FILE")
-                        .value_parser(value_parser!(String))
-                        .help("Generate PERL script to submit commands to slurm for execution"),
-                )
+            com
                 .arg(
                     Arg::new("slurm")
                         .short('S')
@@ -37,14 +46,7 @@ fn gen_cli() -> Command {
                 )
                 .group(ArgGroup::new("slurm_opts").args(["slurm", "slurm_script"]))
         } else {
-            cli_model().arg(
-                Arg::new("slurm_script")
-                    .short('s')
-                    .long("slurm-script")
-                    .value_parser(value_parser!(String))
-                    .value_name("FILE")
-                    .help("Generate PERL script to submit commands to slurm for execution"),
-            )
+            com
         }
     }
     #[cfg(not(feature = "slurm"))]
@@ -56,7 +58,7 @@ fn gen_cli() -> Command {
 fn generate_completions(m: &ArgMatches) -> Result<(), String> {
     //    Err("Completions currently not working".to_string())
     let g = *m.get_one::<Shell>("shell").expect("Missing shell");
-    let mut cmd = cli_model();
+    let mut cmd = gen_cli();
     eprintln!("Generating completion file for {}...", g);
     let ofile = m
         .get_one::<String>("output")
@@ -107,7 +109,9 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
     gem_bs.set_all(m.get_flag("all"));
     gem_bs.set_dry_run(m.get_flag("dry_run"));
     gem_bs.set_slurm(m.get_flag("slurm"));
-
+    if let Some(s) = m.get_one::<String>("slurm_options") {
+        gem_bs.set_slurm_options(s);
+    }
     if let Some(s) = m.get_one::<String>("json") {
         gem_bs.set_json_out(s);
     }

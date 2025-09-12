@@ -61,6 +61,7 @@ pub struct GemBS {
     json_out: Option<String>,
     all: bool,
     slurm: bool,
+    slurm_options: Option<String>,
     slurm_script: Option<String>,
     dry_run: bool,
     verbose: LogLevel,
@@ -85,6 +86,7 @@ impl GemBS {
             json_out: None,
             all: false,
             slurm: false,
+            slurm_options: None,
             slurm_script: None,
             dry_run: false,
             verbose: LogLevel::from_str("error").unwrap(),
@@ -145,6 +147,11 @@ impl GemBS {
             panic!("Internal error!");
         }
     }
+    pub fn set_slurm_options(&mut self, options: &str) {
+        self.set_slurm(true);
+        self.slurm_options = Some(options.to_owned())
+    }
+    
     pub fn set_sample_data(&mut self, dataset: &str, mt: Metadata, val: DataValue) {
         if let GemBSData::SampleData(href) = &mut self.var[1] {
             href.entry(dataset.to_string())
@@ -758,8 +765,11 @@ impl GemBS {
     pub fn slurm(&self) -> bool {
         self.slurm
     }
-    pub fn slurm_script(&self) -> &Option<String> {
-        &self.slurm_script
+    pub fn slurm_script(&self) -> Option<&str> {
+        self.slurm_script.as_deref()
+    }
+    pub fn slurm_options(&self) -> Option<&str> {
+        self.slurm_options.as_deref()
     }
     pub fn set_json_out(&mut self, s: &str) {
         self.json_out = Some(s.to_owned());

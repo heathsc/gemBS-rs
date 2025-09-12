@@ -7,7 +7,8 @@ gemBS_config.mk
 test.sh
 texlive/.texlive
 texlive/gemBS_texlive.profile
-texlive/texlive_install.sh
+texlive/*install*
+latex_extras
 bcftools
 samtools
 htslib
@@ -21,3 +22,4 @@ c_tools/utils/configure
 c_tools/tmp_root
 .idea
 *.iml
+gemBS
