@@ -91,18 +91,15 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
         };
         let tmp_bcf_dir = replace_meta_var(&bcf_dir);
         let bcf_path = Path::new(&tmp_bcf_dir);
-        
+
         let id = format!("{}.bcf", bcode);
-        let bcf_asset = gem_bs
-            .get_asset(id.as_str())
-            .expect("Couldn't find bcf asset")
-            .idx();
-        
+
+        let bcf_asset = handle_file(gem_bs, id, None, bcf_path, AssetType::Derived);
         // Add bcf-index asset and task
         let (csi_name, csi_path) =
             assets::make_ext_asset(gem_bs.get_asset(bcf_asset).unwrap().id(), bcf_path, "csi");
         let csi = gem_bs.insert_asset(&csi_name, &csi_path, AssetType::Derived);
-        
+
         let indexed = if pools.len() > 1 {
             let mut out_bcfs = Vec::new();
             let mut out_jsons = vec![0]; // Dummy value - will fill in later
@@ -151,6 +148,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
                         .set_creator(call_task, &in_vec)
                 });
             }
+            /*
             let out = handle_file(
                 gem_bs,
                 format!("{}.bcf", bcode),
@@ -158,7 +156,8 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
                 bcf_path,
                 AssetType::Derived,
             );
-            out_jsons[0] = out; // Add bcf file as input requirement for JSON merge so that we don't do the merge step until the merge BCF step is complete
+            */
+            out_jsons[0] = bcf_asset; // Add bcf file as input requirement for JSON merge so that we don't do the merge step until the merge BCF step is complete
             let out1 = handle_file(
                 gem_bs,
                 format!("{}_call.json", bcode),
@@ -177,16 +176,20 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
             );
             gem_bs
                 .add_task_inputs(merge_task, &out_bcfs)
-                .add_outputs(&[out, csi])
+                .add_outputs(&[bcf_asset, csi])
                 .set_log(Some(log_index))
                 .set_barcode(bcode)
                 .add_cores(merge_cores)
                 .add_memory(merge_memory)
                 .add_time(merge_time);
-            gem_bs
-                .get_asset_mut(out)
-                .unwrap()
-                .set_creator(merge_task, &out_bcfs);
+
+            [bcf_asset, csi].iter().for_each(|id| {
+                gem_bs
+                    .get_asset_mut(*id)
+                    .unwrap()
+                    .set_creator(merge_task, &out_bcfs);
+            });
+
             let id = format!("merge_call_jsons_{}", bcode);
             let merge_json_task = gem_bs.add_task(
                 &id,
@@ -207,6 +210,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
             let mut in_vec = common_inputs.clone();
             in_vec.push(bam);
             in_vec.push(bam_md5);
+            /*
             let out = handle_file(
                 gem_bs,
                 format!("{}.bcf", bcode),
@@ -214,6 +218,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
                 bcf_path,
                 AssetType::Derived,
             );
+            */
             let out1 = handle_file(
                 gem_bs,
                 format!("{}.json", bcode),
@@ -232,13 +237,13 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
             );
             gem_bs
                 .add_task_inputs(call_task, &in_vec)
-                .add_outputs(&[out, out1])
+                .add_outputs(&[bcf_asset, out1])
                 .set_log(Some(log_index))
                 .set_barcode(bcode)
                 .add_cores(cores)
                 .add_memory(memory)
                 .add_time(time);
-            [out, out1].iter().for_each(|id| {
+            [bcf_asset, out1].iter().for_each(|id| {
                 gem_bs
                     .get_asset_mut(*id)
                     .unwrap()
@@ -247,6 +252,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
             false
         };
 
+        let id = format!("{}.bcf", bcode);
         // Add md5sum asset and task
         let (md5_name, md5_path) =
             assets::make_ext_asset(gem_bs.get_asset(bcf_asset).unwrap().id(), bcf_path, "md5");
@@ -278,7 +284,6 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
             .set_creator(md5_task, &[bcf_asset]);
 
         if !indexed {
-
             let csi_task = gem_bs.add_task(
                 &csi_name,
                 format!("Calc Index for {}", id).as_str(),

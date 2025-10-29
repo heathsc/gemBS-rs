@@ -3,7 +3,7 @@ use crate::common::assets::GetAsset;
 use crate::common::defs::{Command, DataValue, Section};
 use crate::common::dry_run;
 use crate::common::utils;
-use crate::config::{contig, GemBS};
+use crate::config::{GemBS, contig};
 use crate::scheduler;
 use clap::ArgMatches;
 use std::collections::{HashMap, HashSet};
@@ -109,7 +109,7 @@ fn gen_call_command(
         coms.insert(Command::Call);
     }
     let mut merging = false;
-    
+
     if !(options.contains_key("no_merge")
         || options.contains_key("index")
         || options.contains_key("md5"))
