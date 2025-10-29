@@ -108,14 +108,17 @@ fn gen_call_command(
     {
         coms.insert(Command::Call);
     }
+    let mut merging = false;
+    
     if !(options.contains_key("no_merge")
         || options.contains_key("index")
         || options.contains_key("md5"))
     {
         coms.insert(Command::MergeBcfs);
         coms.insert(Command::MergeCallJsons);
+        merging = true;
     }
-    if !options.contains_key("no_index") {
+    if !(options.contains_key("no_index") || merging) {
         coms.insert(Command::IndexBcf);
     }
     let asset_ids: Vec<_> = assets.iter().copied().collect();
