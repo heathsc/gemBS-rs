@@ -137,6 +137,7 @@ lazy_static! {
             "oxbs-seq",
             "customcapturebs-seq",
             "wg-em-seq",
+            "wg-5hmc-seq",
             "other-bs",
         ]
     };
