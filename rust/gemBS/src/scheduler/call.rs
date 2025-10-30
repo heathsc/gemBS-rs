@@ -280,7 +280,7 @@ pub fn make_merge_bcfs_pipeline(
         args.push_str(format!("--threads\x1e{}\x1e", t).as_str());
     }
     if !(options.contains_key("no_merge") || options.contains_key("no_index")) {
-        args.push_str("--write-index")
+        args.push_str("--write-index\x1e")
     }
     
     let remove_bcfs = if let Some((DataValue::Bool(x), _)) = options.get("remove") {
