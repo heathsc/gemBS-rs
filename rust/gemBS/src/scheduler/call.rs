@@ -270,7 +270,7 @@ pub fn make_merge_bcfs_pipeline(
 
     // Setup arguments
     let mut args = format!(
-        "concat\x1e--output\x1e{}\x1e--output-type\x1eb\x1e--naive\x1e",
+        "concat\x1e--output\x1e{}\x1e--output-type\x1eb\x1e",
         output_bcf.to_string_lossy()
     );
     if gem_bs.get_config_bool(Section::Calling, "benchmark_mode") {
