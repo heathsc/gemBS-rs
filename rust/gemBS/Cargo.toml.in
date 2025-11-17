@@ -1,6 +1,6 @@
 [package]
 name = "gem_bs"
-version = "4.4.2"
+version = "4.4.3"
 authors = ["Simon Heath <simon.heath@gmail.com>"]
 edition = "2024"
 
