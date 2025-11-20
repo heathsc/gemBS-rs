@@ -146,7 +146,7 @@ pub fn make_map_pipeline(
         ),
         (
             "conversion_min_base_qual",
-            "conversion-min-base_qual",
+            "conversion-min-base-qual",
             VarType::Int,
         ),
         (
