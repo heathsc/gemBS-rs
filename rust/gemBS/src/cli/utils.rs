@@ -113,6 +113,22 @@ pub static OPT_ASSOC: &[(&str, OptionType)] = &[
         OptionType::Global("overconversion_sequence", VarType::StringVec),
     ),
     (
+        "conv_seq",
+        OptionType::Global("conversion_sequence", VarType::StringVec),
+    ),
+    (
+        "conv_min_mapq",
+        OptionType::Global("conversion_min_mapq", VarType::Int),
+    ),
+    (
+        "conv_min_base_qual",
+        OptionType::Global("conversion_min_base_qual", VarType::Int),
+    ),
+    (
+        "conv_clip_start",
+        OptionType::Global("conversion_clip_start", VarType::Int),
+    ),
+    (
         "reverse",
         OptionType::Global("reverse_conversion", VarType::Bool),
     ),

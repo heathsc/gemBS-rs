@@ -185,6 +185,14 @@ fn make_known_var_list() -> KnownVarList {
         VarType::StringVec,
         vec![Section::Mapping],
     );
+    kv_list.add_known_var(
+        "conversion_sequence",
+        VarType::StringVec,
+        vec![Section::Mapping],
+    );
+    kv_list.add_known_var("conversion_min_mapq", VarType::Int, vec![Section::Mapping]);
+    kv_list.add_known_var("conversion_min_base_qual", VarType::Int, vec![Section::Mapping]);
+    kv_list.add_known_var("conversion_clip_start", VarType::Int, vec![Section::Mapping]);
     kv_list.add_known_var("tmp_dir", VarType::String, vec![Section::Mapping]);
     kv_list.add_known_var("bam_dir", VarType::String, vec![Section::Mapping]);
     kv_list.add_known_var("centre", VarType::String, vec![Section::Mapping]);

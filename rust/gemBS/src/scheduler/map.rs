@@ -134,6 +134,26 @@ pub fn make_map_pipeline(
             "overconversion-sequence",
             VarType::StringVec,
         ),
+        (
+            "conversion_sequence",
+            "conversion-sequence",
+            VarType::StringVec,
+        ),
+        (
+            "conversion_min_mapq",
+            "conversion-min-mapq",
+            VarType::Int,
+        ),
+        (
+            "conversion_min_base_qual",
+            "conversion-min-base_qual",
+            VarType::Int,
+        ),
+        (
+            "conversion_clip_start",
+            "conversion-clip-start",
+            VarType::Int,
+        ),
         ("benchmark_mode", "benchmark-mode", VarType::Bool),
         (
             "max_template_length",
