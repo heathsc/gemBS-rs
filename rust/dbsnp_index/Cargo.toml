@@ -14,7 +14,7 @@ num_cpus = "1.13.0"
 libc = "0.2"
 chrono = "0.4"
 crossbeam-channel = "0.5"
-zstd = "~0.13"
+zstd = "~0.14"
 lazy_static = "~1"
 utils = { path = "../utils" }
 json_rs = { git = "https://github.com/heathsc/json_rs" }

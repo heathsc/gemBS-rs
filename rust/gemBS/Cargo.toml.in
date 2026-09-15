@@ -16,14 +16,14 @@ csv = "1.1"
 libc = "0.2"
 lazy_static = "~1"
 num_cpus = "1.13.0"
-signal-hook = "~0.3"
+signal-hook = "~0.4"
 glob = "0.3.0"
 hostname = "^0.4"
 custom_error = "1.7.1"
 plotters-bitmap = "~0.3"
 plotters = {version = "~0.3", default-features = false, features = ["bitmap_encoder", "line_series", "ttf"]}
 regex = "1"
-md-5 = "~0.10"
+md-5 = "~0.11"
 chrono = "~0.4"
 utils = { path = "../utils" }
 
