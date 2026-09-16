@@ -24,6 +24,7 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
         .get_config_int(Section::Report, "cores")
         .map(|x| x as usize)
         .or(Some(2));
+    let slurm_options = gem_bs.get_slurm_options(Section::Report).map(|s| s.to_owned());
     let memory = gem_bs.get_config_memsize(Section::Report, "memory");
     let time = gem_bs
         .get_config_joblen(Section::Report, "time")
@@ -121,6 +122,7 @@ pub fn check_map_report(gem_bs: &mut GemBS) -> Result<(), String> {
         .add_task_inputs(task, &json_files)
         .add_outputs(&out_vec)
         .add_cores(cores)
+        .add_slurm_options(slurm_options)
         .add_memory(memory)
         .add_time(time);
     out_vec.iter().for_each(|id| {
@@ -147,6 +149,7 @@ pub fn check_call_report(gem_bs: &mut GemBS) -> Result<(), String> {
         .get_config_int(Section::Report, "cores")
         .map(|x| x as usize)
         .or(Some(2));
+    let slurm_options = gem_bs.get_slurm_options(Section::Report).map(|s| s.to_owned());
     let memory = gem_bs.get_config_memsize(Section::Report, "memory");
     let time = gem_bs
         .get_config_joblen(Section::Report, "time")
@@ -222,6 +225,7 @@ pub fn check_call_report(gem_bs: &mut GemBS) -> Result<(), String> {
         .add_task_inputs(task, &json_files)
         .add_outputs(&out_vec)
         .add_cores(cores)
+        .add_slurm_options(slurm_options)
         .add_memory(memory)
         .add_time(time);
     out_vec.iter().for_each(|id| {

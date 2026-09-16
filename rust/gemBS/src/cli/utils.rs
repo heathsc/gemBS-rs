@@ -80,6 +80,7 @@ pub enum OptionType {
 
 pub static OPT_ASSOC: &[(&str, OptionType)] = &[
     ("threads", OptionType::Global("threads", VarType::Int)),
+    ("slurm_options", OptionType::Global("slurm_options", VarType::Int)),
     (
         "map_threads",
         OptionType::Global("map_threads", VarType::Int),

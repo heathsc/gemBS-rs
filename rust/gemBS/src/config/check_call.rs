@@ -26,6 +26,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
         .get_config_int(Section::Calling, "cores")
         .map(|x| x as usize)
         .or(Some(2));
+    let slurm_options = gem_bs.get_slurm_options(Section::Calling).map(|s| s.to_owned());
     let merge_cores = gem_bs
         .get_config_int(Section::Calling, "merge_cores")
         .map(|x| x as usize)
@@ -131,6 +132,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
                     .set_log(Some(log_index))
                     .set_barcode(bcode)
                     .add_cores(cores)
+                    .add_slurm_options(slurm_options.clone())
                     .add_memory(memory)
                     .add_time(time);
                 [out, out1].iter().for_each(|id| {
@@ -172,6 +174,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
                 .set_log(Some(log_index))
                 .set_barcode(bcode)
                 .add_cores(merge_cores)
+                .add_slurm_options(slurm_options.clone())
                 .add_memory(merge_memory)
                 .add_time(merge_time);
 
@@ -233,6 +236,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
                 .set_log(Some(log_index))
                 .set_barcode(bcode)
                 .add_cores(cores)
+                .add_slurm_options(slurm_options.clone())
                 .add_memory(memory)
                 .add_time(time);
             [bcf_asset, out1].iter().for_each(|id| {
@@ -259,6 +263,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
             .get_config_int(Section::MD5Sum, "cores")
             .map(|x| x as usize)
             .or(Some(1));
+        let md5_slurm_options = gem_bs.get_slurm_options(Section::MD5Sum).map(|s| s.to_owned());
         let md5_memory = gem_bs.get_config_memsize(Section::MD5Sum, "memory");
         let md5_time = gem_bs
             .get_config_joblen(Section::MD5Sum, "time")
@@ -268,6 +273,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
             .add_outputs(&[md5])
             .set_barcode(bcode)
             .add_cores(md5_cores)
+            .add_slurm_options(md5_slurm_options.clone())
             .add_memory(md5_memory)
             .add_time(md5_time);
         gem_bs
@@ -287,6 +293,7 @@ pub fn check_call(gem_bs: &mut GemBS) -> Result<(), String> {
                 .add_outputs(&[csi])
                 .set_barcode(bcode)
                 .add_cores(cores)
+                .add_slurm_options(slurm_options.clone())
                 .add_memory(memory)
                 .add_time(time);
             gem_bs

@@ -249,6 +249,7 @@ fn make_dbsnp_tasks(gem_bs: &mut GemBS, dbsnp_files: Vec<PathBuf>) {
             .get_config_int(Section::DbSnp, "cores")
             .or_else(|| gem_bs.get_config_int(Section::Index, "cores"))
             .map(|x| x as usize);
+        let slurm_options = gem_bs.get_slurm_options(Section::DbSnp).map(|s| s.to_owned());
         let memory = gem_bs
             .get_config_memsize(Section::DbSnp, "memory")
             .or_else(|| gem_bs.get_config_memsize(Section::Index, "memory"));
@@ -262,6 +263,7 @@ fn make_dbsnp_tasks(gem_bs: &mut GemBS, dbsnp_files: Vec<PathBuf>) {
             .add_outputs(&[index])
             .set_log(Some(log_index))
             .add_cores(cores)
+            .add_slurm_options(slurm_options)
             .add_memory(memory)
             .add_time(time);
         gem_bs
@@ -428,6 +430,7 @@ fn add_make_index_task(gem_bs: &mut GemBS, idx_name: &str, desc: &str, command: 
     let cores = gem_bs
         .get_config_int(Section::Index, "cores")
         .map(|x| x as usize);
+    let slurm_options= gem_bs.get_slurm_options(Section::Index).map(|s| s.to_owned());
     let memory = gem_bs.get_config_memsize(Section::Index, "memory");
     let time = gem_bs
         .get_config_joblen(Section::Index, "time")
@@ -438,6 +441,7 @@ fn add_make_index_task(gem_bs: &mut GemBS, idx_name: &str, desc: &str, command: 
         .add_outputs(&[index])
         .set_log(Some(log_index))
         .add_cores(cores)
+        .add_slurm_options(slurm_options)
         .add_memory(memory)
         .add_time(time);
     gem_bs

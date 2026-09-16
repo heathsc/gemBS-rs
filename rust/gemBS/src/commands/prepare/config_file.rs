@@ -81,6 +81,19 @@ fn make_known_var_list() -> KnownVarList {
     kv_list.add_known_var("min_contig_size", VarType::Int, vec![Section::Index]);
     kv_list.add_known_var("populate_cache", VarType::Bool, vec![Section::Index]);
     kv_list.add_known_var(
+        "slurm_options",
+        VarType::String,
+        vec![
+            Section::Index,
+            Section::DbSnp,
+            Section::Mapping,
+            Section::Calling,
+            Section::Extract,
+            Section::Report,
+            Section::MD5Sum,
+        ],
+    );
+    kv_list.add_known_var(
         "threads",
         VarType::Int,
         vec![

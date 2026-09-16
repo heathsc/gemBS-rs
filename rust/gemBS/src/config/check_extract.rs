@@ -11,6 +11,7 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 	let get_dir = |name: &str| { if let Some(DataValue::String(x)) = gem_bs.get_config(Section::Extract, name ) { x } else { "." } };
 	let extract_dir = get_dir("extract_dir").to_owned();
 	let cores = gem_bs.get_config_int(Section::Extract, "cores").map(|x| x as usize).or(Some(2));
+	let slurm_options = gem_bs.get_slurm_options(Section::Extract).map(|s| s.to_owned());
 	let memory = gem_bs.get_config_memsize(Section::Extract, "memory");
 	let time = gem_bs.get_config_joblen(Section::Extract, "time").or_else(|| Some(3600.into()));
 	let bw_strand_specific = gem_bs.get_config_bool(Section::Extract, "bigwig_strand_specific");
@@ -71,7 +72,7 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 			let task = gem_bs.add_task(&id, format!("Extract methylation values for barcode {}", bc).as_str(),
 					Command::Extract, format!("{} --barcode {}", mextr_comm, bc).as_str());
 			gem_bs.add_task_inputs(task, &[bcf, bcf_ix, bcf_md5]).add_outputs(&out_vec).set_log(Some(log_index)).set_barcode(bc)
-				.add_cores(cores).add_memory(memory).add_time(time);
+				.add_cores(cores).add_memory(memory).add_time(time).add_slurm_options(slurm_options.clone());
 			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
 		if !snpxtr_suff.is_empty() {
@@ -83,7 +84,7 @@ pub fn check_extract(gem_bs: &mut GemBS) -> Result<(), String> {
 			let task = gem_bs.add_task(&id, format!("Extract SNPs for barcode {}", bc).as_str(),
 					Command::Extract, format!("--snps --barcode {}", bc).as_str());
 			gem_bs.add_task_inputs(task, &[bcf, bcf_ix, bcf_md5]).add_outputs(&out_vec).set_log(Some(log_index)).set_barcode(bc)
-				.add_cores(cores).add_memory(memory).add_time(time);
+				.add_cores(cores).add_memory(memory).add_time(time).add_slurm_options(slurm_options.clone());
 			out_vec.iter().for_each(|id| gem_bs.get_asset_mut(*id).unwrap().set_creator(task, &[bcf]));
 		}		
 	}

@@ -38,6 +38,7 @@ struct JobNode {
     cores: usize,
     mem: MemSize,
     time: JobLen,
+    slurm_options: Option<String>,
     depend: Vec<SlurmDep>, // Index in vector of SlurmJobs
 }
 
@@ -142,7 +143,6 @@ where
 
 fn write_script_file_prelude(
     file: &mut fs::File,
-    slurm_options: Option<&str>,
 ) -> std::io::Result<()> {
     writeln!(
         file,
@@ -156,9 +156,6 @@ fn write_script_file_prelude(
         file,
         "sub sbatch($$) {{\n  my ($args, $scr) = @_;\n  my $fh = File::Temp->new();\n  my $fname = $fh->filename;"
     )?;
-    if let Some(s) = slurm_options {
-        writeln!(file, "$args.=\" {s}\"\n")?;
-    }
     writeln!(
         file,
         "  print $fh $scr;\n  $fh->flush();\n  open(my $sb, \"-|\", \"sbatch $args $fname\") or die \"Couldn't start sbatch: $!\";"
@@ -237,7 +234,6 @@ pub fn handle_slurm(
     let mut job_hash: HashMap<Rc<JobNode>, usize> = HashMap::new();
     let mut task_hash: HashMap<usize, SlurmDep> = HashMap::new();
     let ferr = |e| format!("{}", e);
-    let slurm_options = gem_bs.slurm_options();
 
     let mut file = if let Some(s) = gem_bs.slurm_script() {
         match fs::File::create(Path::new(s)) {
@@ -255,7 +251,7 @@ pub fn handle_slurm(
     };
 
     if let Some(ref mut f) = file {
-        write_script_file_prelude(f, slurm_options)
+        write_script_file_prelude(f)
             .map_err(|e| format!("Error writing perl file header: {}", e))?;
     }
     for ix in task_list
@@ -283,12 +279,14 @@ pub fn handle_slurm(
             t
         };
         let cores = task.cores().unwrap_or(1);
+        let slurm_options = task.slurm_options().map(|s| s.to_owned());
         let mem = task.memory().unwrap_or_else(|| MemSize::from(0x400000000)); // 1G
         let time = task.time().unwrap_or_else(|| JobLen::from(3600)); // 1hr
         let node = JobNode {
             cores,
             mem,
             time,
+            slurm_options,
             depend,
         };
         let job_ix = if let Some(i) = job_hash.get(&node) {
@@ -326,6 +324,9 @@ pub fn handle_slurm(
             if hs.insert(task.command()) {
                 desc.push_str(format!("_{:#}", task.command()).as_str());
             }
+        }
+        if let Some(s) = jv.node.slurm_options.as_ref() {
+            sbatch_args.push(format!("{s}"))
         }
         sbatch_args.push(format!("--job-name={}", desc));
         sbatch_args.push(format!("--cpus-per-task={}", jv.node.cores));
@@ -446,13 +447,22 @@ pub fn handle_slurm(
         let mut script = String::new();
         write_sbatch_rm_script(&mut script, &logfiles)
             .map_err(|e| format!("Error writing sbatch script: {}", e))?;
-        let mut sbatch_args = vec![
+
+        let mut sbatch_args = Vec::new();
+        if let Some(s) = gem_bs.get_slurm_options(crate::common::defs::Section::MD5Sum) {
+            sbatch_args.push(s);
+        }
+
+        for s in [
             "--job-name=gemBS_clean_logfiles",
             "--cpus-per-task=1",
             "--time=10",
             "--no-requeue",
             "--output=slurm_logs/slurm_gemBS_pipeline.out",
-        ];
+        ] {
+            sbatch_args.push(s)
+        }
+        
         if let Some(ref mut f) = file {
             writeln!(f, "print \"Submitting job: clean_logfiles\\n\";").map_err(ferr)?;
             write_array_as_str(f, &sbatch_args, "$sbatch_args = ").map_err(ferr)?;

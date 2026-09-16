@@ -23,6 +23,7 @@ pub struct Task {
     parents: Vec<usize>, // Tasks that this one depends on (i.e., that generate the assets in inputs)
     log: Option<usize>,
     cores: Option<usize>,
+    slurm_options: Option<String>,
     memory: Option<MemSize>,
     time: Option<JobLen>,
     idx: usize,
@@ -38,6 +39,7 @@ impl Task {
             barcode: None,
             idx,
             cores: None,
+            slurm_options: None,
             memory: None,
             time: None,
             inputs: Vec::new(),
@@ -71,6 +73,10 @@ impl Task {
     }
     pub fn add_cores(&mut self, cores: Option<usize>) -> &mut Self {
         self.cores = cores;
+        self
+    }
+    pub fn add_slurm_options(&mut self, opt: Option<String>) -> &mut Self {
+        self.slurm_options = opt;
         self
     }
     pub fn add_memory(&mut self, memory: Option<MemSize>) -> &mut Self {
@@ -119,6 +125,9 @@ impl Task {
     }
     pub fn cores(&self) -> Option<usize> {
         self.cores
+    }
+    pub fn slurm_options(&self) -> Option<&str> {
+        self.slurm_options.as_deref()
     }
     pub fn memory(&self) -> Option<MemSize> {
         self.memory

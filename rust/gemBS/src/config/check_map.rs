@@ -113,6 +113,9 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
     let cores = gem_bs
         .get_config_int(Section::Mapping, "cores")
         .map(|x| x as usize);
+    let slurm_options = gem_bs
+        .get_slurm_options(Section::Mapping)
+        .map(|s| s.to_owned());
     let merge_cores = gem_bs
         .get_config_int(Section::Mapping, "merge_cores")
         .map(|x| x as usize)
@@ -352,6 +355,7 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
                     .set_log(Some(log_index))
                     .set_barcode(&sample.barcode)
                     .add_cores(cores)
+                    .add_slurm_options(slurm_options.clone())
                     .add_memory(memory)
                     .add_time(time);
                 [out1, out2].iter().for_each(|id| {
@@ -401,6 +405,7 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
                     .set_log(Some(log_index))
                     .set_barcode(&sample.barcode)
                     .add_cores(cores)
+                    .add_slurm_options(slurm_options.clone())
                     .add_memory(memory)
                     .add_time(time);
                 [out1, out2, out3].iter().for_each(|id| {
@@ -422,6 +427,9 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
                     .get_config_int(Section::MD5Sum, "cores")
                     .map(|x| x as usize)
                     .or(Some(1));
+                let md5_slurm_options = gem_bs
+                    .get_slurm_options(Section::MD5Sum)
+                    .map(|s| s.to_owned());
                 let md5_memory = gem_bs.get_config_memsize(Section::MD5Sum, "memory");
                 let md5_time = gem_bs
                     .get_config_joblen(Section::MD5Sum, "time")
@@ -431,6 +439,7 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
                     .add_outputs(&[md5])
                     .set_barcode(&sample.barcode)
                     .add_cores(md5_cores)
+                    .add_slurm_options(md5_slurm_options.clone())
                     .add_memory(md5_memory)
                     .add_time(md5_time);
                 gem_bs
@@ -471,6 +480,7 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
                 .set_log(Some(log_index))
                 .set_barcode(&sample.barcode)
                 .add_cores(merge_cores)
+                .add_slurm_options(slurm_options.clone())
                 .add_memory(merge_memory)
                 .add_time(merge_time);
             [out1, out2]
@@ -483,6 +493,9 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
                 .get_config_int(Section::MD5Sum, "cores")
                 .map(|x| x as usize)
                 .or(Some(1));
+            let md5_slurm_options = gem_bs
+                .get_slurm_options(Section::MD5Sum)
+                .map(|s| s.to_owned());
             let md5_memory = gem_bs.get_config_memsize(Section::MD5Sum, "memory");
             let md5_time = gem_bs
                 .get_config_joblen(Section::MD5Sum, "time")
@@ -498,6 +511,7 @@ pub fn check_map(gem_bs: &mut GemBS) -> Result<(), String> {
                 .add_outputs(&[md5])
                 .set_barcode(&sample.barcode)
                 .add_cores(md5_cores)
+                .add_slurm_options(md5_slurm_options.clone())
                 .add_memory(md5_memory)
                 .add_time(md5_time);
             gem_bs

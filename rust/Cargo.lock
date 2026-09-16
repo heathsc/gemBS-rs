@@ -558,7 +558,7 @@ dependencies = [
 
 [[package]]
 name = "gem_bs"
-version = "4.4.3"
+version = "4.4.4"
 dependencies = [
  "chrono",
  "clap",

@@ -482,6 +482,13 @@ impl GemBS {
         }
     }
 
+    pub fn get_slurm_options(&self, section: Section) -> Option<&str> {
+        match self.get_config(section, "slurm_options") {
+            Some(DataValue::String(s)) => Some(s.as_str()),
+            _ => None
+        }
+    }
+
     pub fn get_exec_path(&self, name: &str) -> PathBuf {
         let root = &self.fs.as_ref().unwrap().gem_bs_root;
         [root, Path::new("bin"), Path::new(name)].iter().collect()
@@ -767,9 +774,6 @@ impl GemBS {
     }
     pub fn slurm_script(&self) -> Option<&str> {
         self.slurm_script.as_deref()
-    }
-    pub fn slurm_options(&self) -> Option<&str> {
-        self.slurm_options.as_deref()
     }
     pub fn set_json_out(&mut self, s: &str) {
         self.json_out = Some(s.to_owned());

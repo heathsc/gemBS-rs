@@ -4,7 +4,7 @@ use utils::log_level::init_log;
 
 #[cfg(feature = "slurm")]
 use clap::{Arg, Command};
-use clap_complete::{generate, Shell};
+use clap_complete::{Shell, generate};
 
 use crate::commands;
 use crate::common::defs::{DataValue, Section};
@@ -30,22 +30,24 @@ fn gen_cli() -> Command {
                 Arg::new("slurm_options")
                     .long("slurm-options")
                     .value_name("STRING")
+                    .action(ArgAction::Append)
+                    .value_terminator(";")
                     .value_parser(value_parser!(String))
                     .allow_hyphen_values(true)
+                    .num_args(1..)
                     .help("Command line options to be passed to slurm (sbatch)"),
             );
-        
+
         let container: Option<&'static str> = option_env!("GEMBS_CONTAINER");
         if container.is_none() {
-            com
-                .arg(
-                    Arg::new("slurm")
-                        .short('S')
-                        .long("slurm")
-                        .action(ArgAction::SetTrue)
-                        .help("Submit commands to slurm for execution"),
-                )
-                .group(ArgGroup::new("slurm_opts").args(["slurm", "slurm_script"]))
+            com.arg(
+                Arg::new("slurm")
+                    .short('S')
+                    .long("slurm")
+                    .action(ArgAction::SetTrue)
+                    .help("Submit commands to slurm for execution"),
+            )
+            .group(ArgGroup::new("slurm_opts").args(["slurm", "slurm_script"]))
         } else {
             com
         }
@@ -110,9 +112,18 @@ pub fn process_cli(gem_bs: &mut GemBS) -> Result<(), String> {
     gem_bs.set_all(m.get_flag("all"));
     gem_bs.set_dry_run(m.get_flag("dry_run"));
     gem_bs.set_slurm(m.get_flag("slurm"));
-    if let Some(s) = m.get_one::<String>("slurm_options")
-    {
-        gem_bs.set_slurm_options(s.to_owned());
+    if let Some(s) = m.get_many::<String>("slurm_options").map(|mut v| {
+        let mut s = v
+            .next()
+            .expect("Expect at least one argument to slurm_options")
+            .to_owned();
+        for c in v {
+            s.push(' ');
+            s.push_str(c)
+        }
+        s
+    }) {
+        gem_bs.set_slurm_options(s);
     }
     if let Some(s) = m.get_one::<String>("json") {
         gem_bs.set_json_out(s);
